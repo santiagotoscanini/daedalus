@@ -2,7 +2,8 @@ import type { NodePolicy } from '../../host/schema'
 import { nodeIdField } from '../contract/fields'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../hardware/catalog'
 import { NODE_NAME_RE } from '../nodes-file'
-import { isProviderKind } from '../providers/kinds'
+import { isProviderKind, type ProviderKind } from '../providers/kinds'
+import { checkPin as providerPin } from '../providers/lemonade-release'
 import { modelPolicies } from '../providers/policy'
 import { hasControlChar } from './policy'
 
@@ -109,15 +110,27 @@ function checkedPolicy(o: Record<string, unknown>): NodePolicy {
       if (typeof raw !== 'object' || raw === null) {
         throw new Error(`providers.${kind} must be an object`)
       }
-      const { port, offer, models } = raw as Record<string, unknown>
+      const { port, offer, models, pin, wanted, alwaysOn } = raw as Record<string, unknown>
       if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error(`providers.${kind}.port must be a port number`)
       }
       if (typeof offer !== 'boolean') {
         throw new Error(`providers.${kind}.offer must be true or false`)
       }
-      providers[kind] =
-        models === undefined ? { port, offer } : { port, offer, models: modelPolicies(models) }
+      if (wanted !== undefined && wanted !== 'start' && wanted !== 'stop') {
+        throw new Error(`providers.${kind}.wanted must be start or stop`)
+      }
+      if (alwaysOn !== undefined && typeof alwaysOn !== 'boolean') {
+        throw new Error(`providers.${kind}.alwaysOn must be true or false`)
+      }
+      providers[kind] = {
+        port,
+        offer,
+        ...(models === undefined ? {} : { models: modelPolicies(models) }),
+        ...(pin === undefined ? {} : { pin: providerPin(pin, `providers.${kind}.pin`) }),
+        ...(wanted === undefined ? {} : { wanted }),
+        ...(alwaysOn === undefined ? {} : { alwaysOn }),
+      }
     }
     if (Object.keys(providers).length > 0) policy.providers = providers
   }
@@ -153,4 +166,35 @@ function checkedPolicy(o: Record<string, unknown>): NodePolicy {
     }
   }
   return policy
+}
+
+/** The provider keys the install and power flows own (host/providers/lifecycle.ts). */
+const LIFECYCLE_KEYS = ['pin', 'wanted', 'alwaysOn'] as const
+
+/**
+ * A providers value about to be stored, with each kind's lifecycle keys the
+ * patch leaves out kept from the row: Settings › Machines saves a whole
+ * providers object from what its page last loaded, and an install or a
+ * power change since must not be undone by a port edit. Pure; the writer
+ * (core/nodes.ts `setNodePolicy`) reads the row and calls it.
+ */
+export function keepLifecycle(
+  stored: NodePolicy['providers'],
+  set: NodePolicy['providers'],
+): NodePolicy['providers'] {
+  if (set === undefined || stored === undefined) return set
+  const out: NonNullable<NodePolicy['providers']> = { ...set }
+  for (const kind of Object.keys(set) as ProviderKind[]) {
+    const was = stored[kind]
+    const next = set[kind]
+    if (was === undefined || next === undefined) continue
+    const kept = Object.fromEntries(
+      LIFECYCLE_KEYS.filter((k) => next[k] === undefined && was[k] !== undefined).map((k) => [
+        k,
+        was[k],
+      ]),
+    )
+    out[kind] = { ...next, ...kept }
+  }
+  return out
 }

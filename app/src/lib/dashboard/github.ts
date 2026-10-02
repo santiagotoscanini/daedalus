@@ -91,7 +91,7 @@ export const EMPTY_GAP: VersionGap = {
   note: null,
 }
 
-type GhRelease = {
+export type GhRelease = {
   tag_name?: string
   name?: string
   body?: string
@@ -99,6 +99,7 @@ type GhRelease = {
   published_at?: string
   draft?: boolean
   prerelease?: boolean
+  assets?: { name?: string; size?: number; digest?: string | null; browser_download_url?: string }[]
 }
 
 /**
@@ -127,7 +128,7 @@ export async function githubHeaders(): Promise<Record<string, string>> {
 const cache = swrCache({ ttlMs: TTL_MS, retryMs: RETRY_MS })
 
 /** A repo's published releases, newest first, at most once per `TTL_MS`. */
-async function releases(repo: string): Promise<GhRelease[] | null> {
+export async function releases(repo: string): Promise<GhRelease[] | null> {
   return cache.get(`releases:${repo}`, async (): Promise<GhRelease[] | null> => {
     try {
       const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=60`, {

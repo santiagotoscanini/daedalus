@@ -11,6 +11,7 @@ import { PhoneBar } from './phone-bar'
 import { PhoneDrawer } from './phone-drawer'
 import { Rail } from './rail'
 import { useDrawer, useRailCollapse } from './use-rail'
+import { useRailBadges } from './use-rail-badges'
 
 // The frame around every page: the navigation rail and the page area.
 //
@@ -44,7 +45,8 @@ export function Shell({ children, theme, account, modules, engineOverride }: She
   // Inside an app the rail changes subject: that app's sections, with a way
   // back. Matched here (not in the route) because the rail is the shell's.
   const app = useAppRailContext()
-  const rail = { modules, app, path, account, theme, collapsed, onToggleCollapse: toggle }
+  const badges = useRailBadges()
+  const rail = { modules, badges, app, path, account, theme, collapsed, onToggleCollapse: toggle }
 
   return (
     // Grid on a desktop, block on a phone. Block, not a one-column grid: as a

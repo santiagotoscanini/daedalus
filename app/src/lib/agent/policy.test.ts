@@ -67,3 +67,22 @@ describe('the name a machine is labelled with', () => {
     expect(wireName({ displayName: '😀'.repeat(64) })).toBe('😀'.repeat(64))
   })
 })
+
+describe('a provider’s lifecycle, as the machine hears it', () => {
+  it('carries the pin, wanted and always-on the policy sets, and only those', () => {
+    const pin = {
+      version: 'v2026.40.0',
+      url: 'https://github.com/lemonade-sdk/lemonade/releases/download/v2026.40.0/lemonade.msi',
+      size: 10,
+      sha256: 'a'.repeat(64),
+    }
+    expect(
+      wirePolicy({
+        providers: { lemonade: { port: 13305, offer: true, pin, wanted: 'stop', alwaysOn: true } },
+      }).policy.providers,
+    ).toEqual({ lemonade: { port: 13305, pin, wanted: 'stop', always_on: true } })
+    expect(
+      wirePolicy({ providers: { lemonade: { port: 13305, alwaysOn: false } } }).policy.providers,
+    ).toEqual({ lemonade: { port: 13305, always_on: false } })
+  })
+})

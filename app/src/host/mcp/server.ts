@@ -180,6 +180,8 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       guarded(async (args: any) => {
         const gate = await authoriseWrite(caller, name)
         if (!gate.ok) return gate.result
+        // The same `[audit]` line an admin's server function writes (server/fn.ts).
+        console.info(`[audit] ${gate.actor} ${name}`)
         return run(args, gate.actor)
         // biome-ignore lint/suspicious/noExplicitAny: as above.
       }) as any,
@@ -389,6 +391,63 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       ? ok({ id: outcome.id, changed: outcome.changed })
       : refuse(`${outcome.code}: ${outcome.reason}`)
   })
+
+  const machineArg = {
+    machine: z.string().min(1).describe("The machine's node id, as Settings › Machines shows it."),
+  }
+
+  write(
+    'provider.install',
+    {
+      ...machineArg,
+      version: z
+        .string()
+        .optional()
+        .describe('The release tag (v2026.40.0). Omit for the newest stable release.'),
+    },
+    async (args, actor) => {
+      const { installLemonade } = await import('../providers/lifecycle')
+      const sent = await installLemonade(
+        await ctx(),
+        {
+          machine: String(args.machine),
+          ...(args.version === undefined ? {} : { version: String(args.version) }),
+        },
+        actor,
+      )
+      // The outcome rides the machine's providers document: AI › Providers
+      // shows its phases, and `actions.get` the ending under this request.
+      return sent.ok ? ok(sent.value) : refuse(sent.reason)
+    },
+  )
+
+  write(
+    'provider.power',
+    { ...machineArg, wanted: z.enum(['start', 'stop']).describe('Run it, or not.') },
+    async (args, actor) => {
+      const { powerLemonade } = await import('../providers/lifecycle')
+      const sent = await powerLemonade(
+        await ctx(),
+        { machine: String(args.machine), wanted: args.wanted === 'stop' ? 'stop' : 'start' },
+        actor,
+      )
+      return sent.ok ? ok({ request: sent.value.request }) : refuse(sent.reason)
+    },
+  )
+
+  write(
+    'provider.always_on',
+    { ...machineArg, on: z.boolean().describe('Start on its own, or not.') },
+    async (args, actor) => {
+      const { setLemonadeAlwaysOn } = await import('../providers/lifecycle')
+      const done = await setLemonadeAlwaysOn(
+        await ctx(),
+        { machine: String(args.machine), on: args.on === true },
+        actor,
+      )
+      return done.ok ? ok({ alwaysOn: args.on === true }) : refuse(done.reason)
+    },
+  )
 
   // ── resources ───────────────────────────────────────────────────────────
 

@@ -10,3 +10,9 @@
 export const ARR_TAG = /^v?(\d+\.\d+\.\d+\.\d+)$/
 /** Two segments or three — for projects that ship both `4.3` and `4.3.1`. */
 export const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
+/**
+ * A calendar tag, `vYYYY.WW.N` — Lemonade's since 2026 (`v2026.40.0`). Its
+ * `candidate-v…` prereleases and the older `v10.x` line do not match, so
+ * neither is ever offered as the release to move to.
+ */
+export const CALENDAR_TAG = /^v(\d{4}\.\d{1,2}\.\d+)$/

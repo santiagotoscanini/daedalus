@@ -11,6 +11,28 @@ import {
 } from '../../lib/providers/kinds'
 import type { NodeProvidersOk, ProviderReport } from '../controller/generated'
 
+/**
+ * What the agent found of the install and how it runs — the lifecycle half of
+ * its report, carried as it said it (the page and the rail read it; nothing
+ * here decides on it). Kept from the last report while the provider is silent.
+ */
+export type ProviderManaged = Pick<
+  ProviderReport,
+  'install' | 'pid' | 'session' | 'owner' | 'startup' | 'wanted' | 'lifecycle'
+> & { noUserSession: boolean; manualOff: boolean }
+
+const managedOf = (r: ProviderReport): ProviderManaged => ({
+  install: r.install,
+  pid: r.pid,
+  session: r.session,
+  owner: r.owner,
+  startup: r.startup,
+  wanted: r.wanted,
+  lifecycle: r.lifecycle,
+  noUserSession: r.no_user_session,
+  manualOff: r.manual_off,
+})
+
 // Reading a provider: its catalog, its health and the page's detail.
 //
 // A NODE's provider is never dialled from here. The node's own agent reads
@@ -52,6 +74,8 @@ export type ProviderReading = {
   reported: boolean
   /** What the agent found, for a node: running or only installed, and its version. */
   presence: { running: boolean; version: string | null } | null
+  /** The install and power state the agent reported; null without a report of it. */
+  managed: ProviderManaged | null
   health: ProviderHealth
   models: ProviderModel[]
   detail: ProviderDetail
@@ -67,7 +91,7 @@ export type ProviderReading = {
  * A report older than this, from a machine that is connected, is a reader
  * that stopped: the link pushes the document every minute even unchanged.
  */
-const STALE_MS = 5 * 60_000
+export const STALE_MS = 5 * 60_000
 
 const DOWN: ProviderHealth = { ok: false, version: null, loaded: [] }
 
@@ -85,6 +109,7 @@ function silent(
     reachable: false,
     reported,
     presence: last === undefined ? null : { running: last.running, version: last.version },
+    managed: last === undefined ? null : managedOf(last),
     health: DOWN,
     models: last === undefined ? [] : modelsOf(last),
     detail: NO_DETAIL,
@@ -158,6 +183,7 @@ export function nodeReading(
     reachable: true,
     reported: true,
     presence: { running: true, version: r.version },
+    managed: managedOf(r),
     health: {
       ok: r.healthy,
       version: r.version,
@@ -209,6 +235,7 @@ export async function readSubgen(
     reachable: answered,
     reported: true,
     presence: null,
+    managed: null,
     health: answered
       ? {
           ok: true,

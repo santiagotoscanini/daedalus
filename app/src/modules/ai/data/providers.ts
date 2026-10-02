@@ -1,7 +1,10 @@
 import type { Ctx } from '../../../core/ctx'
+import type { PowerWanted } from '../../../host/controller/generated'
 import { type FleetProvider, readFleetProviders } from '../../../host/providers/fleet'
 import { type GatewayRoute, gatewayRoutes } from '../../../host/providers/gateway'
-import type { ProviderDetail } from '../../../host/providers/read'
+import { lemonadeUpdate } from '../../../host/providers/lemonade-release'
+import type { ProviderDetail, ProviderManaged } from '../../../host/providers/read'
+import type { ProviderPolicy } from '../../../host/schema'
 import {
   type ModelFigures,
   managesResidency,
@@ -9,7 +12,7 @@ import {
   type ProviderKind,
   type ProviderModel,
 } from '../../../lib/providers/kinds'
-import { type ModelPolicies, resolveModel } from '../../../lib/providers/policy'
+import { resolveModel } from '../../../lib/providers/policy'
 import { listAppsLight } from '../../../lib/repo/apps'
 import { listNodes } from '../../../lib/repo/nodes'
 
@@ -64,6 +67,15 @@ export type ProviderMachine = {
   /** How many models the gateway would carry from here. */
   offerableCount: number
   detail: ProviderDetail
+  /** The install and how it runs, as the agent last reported them; null for the box or without a report. */
+  managed: ProviderManaged | null
+  /**
+   * What the box asks of it (the policy): the pinned release, run or not,
+   * start on its own. Null for this box's own, which has no lifecycle here.
+   */
+  asked: { pin: string | null; wanted: PowerWanted | null; alwaysOn: boolean | null } | null
+  /** The newest stable release and how many it runs behind; null when there is nothing to update. */
+  update: { latest: string | null; behind: number } | null
 }
 
 export type Chain = {
@@ -115,16 +127,28 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
     listAppsLight().catch(() => []),
     listNodes(ctx).catch(() => []),
   ])
-  // The same policy the gateway sync resolves against, so the alias this
-  // page prints and the alias the gateway publishes cannot disagree.
-  const policiesOf = (p: FleetProvider): ModelPolicies | undefined =>
+  // A node's provider policy: its models' curation — the same policy the
+  // gateway sync resolves against, so the alias this page prints and the one
+  // the gateway publishes cannot disagree — and its lifecycle.
+  const policyOf = (p: FleetProvider): ProviderPolicy | undefined =>
     p.machine === 'box'
       ? undefined
-      : nodes.find((n) => n.id === p.machine)?.policy.providers?.[p.kind]?.models
+      : nodes.find((n) => n.id === p.machine)?.policy.providers?.[p.kind]
 
-  const machines: ProviderMachine[] = read.map(({ provider, reading }) => {
+  const updates = await Promise.all(
+    read.map(({ provider, reading }) =>
+      provider.kind === 'lemonade' && provider.machine !== 'box'
+        ? lemonadeUpdate(reading.health.version ?? reading.presence?.version ?? null).catch(
+            () => null,
+          )
+        : null,
+    ),
+  )
+
+  const machines: ProviderMachine[] = read.map(({ provider, reading }, i) => {
+    const policy = policyOf(provider)
     const { detail } = reading
-    const policies = policiesOf(provider)
+    const policies = policy?.models
     const models: CatalogEntry[] = reading.models.map((m) => {
       const r = resolveModel(policies, m)
       const live = reading.health.loaded.find((l) => l.id === m.id)
@@ -159,6 +183,16 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       models,
       offerableCount: models.filter((m) => m.offerable).length,
       detail,
+      managed: reading.managed,
+      asked:
+        provider.machine === 'box'
+          ? null
+          : {
+              pin: policy?.pin?.version ?? null,
+              wanted: policy?.wanted ?? null,
+              alwaysOn: policy?.alwaysOn ?? null,
+            },
+      update: updates[i] ?? null,
     }
   })
 

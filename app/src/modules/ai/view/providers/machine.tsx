@@ -7,6 +7,7 @@ import { Button } from '../../../../components/ui/button'
 import { Board, BoardGrid, Measures } from '../../../../components/viz'
 import { num } from '../../../../lib/format'
 import type { ProviderMachine, ProvidersData } from '../../data/providers'
+import { LifecycleBoard } from './lifecycle'
 import { ModelsBoard } from './models'
 
 /* ── one machine ──────────────────────────────────────────────────────── */
@@ -46,7 +47,7 @@ function ProviderActions({ m }: { m: ProviderMachine }) {
     <p className={ACTIONS}>
       {openable && (
         <Button asChild size="sm" variant="outline">
-          <a href={m.base} target="_blank" rel="noreferrer">
+          <a href={`${m.base}/`} target="_blank" rel="noreferrer">
             Open {m.kindName} ↗
           </a>
         </Button>
@@ -82,6 +83,10 @@ export function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersDa
       <ProviderActions m={m} />
 
       <BoardGrid>
+        {/* Lemonade on a machine: install, update, power. The box's own subgen
+            is a container a rebuild manages. */}
+        {m.machine !== 'box' && m.kind === 'lemonade' && <LifecycleBoard m={m} />}
+
         <ModelsBoard m={m} />
 
         <OfferedBoard m={m} />

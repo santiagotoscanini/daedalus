@@ -31,3 +31,9 @@ export const fetchControllerLinkFn = readFn.handler(async ({ context }) => {
   }
   return controller.link()
 })
+
+/** The rail's dots, by module id (host/rail-badges.ts). Polled by the shell. */
+export const fetchRailBadgesFn = readFn.handler(async ({ context }) => {
+  const { railBadges } = await import('../host/rail-badges')
+  return railBadges(await context.ctx())
+})

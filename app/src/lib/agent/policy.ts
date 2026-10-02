@@ -1,4 +1,4 @@
-import type { Command, DesiredPolicy } from '../../host/controller/generated'
+import type { Command, DesiredPolicy, ProviderPolicy } from '../../host/controller/generated'
 import { MAX_NODE_NAME } from '../../host/controller/generated/constants'
 import type { NodePolicy } from '../../host/schema'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
@@ -58,11 +58,23 @@ export function wirePolicy(p: NodePolicy): DesiredPolicy {
       claude_remote_control: e.claudeRemoteControl,
       ...(e.claudeWorkdir === null ? {} : { claude_workdir: e.claudeWorkdir }),
       santree: e.santree,
-      // Where each provider listens, so the agent reads the right port.
-      providers: { lemonade: { port: e.providers.lemonade.port } },
+      // Where each provider listens, so the agent reads the right port, and
+      // its lifecycle: the pinned release, run or not, start on its own.
+      providers: { lemonade: wireProvider(p, 'lemonade', e.providers.lemonade.port) },
     },
     offer_lemonade: p.providers?.lemonade?.offer === true,
     alert_link: p.alertLinkDown ?? POLICY_DEFAULTS.alertLinkDown,
+  }
+}
+
+/** One provider as the agent hears it: the port always, a lifecycle key only when the policy sets it. */
+function wireProvider(p: NodePolicy, kind: ProviderKind, port: number): ProviderPolicy {
+  const s = p.providers?.[kind]
+  return {
+    port,
+    ...(s?.pin === undefined ? {} : { pin: s.pin }),
+    ...(s?.wanted === undefined ? {} : { wanted: s.wanted }),
+    ...(s?.alwaysOn === undefined ? {} : { always_on: s.alwaysOn }),
   }
 }
 

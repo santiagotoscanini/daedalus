@@ -6,14 +6,14 @@ export const manifest = {
   lede: 'The machines that provide models, the gateway that publishes them, and what calls it.',
   order: 10,
   // Shaped to Providers, the tab that opens by default: the chain across
-  // the top, then the picked machine's head, its loaded models and catalog.
-  boardSpans: [12, 8, 4, 12],
+  // the top, then the picked machine's Lemonade, its loaded models and catalog.
+  boardSpans: [12, 12, 8, 4, 12],
   // Three tabs in the order a prompt travels backwards: where the weights
   // are, the gateway in front of them, the callers. Providers has no
   // ServiceHead and no dot — its subject is several machines, drawn from
   // its own picker; the other two are services on this box.
   tabs: [
-    { id: 'providers', label: 'Providers', boardSpans: [12, 8, 4, 12], head: false },
+    { id: 'providers', label: 'Providers', boardSpans: [12, 12, 8, 4, 12], head: false },
     {
       id: 'gateway',
       label: 'Gateway',

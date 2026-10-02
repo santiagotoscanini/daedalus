@@ -387,15 +387,15 @@ rather than around it.
 
 **It is an adapter, not a second implementation.** Every read tool calls the
 loader the corresponding page calls; every write tool calls the same
-`host/apply-flow.ts`, `host/update-flow.ts`, `core/builds/actions.ts` or
-`lib/apps/deploy.ts` the
+`host/apply-flow.ts`, `host/update-flow.ts`, `core/builds/actions.ts`,
+`lib/apps/deploy.ts` or `host/providers/lifecycle.ts` the
 button calls. So an MCP call can do nothing the UI cannot, and an MCP answer
-cannot disagree with the page that mirrors it. Sixteen tools:
+cannot disagree with the page that mirrors it. Nineteen tools:
 
 | | |
 |---|---|
 | reads | `apps.list`, `apps.get`, `builds.list`, `builds.get`, `builds.log`, `deployments`, `images.freshness`, `dns.records`, `site.get`, `apply.preview`, `health` |
-| writes | `build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply` |
+| writes | `build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply`, `provider.install`, `provider.power`, `provider.always_on` |
 
 `apply.preview` is the diff an Apply would carry, computed by the very function
 `runApply` computes it with, and committing nothing. Two resources —

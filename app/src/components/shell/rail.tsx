@@ -3,9 +3,11 @@ import type { ReactNode } from 'react'
 import type { Account } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
 import type { ModuleManifest } from '../../lib/modules/manifest'
+import type { RailBadge, RailBadges } from '../../lib/rail-badge'
 import type { ThemeChoice } from '../../lib/theme'
 import { AccountMenu } from '../account-menu'
 import { NavIcon, type NavIconName } from '../nav-icon'
+import { Pulse } from '../viz'
 import { AppRail, type AppRailContext } from './app-rail'
 import {
   BRAND,
@@ -36,6 +38,8 @@ import {
 export type RailBodyProps = {
   modules: ModuleManifest[]
   app: AppRailContext | null
+  /** A dot per module row, by module id (host/rail-badges.ts); empty until the shell has asked. */
+  badges: RailBadges
   path: string
   account: Promise<Account | null>
   theme: ThemeChoice
@@ -67,6 +71,7 @@ export function Rail(props: RailBodyProps) {
 
 export function RailBody({
   modules,
+  badges,
   app,
   path,
   account,
@@ -84,8 +89,8 @@ export function RailBody({
   return (
     <>
       <RailHead collapsed={collapsed} onToggleCollapse={onToggleCollapse} close={close} />
-      {app !== null ? <AppRail app={app} /> : <DirectoryNav modules={directory} />}
-      <FleetNav modules={fleet} path={path} account={account} theme={theme} />
+      {app !== null ? <AppRail app={app} /> : <DirectoryNav modules={directory} badges={badges} />}
+      <FleetNav modules={fleet} badges={badges} path={path} account={account} theme={theme} />
     </>
   )
 }
@@ -139,7 +144,7 @@ function RailHead({
  * Apps, then one row per module this box runs. Apps is the management
  * surface; every module below it is a read-only view of one subject area.
  */
-function DirectoryNav({ modules }: { modules: ModuleManifest[] }) {
+function DirectoryNav({ modules, badges }: { modules: ModuleManifest[]; badges: RailBadges }) {
   return (
     <nav className={NAV_LIST} aria-label="Sections">
       <Link
@@ -155,7 +160,7 @@ function DirectoryNav({ modules }: { modules: ModuleManifest[] }) {
       <span className={NAV_DIVIDER} aria-hidden="true" />
 
       {modules.map((m) => (
-        <ModuleRow key={m.id} module={m} />
+        <ModuleRow key={m.id} module={m} badge={badges[m.id]} />
       ))}
     </nav>
   )
@@ -169,11 +174,13 @@ function DirectoryNav({ modules }: { modules: ModuleManifest[] }) {
  */
 function FleetNav({
   modules,
+  badges,
   path,
   account,
   theme,
 }: {
   modules: ModuleManifest[]
+  badges: RailBadges
   path: string
   account: Promise<Account | null>
   theme: ThemeChoice
@@ -182,7 +189,7 @@ function FleetNav({
     <nav className={cn(NAV_LIST, 'mt-auto')} aria-label="This workshop">
       <span className={NAV_DIVIDER} aria-hidden="true" />
       {modules.map((m) => (
-        <ModuleRow key={m.id} module={m} />
+        <ModuleRow key={m.id} module={m} badge={badges[m.id]} />
       ))}
       <AccountMenu
         account={account}
@@ -201,8 +208,13 @@ function FleetNav({
  * loader picks the module's first; naming it here would mean the rail and
  * the route disagreed the moment a tab was renamed. `data-label` is what the
  * collapsed rail's tooltip says. The icon is keyed by the module id.
+ *
+ * `badge` is the module's word about itself (host/rail-badges.ts): the pulse
+ * dot the machine pills use, at the row's end — over the icon's corner when
+ * the rail is collapsed — with its sentence in the tooltip and for a reader.
  */
-function ModuleRow({ module }: { module: ModuleManifest }) {
+function ModuleRow({ module, badge }: { module: ModuleManifest; badge?: RailBadge | undefined }) {
+  const label = badge === undefined ? module.label : `${module.label} · ${badge.label}`
   return (
     <Link
       to="/c/$category"
@@ -210,10 +222,20 @@ function ModuleRow({ module }: { module: ModuleManifest }) {
       search={{}}
       className={NAV_ITEM}
       activeProps={{ className: NAV_ITEM_ACTIVE }}
-      data-label={module.label}
+      data-label={label}
     >
       <NavIcon name={module.id as NavIconName} />
       <span className={NAV_LABEL}>{module.label}</span>
+      {badge !== undefined && (
+        <span className={BADGE} title={badge.label}>
+          <Pulse on tone={badge.tone} />
+          <span className="sr-only">{badge.label}</span>
+        </span>
+      )}
     </Link>
   )
 }
+
+/* At the row's end; collapsed, over the icon's top corner. */
+const BADGE =
+  'ml-auto flex items-center pr-0.5 nav-collapsed:absolute nav-collapsed:top-[0.4rem] nav-collapsed:right-[0.55rem] nav-collapsed:ml-0 nav-collapsed:pr-0'

@@ -1,14 +1,24 @@
 import type { Ctx } from '../core/ctx'
 import type { ActionOutcome, ModelAction } from '../host/controller/generated'
-import { asValidator, bool, is, obj, withMessage } from '../lib/contract/decode'
-import { nodeIdField, nonBlankField } from '../lib/contract/fields'
+import {
+  absent,
+  asValidator,
+  bool,
+  is,
+  literal,
+  nullable,
+  obj,
+  withMessage,
+} from '../lib/contract/decode'
+import { nodeIdField, nonBlankField, strMax } from '../lib/contract/fields'
 import { isProviderKind, managesResidency, type ProviderKind } from '../lib/providers/kinds'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'
 import { adminFn, readFn } from './fn'
 
-// The two things worth a button on a provider: put a model into the
-// accelerator, and take it back out.
+// The two things worth a button on a provider's models: put one into the
+// accelerator, and take it back out. (The provider's own lifecycle — install,
+// update, power — is the section at the end.)
 //
 // Everything else about this system is edited as configuration and shipped
 // by an Apply, which is right — config belongs in the flake. Residency is
@@ -182,4 +192,80 @@ export const fetchProviderActionFn = readFn
   .handler(async ({ data, context }): Promise<ActionOutcome | null> => {
     const ctx = await context.ctx()
     return ctx.controller.call('actions.get', { node: data.machine, request: data.request })
+  })
+
+/* ── Lemonade's lifecycle: install or update, start or stop, always on ── */
+
+// The buttons on AI › Providers' machine page, through the same flows as the
+// MCP tools (host/providers/lifecycle.ts): the policy first, then the verb,
+// whose request id the page follows with `fetchProviderActionFn` like a load.
+
+/** A release tag, `v2026.40.0` or `2026.40.0`; the flow refuses one Lemonade never published. */
+const versionField = withMessage(strMax(64), 'expected a release tag')
+
+/** Install or update Lemonade to `version`, or the newest release: the request id to follow. */
+export const installProviderFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ machine: nodeIdField, version: absent(versionField) }),
+        'expected a machine and, optionally, a release',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<ModelActionResult> => {
+    const { installLemonade } = await import('../host/providers/lifecycle')
+    const sent = await installLemonade(
+      await context.ctx(),
+      { machine: data.machine, ...(data.version === undefined ? {} : { version: data.version }) },
+      context.actor,
+    )
+    return sent.ok ? { ok: true, value: sent.value.request } : sent
+  })
+
+/** Start or stop Lemonade, and keep it so: the request id to follow. */
+export const powerProviderFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ machine: nodeIdField, wanted: literal('start', 'stop') }),
+        'expected a machine and start or stop',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }): Promise<ModelActionResult> => {
+    const { powerLemonade } = await import('../host/providers/lifecycle')
+    const sent = await powerLemonade(await context.ctx(), data, context.actor)
+    return sent.ok ? { ok: true, value: sent.value.request } : sent
+  })
+
+/** Start Lemonade on its own with the logon (Windows) or the boot, or not. */
+export const setProviderAlwaysOnFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(
+        obj({ machine: nodeIdField, on: withMessage(bool, 'expected on to be true or false') }),
+        'expected a machine and on',
+      ),
+    ),
+  )
+  .handler(async ({ data, context }) => {
+    const { setLemonadeAlwaysOn } = await import('../host/providers/lifecycle')
+    return setLemonadeAlwaysOn(await context.ctx(), data, context.actor)
+  })
+
+/**
+ * Lemonade's release notes from the running version up, on demand: the
+ * update row opens them, so a page load never spends the GitHub budget on
+ * notes nobody read.
+ */
+export const fetchProviderNotesFn = readFn
+  .validator(
+    asValidator(
+      withMessage(obj({ installed: nullable(strMax(64)) }), 'expected the running version'),
+    ),
+  )
+  .handler(async ({ data }) => {
+    const { lemonadeNotes } = await import('../host/providers/lemonade-release')
+    return lemonadeNotes(data.installed)
   })

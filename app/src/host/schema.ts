@@ -47,6 +47,7 @@ import { MCP_SCOPES, type McpScope } from '../lib/mcp'
 import type { ProviderKind } from '../lib/providers/kinds'
 import type { ModelPolicies } from '../lib/providers/policy'
 import { APP_STAGES, type AppStage } from '../lib/stage'
+import type { PowerWanted, ProviderPin } from './controller/generated'
 
 /**
  * `<column> IN ('a', 'b', …)` from a vocabulary tuple. The values are written
@@ -655,11 +656,22 @@ export const enrollCodes = pgTable('enroll_codes', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
-/** One provider on a node: where it listens, whether to offer it, what to call its models. */
+/**
+ * One provider on a node: where it listens, whether to offer it, what to call
+ * its models — and its lifecycle, which the agent hears (lib/agent/policy.ts
+ * `wirePolicy`): the release the box pinned (the agent takes no
+ * `provider_install` of another), whether it should run, and whether it
+ * starts on its own. The install and power flows write those three
+ * (host/providers/lifecycle.ts); a save that leaves them out keeps them
+ * (lib/agent/policy-patch.ts `keepLifecycle`).
+ */
 export type ProviderPolicy = {
   port?: number
   offer?: boolean
   models?: ModelPolicies
+  pin?: ProviderPin
+  wanted?: PowerWanted
+  alwaysOn?: boolean
 }
 
 /**

@@ -10,6 +10,7 @@ import { fingerprintOf, releaseTunnel } from '../host/enroll'
 import { requestGatewaySync } from '../host/gateway-sync'
 import type { NodePolicy } from '../host/schema'
 import { readSessionHost } from '../host/session-host'
+import { keepLifecycle } from '../lib/agent/policy-patch'
 import { enrollStore } from '../lib/repo/enroll'
 import {
   allNodeRows,
@@ -55,7 +56,15 @@ export async function setNodePolicy(
     const taken = await netNameTakenBy(name, id)
     if (taken !== null) throw new Error(`"${name}" is already ${taken}'s name on the network`)
   }
-  const updated = await writePolicy(id, p, by)
+  // A providers object from a page keeps the lifecycle keys it did not name.
+  const set =
+    p.set.providers === undefined
+      ? p.set
+      : {
+          ...p.set,
+          providers: keepLifecycle((await nodeById(id))?.policy?.providers, p.set.providers),
+        }
+  const updated = await writePolicy(id, { ...p, set }, by)
   await afterDecision(ctx)
   return updated
 }

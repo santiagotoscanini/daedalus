@@ -64,6 +64,7 @@ const reading = (
   reachable,
   reported: true,
   presence: { running: reachable, version: '10.8.1' },
+  managed: null,
   health: { ok: reachable, version: '10.8.1', loaded },
   models,
   detail: NO_DETAIL,

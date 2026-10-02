@@ -17,7 +17,7 @@
  * What a token may reach.
  *
  * Two values and no more. `read` reaches the read tools below; `write` is
- * those plus the five mutations, each already fenced by the same host-side
+ * those plus the mutations, each already fenced by the same host-side
  * gates as the button it mirrors. There is deliberately no per-tool scope:
  * every write ends at a root verb the host guards on its own, so
  * splitting the token would be a security story the mechanism does not back.
@@ -43,7 +43,7 @@ export type McpToolSpec = {
  *
  * Read tools are the loaders the pages already use — the same function, no
  * second implementation, so an MCP answer and the page it mirrors can never
- * disagree. Write tools are five of the UI's doors, reached through the same
+ * disagree. Write tools are the UI's doors, reached through the same
  * functions the buttons call (core/builds, lib/apps/deploy, the host/ flows):
  * an MCP call can do nothing the UI
  * cannot, which is the property that makes a write token defensible at all.
@@ -100,6 +100,22 @@ export const MCP_TOOLS: readonly McpToolSpec[] = [
     name: 'apply',
     scope: 'write',
     summary: 'Write the registry and site files, rebuild, and switch.',
+  },
+  {
+    name: 'provider.install',
+    scope: 'write',
+    summary:
+      'Install or update Lemonade on a machine to a release (the newest when none is named), pinned.',
+  },
+  {
+    name: 'provider.power',
+    scope: 'write',
+    summary: 'Start or stop Lemonade on a machine, and keep it so.',
+  },
+  {
+    name: 'provider.always_on',
+    scope: 'write',
+    summary: 'Have Lemonade start on its own at logon or boot on a machine, or not.',
   },
 ] as const
 
