@@ -398,10 +398,6 @@ stable — code cites them.
     Actions page reads every repository the box watches — its apps,
     Settings › Projects, the engine — as the App where it may and as anyone
     where the repository is public. What it still lacks, in order:
-    - **The App reads runs.** Until the operator grants `actions: read`
-      (Owed, below), private repositories show "needs actions: read" and
-      public ones are read out of the address's sixty-an-hour anonymous
-      budget, which the page meters and stops at.
     - **Runners themselves.** Runners run CI, never fleet images — the
       box's build path stays the only way an image reaches zot. Ephemeral,
       on demand, per job: subscribe to `workflow_job`; on `queued` with a
