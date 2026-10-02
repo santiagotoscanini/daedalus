@@ -3,7 +3,6 @@ import type { BoxSettings, IntegrationStatus, ZoneList } from '../../core/settin
 import type { SiteEdit, SiteState } from '../../core/site'
 import type { McpTokenRow } from '../../host/mcp/tokens'
 import type { MachinesData } from '../../lib/dashboard/machines'
-import type { ExternalApp } from '../../lib/external-apps'
 import type { ModuleSwitch } from '../../lib/module-switch'
 import type { ThemeChoice } from '../../lib/theme'
 import { GuardedAwait } from '../error'
@@ -11,7 +10,6 @@ import { BoardsSkeleton } from '../skeleton'
 import { useAction } from '../use-action'
 import { Appearance } from './appearance'
 import { Developer } from './developer'
-import { ExternalApps } from './external-apps'
 import { General } from './general'
 import type { GithubAppProps } from './github-app'
 import { Integrations } from './integrations'
@@ -32,7 +30,6 @@ type SettingsTabData = {
   settings: BoxSettings
   edit: SiteEdit
   timezones: string[]
-  externalApps: ExternalApp[]
   mcpTokens: McpTokenRow[]
   zones: Promise<ZoneList> | null
   integrations: Promise<IntegrationStatus> | null
@@ -75,7 +72,7 @@ export function SettingsTabBody({
   data: SettingsTabData
   github: GithubAppProps
 }) {
-  const { theme, settings, edit, timezones, externalApps, mcpTokens } = data
+  const { theme, settings, edit, timezones, mcpTokens } = data
   const { run, busy: pending } = useAction()
   // The choice is held here as well as in the loader so a click repaints the
   // page immediately. The save is what makes it durable; the router
@@ -119,7 +116,6 @@ export function SettingsTabBody({
           render={(state) => <Repository settings={settings} site={state} edit={edit} />}
         />
       )}
-      {tab === 'projects' && <ExternalApps rows={externalApps} />}
       {tab === 'modules' && data.modules !== null && (
         <GuardedAwait
           resetKey={tab}

@@ -1,5 +1,5 @@
 import type { Ctx } from '../../core/ctx'
-import { listExternalApps } from '../../core/settings/external-apps'
+import { listExternalApps } from '../../core/offbox'
 import type { RootAnswer } from '../../host/root'
 import { requestWorkspaceClone } from '../../host/workspaces'
 import { listApps } from '../repo/apps'
@@ -11,8 +11,9 @@ import { appRepo } from '../site'
 // never enters this container (host/workspaces.ts).
 //
 // The allowlist is exactly the repos the Apps UI offers a button for: the
-// registry apps (keyed <owner>/<name>) and the off-box projects' hand-declared
-// slugs. The helper and the host re-validate the slug's shape; this check is what
+// registry apps (keyed <owner>/<name>) and the off-box sites' repos — the ones
+// discovery found through the App's installations or a Vercel project's git
+// link (core/offbox/), so only accounts the operator connected. The helper and the host re-validate the slug's shape; this check is what
 // keeps the verb from being a general "clone anything as the operator" door, and it
 // has to be here rather than in a validator because it is built from the
 // registry.

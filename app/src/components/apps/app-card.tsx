@@ -2,10 +2,11 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
-import type { Platform } from '../../lib/external-apps'
+import type { Platform, SiteState } from '../../lib/external-apps'
 import { type AppStage, isAppStage } from '../../lib/stage'
 import type { Tone } from '../../lib/tone'
-import { AppIcon, StateDot } from '../controls'
+import { Ago } from '../ago'
+import { AppIcon, type AppState, StateDot } from '../controls'
 import { Chip, Spark } from '../viz'
 import { CloneButton } from '../workspace'
 import type { ExternalEntry, Row } from './apps-list'
@@ -28,44 +29,77 @@ export const PLATFORM_ICONS: Record<Platform, ReactNode> = {
   ),
 }
 
+/** A site's platform state as the dot's vocabulary. */
+export const SITE_DOT: Record<SiteState, AppState> = {
+  live: 'running',
+  building: 'unknown',
+  failed: 'attention',
+  unknown: 'unknown',
+}
+
 export function ExternalRow({ entry }: { entry: ExternalEntry }) {
-  // The actions live BESIDE the row's anchor, not inside it — a button in an
-  // anchor is one click with two meanings, and invalid HTML besides. The row
-  // still links to the site; the trailing cell links to the repo and holds
-  // the one workspace action these projects have (no detail page to put it
-  // on — see the section comment above). No dot and no spark — nothing on
-  // this box probes those sites — so the card simply doesn't draw the
-  // readings it doesn't have.
+  // The card is the link to the site's detail page; the actions live BESIDE
+  // it, not inside — a button in an anchor is one click with two meanings,
+  // and invalid HTML besides. The foot carries the site itself, the repo,
+  // and the one workspace action these projects have. The dot is the
+  // platform's own word on the last publish (nothing on this box probes
+  // these sites), so there is no spark.
   return (
     <li className={cn(CARD, CARD_ASIDE)}>
-      <a href={`https://${entry.host}`} target="_blank" rel="noreferrer" className={CARD_LINK}>
+      <Link to="/apps/offbox/$id" params={{ id: entry.id }} className={CARD_LINK}>
         <div className={CARD_HEAD}>
           <AppIcon name={entry.id} hasIcon={entry.hasIcon} size={30} />
           <div className="min-w-0 flex-1">
-            <div className={APP_NAME}>{entry.name}</div>
+            <div className={APP_NAME}>
+              {entry.name}
+              <StateDot state={SITE_DOT[entry.state]} label={entry.state} />
+            </div>
             <code className={APP_HOST}>{entry.host}</code>
           </div>
         </div>
-        <p className={APP_DESC}>{entry.description}</p>
-      </a>
-      {entry.repo !== null && (
-        <div className="flex min-w-0 items-center justify-between gap-[0.9rem] border-t border-t-subtle px-4 pt-[0.6rem] pb-[0.75rem] text-[0.8rem]">
-          <a
-            className="min-w-0 truncate text-subdued"
-            href={`https://github.com/${entry.repo}`}
-            target="_blank"
-            rel="noreferrer"
-            title={
-              entry.workspace
-                ? `cloned — ${entry.workspace.branch ?? '?'} @ ${entry.workspace.head ?? '?'}${entry.workspace.dirty ? ', uncommitted changes' : ''}`
-                : 'not cloned on this box'
-            }
-          >
-            ⎇ {entry.repo}
-          </a>
-          <CloneButton repo={entry.repo} cloned={entry.workspace !== null} />
+        {entry.description !== null && <p className={APP_DESC}>{entry.description}</p>}
+        <div className="mt-auto flex flex-wrap items-center gap-x-[0.6rem] gap-y-1 text-[0.76rem] text-muted-foreground">
+          {entry.deployed !== null && (
+            <span>
+              deployed <Ago at={entry.deployed.at} />
+              {entry.deployed.sha !== null && <code> · {entry.deployed.sha.slice(0, 7)}</code>}
+            </span>
+          )}
+          {entry.warnings.map((w) => (
+            <Chip key={w} tone="warn" className={CHIP}>
+              {w}
+            </Chip>
+          ))}
         </div>
-      )}
+      </Link>
+      <div className="flex min-w-0 items-center justify-between gap-[0.9rem] border-t border-t-subtle px-4 pt-[0.6rem] pb-[0.75rem] text-[0.8rem]">
+        <a
+          className="shrink-0 text-subdued"
+          href={`https://${entry.host}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          ↗ site
+        </a>
+        {entry.repo !== null && (
+          <>
+            <a
+              className="min-w-0 flex-1 truncate text-subdued"
+              href={`https://github.com/${entry.repo}`}
+              target="_blank"
+              rel="noreferrer"
+              title={
+                entry.workspace
+                  ? `cloned — ${entry.workspace.branch ?? '?'} @ ${entry.workspace.head ?? '?'}${entry.workspace.dirty ? ', uncommitted changes' : ''}`
+                  : 'not cloned on this box'
+              }
+            >
+              ⎇ {entry.repo}
+            </a>
+            <CloneButton repo={entry.repo} cloned={entry.workspace !== null} />
+          </>
+        )}
+      </div>
     </li>
   )
 }
@@ -78,7 +112,7 @@ export const CARD =
 export const CARD_ASIDE = 'border-dashed bg-transparent'
 
 /* The whole card is the link; the foot rides inside it so one hover means
-   one destination. External cards break this on purpose (see ExternalRow). */
+   one destination. External cards keep their outbound links in a foot beside it (see ExternalRow). */
 export const CARD_LINK =
   'flex min-w-0 flex-1 flex-col gap-[0.55rem] px-4 pt-[0.85rem] pb-[0.9rem] text-inherit hover:no-underline'
 

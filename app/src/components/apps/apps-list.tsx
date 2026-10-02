@@ -33,7 +33,7 @@ const TALLY = 'inline-flex items-center gap-[0.45rem]'
 const TALLY_COUNT = 'font-semibold text-foreground'
 
 export function AppsList({ data }: { data: ListData }) {
-  const { apps, applyStatus, external } = data
+  const { apps, applyStatus, external, offboxStatus } = data
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')
   const [exposure, setExposure] = useState<'all' | AppStage>('all')
@@ -200,21 +200,49 @@ export function AppsList({ data }: { data: ListData }) {
         </>
       )}
 
-      {/* Projects hosted off the box, one section per platform. The registry
-          knows nothing about them — the list is the operator's, kept in the
-          settings store (Settings › Projects) — so the rows link out to the site itself
-          rather than to a detail page there is no data to fill. */}
+      {/* Projects hosted off the box, one section per platform, discovered
+          from GitHub Pages and Vercel (core/offbox/). A platform that could
+          not be read in full says why under its head — not connected, a
+          permission not granted — with the place to fix it; one that has
+          nothing to say and nothing to list is not drawn. */}
       {PLATFORMS.map((p) => {
         const entries = offBox.filter((e) => e.platform === p.id)
-        if (entries.length === 0) return null
+        const notes = offboxStatus.filter((s) => s.platform === p.id && s.state !== 'ok')
+        if (entries.length === 0 && notes.length === 0) return null
         return (
           <div key={p.id}>
             <SectionHead icon={PLATFORM_ICONS[p.id]} title={p.id} sub={p.description} />
-            <ul className={APP_LIST}>
-              {entries.map((e) => (
-                <ExternalRow key={e.id} entry={e} />
-              ))}
-            </ul>
+            {notes.length > 0 && (
+              <ul className="m-0 mb-[0.8rem] list-none p-0 text-[0.82rem] text-subdued">
+                {notes.map((n) => (
+                  <li
+                    key={`${n.account ?? ''}:${n.detail ?? ''}`}
+                    className="flex items-center gap-2"
+                  >
+                    <StateDot state={n.state === 'error' ? 'attention' : 'unknown'} />
+                    <span>
+                      {n.account !== null && <b className="font-medium">{n.account}: </b>}
+                      {n.detail}
+                      {n.state !== 'error' && (
+                        <>
+                          {' — '}
+                          <Link to="/settings" search={{ tab: 'integrations' }}>
+                            Settings › Integrations
+                          </Link>
+                        </>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {entries.length > 0 && (
+              <ul className={APP_LIST}>
+                {entries.map((e) => (
+                  <ExternalRow key={e.id} entry={e} />
+                ))}
+              </ul>
+            )}
           </div>
         )
       })}

@@ -108,8 +108,10 @@ loaded. They are not repeated here.
   scheduler, dispatch, sweep and GitHub reporting. `core/settings/` is the
   read-only reader behind `/settings` (`index.ts` assembles env +
   /export + snapshots into `BoxSettings`; `integrations.ts` is the
-  deferred, 5-min-cached live token checks; `external-apps.ts` reads
-  the off-box list from the store with `lib/external-apps.ts` as seed;
+  deferred, 5-min-cached live token checks; `core/offbox/` discovers
+  the off-box list — GitHub Pages through every installation of the App,
+  Vercel through its token — cached in-process and served stale while it
+  refreshes;
   `profile.ts` is the Profile tab — the signed-in person's Pocket ID
   account, resolved from the forward-auth headers and written through
   Pocket ID's admin API (every write re-sends isAdmin/disabled/

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { makeCtx } from '../core/ctx'
-import { findExternalApp } from '../core/settings/external-apps'
+import { findExternalApp } from '../core/offbox'
 import { appIcon, type ResolvedIcon, siteIcon } from '../host/app-icon'
 import { readSite } from '../host/site'
 import { effectiveHostname } from '../lib/hostname'
@@ -26,9 +26,9 @@ export const Route = createFileRoute('/api/app-icon/$name')({
         // JSON body — which a browser would try to decode as an image.
         const miss = new Response(null, { status: 404 })
 
-        // Registry apps first, then the operator's off-box list — the
+        // Registry apps first, then the discovered off-box list — the
         // resolution order that makes external ids forbidden from colliding
-        // with app names (see lib/external-apps.ts).
+        // with app names (see lib/external-apps.ts; core/offbox drops one).
         const record = await getApp(params.name)
         const external = record ? null : await findExternalApp(await makeCtx(), params.name)
         if (!record && !external) return miss

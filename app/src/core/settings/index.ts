@@ -74,6 +74,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
         tokenConfigured: ctx.secret('CF_API_TOKEN') !== '',
       },
       github: { owner: s.owner },
+      vercel: { tokenConfigured: ctx.secret('VERCEL_API_TOKEN') !== '' },
       mail: s.mail,
       registryUrl: s.registryUrl,
       grafanaUrl: s.grafanaUrl,

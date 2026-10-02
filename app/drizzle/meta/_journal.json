@@ -176,6 +176,13 @@
       "when": 1790868635393,
       "tag": "0024_typical_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790959586863,
+      "tag": "0025_offbox_discovered",
+      "breakpoints": true
     }
   ]
 }

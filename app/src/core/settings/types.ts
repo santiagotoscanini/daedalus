@@ -51,6 +51,8 @@ export type BoxSettings = {
       tokenConfigured: boolean
     }
     github: { owner: string }
+    /** The Vercel API token (DASH_VERCEL_API_TOKEN) is present. */
+    vercel: { tokenConfigured: boolean }
     mail: { sender: string; alertTo: string }
     registryUrl: string
     grafanaUrl: string
@@ -97,9 +99,30 @@ export type CloudflareStatus = {
   tunnel: { name: string; status: string } | null
 }
 
+export type VercelStatus = {
+  token: TokenCheck
+  /** The account the token belongs to, and every scope (team) it reaches. */
+  user: string | null
+  scopes: string[]
+}
+
+/** One installation of the GitHub App, as the host's minter last published it. */
+export type InstallationStatus = {
+  account: string
+  /** The owner's installation: the one that builds. The rest only read. */
+  owner: boolean
+  selection: string | null
+  ok: boolean
+  reason: string | null
+  /** Permissions the box asks for that this installation has not accepted. */
+  missing: string[]
+}
+
 export type IntegrationStatus = {
   checkedAt: string
   cloudflare: CloudflareStatus
+  vercel: VercelStatus
+  installations: InstallationStatus[]
   mail: { lastSentAt: string | null; lastRecipient: string | null }
 }
 

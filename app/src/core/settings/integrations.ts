@@ -1,6 +1,12 @@
 import { swrValue } from '../../lib/cache'
 import type { Ctx } from '../ctx'
-import type { CloudflareStatus, IntegrationStatus, TokenCheck } from './types'
+import type {
+  CloudflareStatus,
+  InstallationStatus,
+  IntegrationStatus,
+  TokenCheck,
+  VercelStatus,
+} from './types'
 
 // The live half of Settings › Integrations: each credential asked of the
 // service that issued it. Split from the settings reader because these are
@@ -106,6 +112,57 @@ async function mail(ctx: Ctx): Promise<IntegrationStatus['mail']> {
 }
 
 /**
+ * The Vercel token, asked of Vercel: who it is, which scopes it reaches,
+ * and when it expires (`/v5/user/tokens/current`, the token describing
+ * itself). The off-box list reads every scope this names.
+ */
+async function vercel(ctx: Ctx): Promise<VercelStatus> {
+  if (ctx.secret('VERCEL_API_TOKEN') === '')
+    return { token: NOT_CONFIGURED, user: null, scopes: [] }
+  const { vercelScopes, vercelTokenExpiry } = await import('../offbox/vercel')
+  const [who, expiry] = await Promise.all([vercelScopes(ctx), vercelTokenExpiry(ctx)])
+  if (!who.ok) return { token: { ok: false, reason: who.reason }, user: null, scopes: [] }
+  return {
+    token: { ok: true, value: { status: 'active', expiresOn: expiry } },
+    user: who.user,
+    scopes: who.scopes.map((s) => s.slug),
+  }
+}
+
+/**
+ * Every installation of the GitHub App, from the files the host's minter
+ * publishes: the owner's, which builds, and any other account or org, which
+ * only reads. `missing` is what the box asks for that GitHub has not been told
+ * to grant — the operator's step, named on the page.
+ */
+async function installations(ctx: Ctx): Promise<InstallationStatus[]> {
+  const { installationState, otherInstallations } = await import('../github-app')
+  const [owner, others] = await Promise.all([installationState(ctx), otherInstallations(ctx)])
+  const out: InstallationStatus[] = []
+  if (owner.available && owner.data.account !== null) {
+    out.push({
+      account: owner.data.account.login,
+      owner: true,
+      selection: owner.data.repositorySelection,
+      ok: owner.data.state === 'ok',
+      reason: owner.data.reason,
+      missing: owner.data.missingPermissions,
+    })
+  }
+  for (const i of others.data) {
+    out.push({
+      account: i.account?.login ?? String(i.installationId),
+      owner: false,
+      selection: i.repositorySelection,
+      ok: i.state === 'ok',
+      reason: i.reason,
+      missing: i.missingPermissions,
+    })
+  }
+  return out
+}
+
+/**
  * A check that failed outright reads as "did not answer", never as a broken
  * tab. These promises stream into an <Await>, and a rejection there is a
  * render error for the whole page — one failing upstream must not cost the
@@ -131,14 +188,19 @@ const failedCheck = (token: string): { ok: false; reason: string | null } =>
 
 async function load(ctx: Ctx): Promise<IntegrationStatus> {
   const cfToken = ctx.secret('CF_API_TOKEN')
-  const [cf, m] = await Promise.all([
+  const vercelToken = ctx.secret('VERCEL_API_TOKEN')
+  const [cf, m, v, inst] = await Promise.all([
     settled(cloudflare(ctx), { token: failedCheck(cfToken), zone: null, tunnel: null }),
     settled(mail(ctx), { lastSentAt: null, lastRecipient: null }),
+    settled(vercel(ctx), { token: failedCheck(vercelToken), user: null, scopes: [] }),
+    settled(installations(ctx), []),
   ])
   return {
     checkedAt: new Date().toISOString(),
     cloudflare: cf,
     mail: m,
+    vercel: v,
+    installations: inst,
   }
 }
 

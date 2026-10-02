@@ -125,7 +125,7 @@ async function exportOnce(): Promise<void> {
   ] = await Promise.all([
     import('./workspaces'),
     import('../lib/repo/apps'),
-    import('../core/settings/external-apps'),
+    import('../core/offbox'),
     import('../core/ctx'),
     import('./app-icon'),
     import('../lib/hostname'),

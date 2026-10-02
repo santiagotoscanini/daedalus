@@ -8,19 +8,10 @@ import type {
   IntegrationStatus,
   ZoneList,
 } from '../core/settings/types'
+import type { VercelTokenOutcome } from '../core/settings/vercel-token'
 import type { McpTokenRow } from '../host/mcp/tokens'
-import {
-  asValidator,
-  bool,
-  is,
-  nullable,
-  obj,
-  optional,
-  str,
-  withMessage,
-} from '../lib/contract/decode'
+import { asValidator, bool, is, obj, optional, str, withMessage } from '../lib/contract/decode'
 import { strMax } from '../lib/contract/fields'
-import { type ExternalApp, isPlatform } from '../lib/external-apps'
 import { isMcpScope } from '../lib/mcp'
 import type { Result } from '../lib/result'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
@@ -66,6 +57,18 @@ export const replaceCloudflareTokenFn = adminFn
   .handler(async ({ data, context }): Promise<TokenReplaceOutcome> => {
     const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
     return replaceCloudflareToken(await context.ctx(), context.actor, data.token)
+  })
+
+/**
+ * Settings › Integrations › Vercel: the token the off-box list reads Vercel
+ * with, checked then sealed for site/vault/ (core/settings/vercel-token.ts);
+ * never stored, logged or sent back.
+ */
+export const replaceVercelTokenFn = adminFn
+  .validator(asValidator(withMessage(obj({ token: str }), 'expected a token')))
+  .handler(async ({ data, context }): Promise<VercelTokenOutcome> => {
+    const { replaceVercelToken } = await import('../core/settings/vercel-token')
+    return replaceVercelToken(await context.ctx(), context.actor, data.token)
   })
 
 /**
@@ -174,50 +177,6 @@ export const saveTheme = adminFn
     const { SETTING_KEYS } = await import('../lib/repo/settings')
     await (await context.ctx()).store.write(SETTING_KEYS.theme, data)
     return data
-  })
-
-// ── Settings › Projects ─────────────────────────────────────────────────────
-//
-// A preference of the same kind as the theme: a row in Postgres, saved on
-// click, nothing rebuilds. core/settings/external-apps.ts
-// holds the rules; these are its doors, behind the admin gate like every
-// other mutation.
-
-export const fetchExternalApps = readFn.handler(async ({ context }): Promise<ExternalApp[]> => {
-  const { listExternalApps } = await import('../core/settings/external-apps')
-  return listExternalApps(await context.ctx())
-})
-
-/**
- * A new row's fields. The shape is checked first and refused as one sentence;
- * the platform is decoded last, so only a well-shaped form hears its own.
- */
-const externalAppInput = withMessage(
-  obj({
-    name: str,
-    host: str,
-    description: str,
-    repo: nullable(str),
-    platform: withMessage(is(isPlatform, 'a platform'), 'not a platform this build knows'),
-  }),
-  'expected a name, host, platform, description and repo',
-)
-
-/** Add a row. The refusal is the sentence the form shows under the fields. */
-export const addExternalAppFn = adminFn
-  .validator(asValidator(externalAppInput))
-  .handler(async ({ data, context }): Promise<Result<ExternalApp>> => {
-    const { addExternalApp } = await import('../core/settings/external-apps')
-    return addExternalApp(await context.ctx(), data)
-  })
-
-/** Drop a row. The site keeps running wherever it runs; only the listing goes. */
-export const removeExternalAppFn = adminFn
-  .validator(asValidator(withMessage(obj({ id: str }), 'expected a row id')))
-  .handler(async ({ data, context }): Promise<Result<null>> => {
-    const { removeExternalApp } = await import('../core/settings/external-apps')
-    const done = await removeExternalApp(await context.ctx(), data.id)
-    return done ? { ok: true, value: null } : { ok: false, reason: 'No such row.' }
   })
 
 // ── Settings › Developer › MCP tokens ──────────────────────────────────────

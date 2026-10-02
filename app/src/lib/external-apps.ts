@@ -1,24 +1,21 @@
 // Live projects hosted OFF this box — GitHub Pages, Vercel — so the app list
 // shows everything that is running somewhere, not only what this server runs.
 //
-// Nothing on the box builds, serves or monitors these, so there is no
-// registry row or nix manifest entry to derive them from, and nix never
-// consumes the list — which makes it a preference, not site configuration.
-// It lives in the settings store under `apps.external` (core/settings/
-// external-apps.ts reads and writes it; Settings › Projects is the editor),
-// and it is the operator's data: this file carries no rows, only the shape
-// and the rules a new row is held to. An image is built once and runs on
-// every box, so a row written here would be one box's projects on all of
-// them. The hostname rule ("nix binds every hostname") does not apply for
-// the same reason: the nix side has never heard of these hosts.
-
-import { hostnameShapeError } from './site-fields'
+// Nothing here is typed in. The rows are DISCOVERED (core/offbox/): every
+// repository the GitHub App can see that has Pages turned on, on every
+// account or org it is installed on, and every project the Vercel token can
+// see. Nix never consumes the list — nothing on the box builds, serves or
+// monitors these sites — so it is neither site configuration nor a
+// preference: it is whatever the two platforms say right now.
+//
+// This file is the client-safe half: the shape a row reaches the page in,
+// and the id rule.
 
 /**
  * The hosting platforms, in the order their sections render. The UI keys its
  * brand icons off `id` (components live with the JSX, not here), so adding a
  * platform means an entry here plus a mark in PLATFORM_ICONS
- * (routes/apps.index.tsx) — a compile error until it has one.
+ * (components/apps/app-card.tsx) — a compile error until it has one.
  */
 export const PLATFORMS = [
   {
@@ -33,36 +30,48 @@ export const PLATFORMS = [
 
 export type Platform = (typeof PLATFORMS)[number]['id']
 
-export const isPlatform = (v: unknown): v is Platform => PLATFORMS.some((p) => p.id === v)
+/** Where a site stands, as its platform reports it. */
+export type SiteState = 'live' | 'building' | 'failed' | 'unknown'
 
 export type ExternalApp = {
   /**
-   * Keys the icon endpoint and its cache, so it must be unique AND must not
-   * collide with a registry app name — /api/app-icon resolves registry apps
-   * first, and a collision would silently serve the wrong icon. Derived from
-   * the host by `externalAppId`, never typed: a host always carries a dot, so
-   * its id always carries a hyphen where a bare app name would not.
+   * Keys the icon endpoint, its cache and the detail route, so it must be
+   * unique AND must not collide with a registry app name — /api/app-icon
+   * resolves registry apps first. Derived from the host by `externalAppId`:
+   * a host always carries a dot, so its id always carries a hyphen where a
+   * bare app name would not, and discovery drops a row that collides anyway.
    */
   id: string
   name: string
   /** Bare public hostname; every link and icon probe is https://<host>. */
   host: string
   platform: Platform
-  description: string
+  /** The repository's own description; null when it has none. */
+  description: string | null
   /**
-   * Full owner/name GitHub slug — full, unlike registry apps' `OWNER/<name>`
-   * convention, because these live wherever they live, an org included. It
-   * is what the repo link and the workspace clone button act on. Null means
-   * "no repo to offer" and the row simply shows neither.
+   * Full owner/name GitHub slug — what the repo link, the Actions page and
+   * the workspace clone button act on. Null for a Vercel project that is not
+   * linked to a GitHub repository.
    */
   repo: string | null
+  state: SiteState
+  /** The last publish the platform recorded; null when it reports none. */
+  deployed: { at: string; sha: string | null } | null
+  /** Things worth a look — an expiring certificate, a domain not verified. Short phrases. */
+  warnings: string[]
+  /** The site's page on its platform (repo Pages settings, Vercel project). */
+  dashboardUrl: string
 }
 
-/** What the editor sends: a row less the id the store derives for it. */
-export type ExternalAppInput = Omit<ExternalApp, 'id'>
-
-export const EXTERNAL_NAME_MAX = 64
-export const EXTERNAL_DESCRIPTION_MAX = 200
+/** Why a platform contributed no rows, or fewer than it might. One per account. */
+export type ProviderStatus = {
+  platform: Platform
+  /** The GitHub account/org, or the Vercel scope; null before anything is known. */
+  account: string | null
+  state: 'ok' | 'not-configured' | 'needs-permission' | 'error'
+  /** A sentence safe to show; null when state is ok. */
+  detail: string | null
+}
 
 /** `docs.example.org` → `docs-example-org`: the id a host's row is filed under. */
 export const externalAppId = (host: string): string =>
@@ -72,71 +81,41 @@ export const externalAppId = (host: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 
-/** `owner/name`, as GitHub spells a repository. */
-const REPO_SLUG = /^[a-z\d](?:[a-z\d-]*[a-z\d])?\/[\w.-]+$/i
-
-/**
- * Why a row may not be added, or null when it may.
- *
- * `taken` is every id already in use — the stored rows' and the registry's
- * app names — so the collision the `id` field warns about is refused at the
- * door rather than discovered as the wrong icon. The server runs this over
- * the real lists; the form runs it over what it was handed, for the red box.
- */
-export function externalAppError(input: ExternalAppInput, taken: readonly string[]): string | null {
-  const name = input.name.trim()
-  if (name === '') return 'a name is required.'
-  if (name.length > EXTERNAL_NAME_MAX) {
-    return `a name is at most ${String(EXTERNAL_NAME_MAX)} characters.`
-  }
-  const host = input.host.trim()
-  const shape = hostnameShapeError(host)
-  if (shape !== null) return shape
-  if (!host.includes('.'))
-    return 'a public hostname needs at least two labels, like docs.example.org.'
-  if (!isPlatform(input.platform)) return 'not a platform this build knows.'
-  if (input.description.trim() === '') return 'a description is required.'
-  if (input.description.trim().length > EXTERNAL_DESCRIPTION_MAX) {
-    return `a description is at most ${String(EXTERNAL_DESCRIPTION_MAX)} characters.`
-  }
-  if (input.repo !== null && !REPO_SLUG.test(input.repo.trim())) {
-    return 'a repository is owner/name, as GitHub spells it — or leave it empty.'
-  }
-  if (taken.includes(externalAppId(host))) return `${host} is already listed.`
-  return null
+/** The detail page's read of a Pages site (core/offbox/github-pages.ts). */
+export type PagesDetail = {
+  buildType: 'legacy' | 'workflow' | null
+  source: { branch: string; path: string } | null
+  httpsEnforced: boolean
+  certificate: { state: string; expiresAt: string | null } | null
+  /** Most recent first; each a publish GitHub recorded. */
+  deploys: { at: string; sha: string | null; state: string; url: string | null }[]
 }
 
-/** The row `externalAppError` accepted, trimmed and filed under its id. */
-export function externalAppFrom(input: ExternalAppInput): ExternalApp {
-  const host = input.host.trim().toLowerCase()
-  const repo = input.repo?.trim() ?? ''
-  return {
-    id: externalAppId(host),
-    name: input.name.trim(),
-    host,
-    platform: input.platform,
-    description: input.description.trim(),
-    repo: repo === '' ? null : repo,
-  }
-}
-
-/**
- * The guard a stored list is read back through. Structural, field by field:
- * a row written by an older shape, or by hand with a platform this build
- * does not know, degrades to no rows at all rather than reaching a component.
- */
-export function isExternalAppList(v: unknown): v is ExternalApp[] {
-  if (!Array.isArray(v)) return false
-  return v.every((e: unknown) => {
-    if (e === null || typeof e !== 'object') return false
-    const o = e as Record<string, unknown>
-    return (
-      typeof o.id === 'string' &&
-      typeof o.name === 'string' &&
-      typeof o.host === 'string' &&
-      typeof o.description === 'string' &&
-      isPlatform(o.platform) &&
-      (o.repo === null || typeof o.repo === 'string')
-    )
-  })
+/** The detail page's read of a Vercel project (core/offbox/vercel.ts). */
+export type VercelDetail = {
+  framework: string | null
+  domains: {
+    name: string
+    verified: boolean
+    misconfigured: boolean | null
+    redirect: string | null
+  }[]
+  deploys: {
+    at: string
+    state: string
+    target: string | null
+    sha: string | null
+    message: string | null
+    url: string | null
+    inspectorUrl: string | null
+  }[]
+  /** Null when Web Analytics is off for the project (or the plan lacks it). */
+  analytics: { days: number; pageviews: number; visitors: number }[] | null
+  /** The last 24 h of firewall actions; null when Vercel would not say. */
+  firewall: {
+    total: number
+    blockingIps: number
+    challengingIps: number
+    byAction: Record<string, number>
+  } | null
 }

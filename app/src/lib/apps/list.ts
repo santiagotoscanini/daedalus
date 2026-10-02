@@ -1,5 +1,5 @@
 import type { Ctx } from '../../core/ctx'
-import { listExternalApps } from '../../core/settings/external-apps'
+import { offbox } from '../../core/offbox'
 import { appIcon, siteIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
 import { manifestEntries } from '../../host/nix-manifest'
@@ -26,7 +26,7 @@ export async function loadAppList(ctx: Ctx) {
   const [rows, entries] = await Promise.all([listApps(), manifestEntries()])
   const manifest = new Map(entries.map((m) => [m.name, m]))
   const records = rows.map((r) => asDeclared(r, manifest.get(r.name)))
-  const EXTERNAL_APPS = await listExternalApps(ctx)
+  const { sites: EXTERNAL_APPS, status: offboxStatus } = await offbox(ctx)
   const [statuses, applyStatus, icons, externalIcons, workspaces] = await Promise.all([
     // Degrades per-app rather than rejecting, so a prometheus outage costs
     // the status column, not the page.
@@ -53,11 +53,13 @@ export async function loadAppList(ctx: Ctx) {
 
   return {
     applyStatus,
-    // The off-box projects (GitHub Pages / Vercel). Static data plus two
-    // probed facts — whether the site serves an icon, and whether a
-    // workspace on this box already holds the repo — so the row can draw a
-    // monogram instead of a broken image and a clone button that tells the
-    // truth.
+    // The off-box projects (GitHub Pages / Vercel), as the two platforms
+    // report them, plus two probed facts — whether the site serves an
+    // icon, and whether a workspace on this box already holds the repo — so
+    // the row can draw a monogram instead of a broken image and a clone
+    // button that tells the truth. `offboxStatus` says why a platform shows
+    // fewer rows than it might: not connected, a permission not granted.
+    offboxStatus,
     external: EXTERNAL_APPS.map((e, i) => ({
       ...e,
       hasIcon: externalIcons[i] ?? false,

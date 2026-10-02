@@ -59,6 +59,12 @@ export const MCP_TOOLS: readonly McpToolSpec[] = [
     scope: 'read',
     summary: 'One app: its record, drift from nix, and live signals.',
   },
+  {
+    name: 'offbox.get',
+    scope: 'read',
+    summary:
+      'One site hosted off the box (GitHub Pages or Vercel), by the id apps.list gives it: publishes, domains, and for Vercel its traffic and firewall.',
+  },
   { name: 'builds.list', scope: 'read', summary: 'Recent builds of one app, newest first.' },
   {
     name: 'builds.get',

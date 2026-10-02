@@ -421,6 +421,10 @@ export const SCHEMA = {
     'The box’s one Cloudflare token. Only ever GETs here.',
     `${DAEDALUS} daedalus-dashboard-keys, from site/vault/cloudflare-api-token.sops`,
   ),
+  DASH_VERCEL_API_TOKEN: dash(
+    'The Vercel token the off-box list reads with. Only ever GETs here.',
+    `${DAEDALUS} daedalus-dashboard-keys, from site/vault/vercel-api-token.sops`,
+  ),
   DASH_POCKETID_KEY: dash(
     'Pocket ID’s admin API key.',
     'stacks/pocket-id fleet.dashboard.pocket-id.envFiles (pocket-id-daedalus-key)',

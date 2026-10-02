@@ -22,6 +22,13 @@
 let
   storeFile = config.fleet.daedalus.serviceKeysSopsFile;
 
+  # The Vercel token the off-box list reads with: set from Settings ›
+  # Integrations, which seals it into site/vault/. Until that first Apply
+  # there is no file, nothing is declared, and the Apps page says Vercel is
+  # not connected.
+  vercelVault = "${config.fleet.site.source}/vault/vercel-api-token.sops";
+  haveVercel = builtins.pathExists vercelVault;
+
   # <n> in the store → DASH_<n> in the container's environment: every key a
   # switched-on stack asks for, once, in name order.
   serviceKeys = lib.optionals (storeFile != null) (
@@ -55,6 +62,15 @@ in
       "podman-app-daedalus.service"
     ];
 
+    sops.secrets."vercel-api-token" = lib.mkIf haveVercel {
+      sopsFile = vercelVault;
+      format = "binary";
+      restartUnits = [
+        "daedalus-dashboard-keys.service"
+        "podman-app-daedalus.service"
+      ];
+    };
+
     systemd.services."daedalus-dashboard-keys" =
       let
         store = config.sops.secrets."daedalus-service-keys".path;
@@ -76,12 +92,17 @@ in
             # installation token (GITHUB_TOKEN_PATH), not a key here.
             "CF_TOKEN=$(grep -m1 '^CF_DNS_API_TOKEN=' ${config.fleet.cloudflare.tokenEnvFile} | cut -d= -f2- | tr -d '\"' || true)"
           ]
+          ++ lib.optional haveVercel "VERCEL_TOKEN=$(tr -d '\\n' < ${
+            config.sops.secrets."vercel-api-token".path
+          } || true)"
         );
         content = lib.concatStringsSep "\n" (
-          map (k: "DASH_${k}=\${${k}}") serviceKeys ++ [ "DASH_CF_API_TOKEN=\${CF_TOKEN}" ]
+          map (k: "DASH_${k}=\${${k}}") serviceKeys
+          ++ [ "DASH_CF_API_TOKEN=\${CF_TOKEN}" ]
+          ++ lib.optional haveVercel "DASH_VERCEL_API_TOKEN=\${VERCEL_TOKEN}"
         );
         # Each read above tolerates a missing key (`|| true`).
-        optional = serviceKeys ++ [ "CF_TOKEN" ];
+        optional = serviceKeys ++ [ "CF_TOKEN" ] ++ lib.optional haveVercel "VERCEL_TOKEN";
       };
   };
 }

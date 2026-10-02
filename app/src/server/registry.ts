@@ -317,3 +317,27 @@ export const runTaskNow = adminFn
     const { runAppTaskNow } = await import('../lib/apps/tasks')
     return runAppTaskNow(await context.ctx(), { ...data, actor: context.actor })
   })
+
+// ── off-box sites (core/offbox/) ────────────────────────────────────────────
+
+const offboxId = withMessage(obj({ id: str }), 'expected a site id')
+
+/** One discovered site, from the cached list; null when no platform lists it. */
+export const fetchOffboxSite = readFn
+  .validator(asValidator(offboxId))
+  .handler(async ({ data, context }) => {
+    const { findExternalApp } = await import('../core/offbox')
+    return findExternalApp(await context.ctx(), data.id)
+  })
+
+/**
+ * The detail page's own read of one site — its platform asked afresh: the
+ * publishes, the domains, and for Vercel the analytics and the firewall.
+ * Streamed behind the page; null when the platform no longer answers for it.
+ */
+export const fetchOffboxDetail = readFn
+  .validator(asValidator(offboxId))
+  .handler(async ({ data, context }) => {
+    const { offboxDetail } = await import('../core/offbox')
+    return (await offboxDetail(await context.ctx(), data.id))?.detail ?? null
+  })

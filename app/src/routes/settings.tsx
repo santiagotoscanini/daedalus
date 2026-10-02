@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router'
 import {
   CodeIcon,
   FolderGit2Icon,
-  GlobeIcon,
   LayersIcon,
   MonitorSmartphoneIcon,
   NetworkIcon,
@@ -26,7 +25,6 @@ import { fetchMachinesFn } from '../server/nodes'
 import { fetchApplyStatus } from '../server/registry'
 import {
   fetchBoxSettings,
-  fetchExternalApps,
   fetchGithubAppStatus,
   fetchIntegrationStatus,
   fetchMcpTokens,
@@ -49,11 +47,11 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 //
 // The dividing line every section on this page has to respect: a setting the
 // NixOS side consumes belongs in the site repository, where changing it is a
-// commit and a rebuild. A setting it does not — the theme, the off-box
-// projects, what the box asks of the other machines, and every UI
-// preference after them — belongs in Postgres, where changing it is an
-// UPDATE and nothing rebuilds. Appearance and Projects are deliberately the
-// second kind, which is why they save on click with no Apply bar. Machines
+// commit and a rebuild. A setting it does not — the theme, what the box
+// asks of the other machines, and every UI preference after them — belongs
+// in Postgres, where changing it is an UPDATE and nothing rebuilds.
+// Appearance is deliberately the second kind, which is why it saves on
+// click with no Apply bar. Machines
 // saves on click too, but a machine's id, name, OS and providers also reach
 // nix as site/nodes.json at the next Apply (host/apply-flow.ts
 // nodesChange). Machines is also where the other machines are SHOWN — what
@@ -91,7 +89,6 @@ const TABS = [
   { id: 'network', label: <TabLabel icon={<NetworkIcon />}>Network</TabLabel> },
   { id: 'integrations', label: <TabLabel icon={<PlugIcon />}>Integrations</TabLabel> },
   { id: 'repository', label: <TabLabel icon={<FolderGit2Icon />}>Site</TabLabel> },
-  { id: 'projects', label: <TabLabel icon={<GlobeIcon />}>Projects</TabLabel> },
   { id: 'machines', label: <TabLabel icon={<MonitorSmartphoneIcon />}>Machines</TabLabel> },
   { id: 'modules', label: <TabLabel icon={<LayersIcon />}>Modules</TabLabel> },
   { id: 'appearance', label: <TabLabel icon={<PaletteIcon />}>Appearance</TabLabel> },
@@ -158,32 +155,28 @@ export const Route = createFileRoute('/settings')({
   // shows them; so does the machine list, which probes the LAN.
   loader: async ({ deps }) => {
     const general = !isTab(deps.tab) || deps.tab === 'general'
-    const [theme, settings, edit, applyStatus, timezones, externalApps, githubApp, mcpTokens] =
-      await Promise.all([
+    const [theme, settings, edit, applyStatus, timezones, githubApp, mcpTokens] = await Promise.all(
+      [
         known('settings/theme', fetchTheme),
         known('settings/box', fetchBoxSettings),
         known('settings/edit', fetchSiteEdit),
         known('settings/apply', fetchApplyStatus),
         // A file read; only General has the picker.
         general ? known('settings/timezones', fetchTimezones) : Promise.resolve<string[]>([]),
-        // One row, and only Projects has the editor.
-        deps.tab === 'projects'
-          ? known('settings/projects', fetchExternalApps)
-          : Promise.resolve([]),
         // Two file reads and a row, for the tab that shows it.
         deps.tab === 'integrations'
           ? known('settings/github', fetchGithubAppStatus)
           : Promise.resolve(null),
         // One indexed table read, and only for the tab that lists them.
         deps.tab === 'developer' ? known('settings/mcp', fetchMcpTokens) : Promise.resolve([]),
-      ])
+      ],
+    )
     return {
       theme,
       settings,
       edit,
       applyStatus,
       timezones,
-      externalApps,
       githubApp,
       mcpTokens,
       // One table read plus a LAN probe of every machine, which can take
@@ -223,7 +216,7 @@ function SettingsPage() {
     <Measure>
       <PageHead title="Settings">
         How this box is configured, and how it looks. What nix builds from is edited here and
-        applied as a rebuild; Projects, Machines and Appearance save to this control plane at once.
+        applied as a rebuild; Machines and Appearance save to this control plane at once.
       </PageHead>
 
       <TabBar

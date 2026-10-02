@@ -6,8 +6,10 @@ import { mailAddressError } from '../../lib/site-fields'
 import { Ago, When } from '../ago'
 import { Identified, ReplaceToken, Token } from './cloudflare'
 import { GithubApp, type GithubAppProps } from './github-app'
+import { Installations } from './installations'
 import { ExtLink, Mono, Pending, Section, Stack, Unset, Value } from './shared'
 import { SiteText, SiteUnwritten } from './site-fields'
+import { Vercel } from './vercel'
 
 // The Integrations tab's frame: four sections of facts, in the order a
 // request travels — the edge, the source of the code, the mail that reports on
@@ -109,10 +111,28 @@ export function Integrations({
                 <ExtLink href={`https://github.com/${gh.owner}`}>{gh.owner}</ExtLink>
               ),
           },
+          {
+            k: 'Installations',
+            v:
+              status === null ? (
+                <Pending />
+              ) : (
+                <Installations
+                  list={status.installations}
+                  settingsUrl={github.app?.settingsUrl ?? null}
+                  installUrl={github.app?.installUrl ?? null}
+                />
+              ),
+          },
         ]}
       >
         <GithubApp {...github} />
       </Section>
+
+      <Vercel
+        configured={settings.vercel.tokenConfigured}
+        status={status === null ? null : status.vercel}
+      />
 
       <Section
         title="Mail relay"

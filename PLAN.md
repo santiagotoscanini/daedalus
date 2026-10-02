@@ -395,7 +395,7 @@ stable — code cites them.
 
 11. **Self-hosted GitHub Actions runners, managed from daedalus.** The
     Actions page reads every repository the box watches — its apps,
-    Settings › Projects, the engine — as the App where it may and as anyone
+    the off-box sites, the engine — as the App where it may and as anyone
     where the repository is public. What it still lacks, in order:
     - **Runners themselves.** Runners run CI, never fleet images — the
       box's build path stays the only way an image reaches zot. Ephemeral,

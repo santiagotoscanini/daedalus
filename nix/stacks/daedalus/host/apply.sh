@@ -146,7 +146,7 @@ jq -e '.files | type == "object"' "$PAYLOAD_COPY" >/dev/null 2>&1 || fail writin
 # all, and a payload naming one is skipped like any other unmanaged key.
 # It goes after the vault root entries and before README.md, so both
 # orderings the subject below relies on still hold.
-MANAGED=(apps.json nodes.json site.json vault/cloudflare-api-token.sops vault/github-app.sops "${VAULT_APP_SECRETS[@]}" README.md daedalus.json)
+MANAGED=(apps.json nodes.json site.json vault/cloudflare-api-token.sops vault/github-app.sops vault/vercel-api-token.sops "${VAULT_APP_SECRETS[@]}" README.md daedalus.json)
 WRITTEN=()
 for f in "${MANAGED[@]}"; do
   [ "$(jq -r --arg f "$f" 'if (.files[$f] | type) == "string" then "yes" else "no" end' "$PAYLOAD_COPY")" = "yes" ] || continue

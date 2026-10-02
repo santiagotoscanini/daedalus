@@ -1,5 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { listExternalApps } from '../../../core/settings/external-apps'
+import { listExternalApps } from '../../../core/offbox'
 import { type Decoder, decode } from '../../../lib/contract/decode'
 import { ENGINE_REPO } from '../../../lib/engine'
 import { listAppNames } from '../../../lib/repo/apps'

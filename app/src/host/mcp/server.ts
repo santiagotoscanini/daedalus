@@ -202,6 +202,18 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
     return detail
   })
 
+  read(
+    'offbox.get',
+    { id: z.string().min(1).describe('The site id, as apps.list names it under external.') },
+    async (args) => {
+      const { offboxDetail } = await import('../../core/offbox')
+      const found = await offboxDetail(await ctx(), String(args.id))
+      if (found === null)
+        throw new Error('Neither GitHub Pages nor Vercel lists a site by that id.')
+      return found
+    },
+  )
+
   read('builds.list', { ...appArg, ...limitArg }, async (args) => {
     const { getApp } = await import('../../lib/repo/apps')
     const { listBuilds } = await import('../../lib/repo/builds')
