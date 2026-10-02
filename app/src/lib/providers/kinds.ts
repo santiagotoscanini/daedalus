@@ -230,9 +230,18 @@ export function apiBase(kind: ProviderKind, base: string): string {
 const REPLY_RESERVE = 16_384
 
 /**
- * One provider model as the LiteLLM route the sync writes. `openai/<id>` is
- * the transport, not the vendor; cost is pinned to zero so spend analytics
- * stay exact; a chat model with a known context splits it into input and
+ * The LiteLLM model string a route dials: `openai/<id>` — the transport, not
+ * the vendor — except a reranker's, `hosted_vllm/<id>`: LiteLLM's openai
+ * provider has no rerank, and hosted_vllm posts the Cohere-shaped body to
+ * `<api_base>/rerank`, which Lemonade serves.
+ */
+export function upstreamFor(mode: ModelMode, id: string): string {
+  return mode === 'rerank' ? `hosted_vllm/${id}` : `openai/${id}`
+}
+
+/**
+ * One provider model as the LiteLLM route the sync writes. Cost is pinned to
+ * zero so spend analytics stay exact; a chat model with a known context splits it into input and
  * reply the way the hand-written routes did.
  */
 export function routeFor(input: {
@@ -261,7 +270,7 @@ export function routeFor(input: {
   return {
     model_name: input.alias,
     litellm_params: {
-      model: `openai/${model.id}`,
+      model: upstreamFor(model.mode, model.id),
       api_base: apiBase(input.kind, input.base),
       api_key: 'local-no-auth',
       // A cold model load on a GPU box is slow; the first call after idle

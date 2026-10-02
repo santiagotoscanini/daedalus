@@ -15,7 +15,7 @@ export type GatewayRoute = {
   inDb: boolean
   /** The published name callers use. */
   alias: string
-  /** `openai/<id>` — the transport and the upstream id. */
+  /** `<provider>/<id>` — LiteLLM's transport and the upstream id. */
   upstream: string
   /** Host and port the route dials, or null when the route has no api_base. */
   host: string | null

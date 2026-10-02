@@ -490,15 +490,10 @@ stable — code cites them.
       and its log tail. MCP write tools for install and power.
     - **Fixes.** A failed `/models` read reports an unknown catalog, never an
       empty one (today gateway-sync deletes every route of the node on it).
-      Reranking becomes an ordinary synced route on a LiteLLM rerank provider
-      (Lemonade serves `/v1/rerank` since v2026.40); the `/reranking`
-      pass-through and `@lemonadeHost@` leave `/etc/nixos`, and Open WebUI
-      reranks through the alias. `lemonade.md` and the litellm header are
-      rewritten for the managed install.
     - **Order.** The route-wipe fix; detection, the report, the dot and the
       page; the Windows verbs, with the gaming PC moving from 10.8.1 through
       them (if 10.8.1 predates the MSI's upgrade code it reports as
-      unmanaged and is uninstalled by hand once); reranking and docs; macOS
+      unmanaged and is uninstalled by hand once); macOS
       and Linux when such a node offers Lemonade.
 
 ---

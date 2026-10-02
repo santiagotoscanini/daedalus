@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apiBase, defaultAlias, modelOf, modeOf, routeFor } from './kinds'
+import { apiBase, defaultAlias, modelOf, modeOf, routeFor, upstreamFor } from './kinds'
 
 // The gaming PC's Lemonade 10.8.1 catalog of 2026-09-23, as its agent
 // carries it (agent/src/node/providers/: the provider's own words).
@@ -86,6 +86,23 @@ describe('the route a model becomes', () => {
         daedalus: { node: 'a2272f1b0bdac468', kind: 'lemonade', id: 'Gemma-4-12B-it-MTP-GGUF' },
       },
     })
+  })
+
+  it('routes a reranker through hosted_vllm, which posts to <api_base>/rerank', () => {
+    const reranker = CATALOG[4]
+    if (reranker === undefined) throw new Error('fixture')
+    const r = routeFor({
+      node: 'a2272f1b0bdac468',
+      kind: 'lemonade',
+      base: 'http://gaming-pc.lan:13305',
+      model: reranker,
+      alias: 'bge-reranker-v2-m3',
+      maxContext: null,
+    })
+    expect(r.litellm_params.model).toBe('hosted_vllm/bge-reranker-v2-m3-GGUF')
+    expect(r.litellm_params.api_base).toBe('http://gaming-pc.lan:13305/api/v1')
+    expect(r.model_info.mode).toBe('rerank')
+    expect(upstreamFor('chat', 'x')).toBe('openai/x')
   })
 
   it('knows where each kind hangs its OpenAI surface', () => {

@@ -1,6 +1,11 @@
 import type { Ctx, Gateway } from '../core/ctx'
 import { isRecord } from '../lib/is-record'
-import { type LitellmRoute, type ProviderModel, routeFor } from '../lib/providers/kinds'
+import {
+  type LitellmRoute,
+  type ProviderModel,
+  routeFor,
+  upstreamFor,
+} from '../lib/providers/kinds'
 import {
   BOX_PROVIDERS_KEY,
   type BoxProviderPolicy,
@@ -201,7 +206,7 @@ export function planRoutes(input: {
           ? { ...resolved, alias: model.id.toLowerCase() }
           : resolved
       if (!r.offer) continue
-      const upstream = `openai/${model.id}`
+      const upstream = upstreamFor(r.mode, model.id)
       const owner = taken.get(r.alias)
       if (owner !== undefined) {
         skipped.push({ alias: r.alias, why: `already ${owner}` })

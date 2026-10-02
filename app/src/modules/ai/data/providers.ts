@@ -121,7 +121,7 @@ function routedBy(routes: GatewayRoute[], p: FleetProvider, id: string): string 
   const hit = routes.find(
     (r) =>
       (r.daedalus !== null && r.daedalus.node === p.machine && r.daedalus.id === id) ||
-      (r.daedalus === null && r.upstream === `openai/${id}` && r.host === host),
+      (r.daedalus === null && r.upstream.replace(/^[^/]+\//, '') === id && r.host === host),
   )
   return hit?.alias ?? null
 }
