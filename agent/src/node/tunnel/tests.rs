@@ -4,6 +4,7 @@
 //! wrong the same way at both ends. (The box's kernel WireGuard is the
 //! end-to-end's, agent/e2e-tunnel.sh.)
 
+use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,7 +80,8 @@ fn spawn_box(machine: &StaticSecret, loss: u32) -> TestBox {
             });
             iface.routes_mut().add_default_ipv4_route(BOX).unwrap();
             let mut sockets = SocketSet::new(Vec::new());
-            let mut handles: Vec<SocketHandle> = vec![sockets.add(listener())];
+            let mut handles: Vec<(SocketHandle, VecDeque<u8>)> =
+                vec![(sockets.add(listener()), VecDeque::new())];
             let mut peer: Option<SocketAddr> = None;
             let (mut buf, mut out) = (vec![0u8; 2048], vec![0u8; 2048]);
             let mut chunk = vec![0u8; 16 * 1024];
@@ -113,23 +115,32 @@ fn spawn_box(machine: &StaticSecret, loss: u32) -> TestBox {
                     let _ = udp.send_to(d, p);
                 }
                 iface.poll(now(), &mut q, &mut sockets);
-                for h in &handles {
+                // The echo reads everything that arrives, whether or not its
+                // send buffer has room, as the kernel at the real box does:
+                // smoltcp drops the ACK riding a segment outside a closed
+                // receive window, so an echo that stopped reading until its
+                // sends were acknowledged would wait for ACKs it throws away
+                // (the machine's end gives up after TCP_TIMEOUT).
+                for (h, pending) in &mut handles {
                     let s = sockets.get_mut::<tcp::Socket>(*h);
-                    while s.can_recv() && s.can_send() {
-                        let room = (s.send_capacity() - s.send_queue()).min(chunk.len());
-                        let n = s.recv_slice(&mut chunk[..room]).unwrap();
-                        s.send_slice(&chunk[..n]).unwrap();
+                    while s.can_recv() {
+                        let n = s.recv_slice(&mut chunk).unwrap();
+                        pending.extend(&chunk[..n]);
                     }
-                    if s.state() == tcp::State::CloseWait {
+                    while !pending.is_empty() && s.can_send() {
+                        let n = s.send_slice(pending.as_slices().0).unwrap();
+                        pending.drain(..n);
+                    }
+                    if s.state() == tcp::State::CloseWait && pending.is_empty() {
                         s.close();
                     }
                 }
                 // Always one socket listening for the next connection.
                 if handles
                     .iter()
-                    .all(|h| sockets.get::<tcp::Socket>(*h).state() != tcp::State::Listen)
+                    .all(|(h, _)| sockets.get::<tcp::Socket>(*h).state() != tcp::State::Listen)
                 {
-                    handles.push(sockets.add(listener()));
+                    handles.push((sockets.add(listener()), VecDeque::new()));
                 }
                 iface.poll(now(), &mut q, &mut sockets);
                 while let Some(packet) = q.tx.pop_front() {
