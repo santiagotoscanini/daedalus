@@ -136,7 +136,10 @@ in
   # through traefik, behind the sign-in gate, never through the tunnel. The
   # app links it and spells the same name (app/src/lib/providers/kinds.ts
   # `providerUiHost`), and tells the node's agent to accept it as an origin.
-  # The probe is Lemonade's unauthenticated liveness path.
+  # The probe is Lemonade's unauthenticated liveness path, in the `machines`
+  # probe group: a machine that is off fails it by design, and "Machine Link
+  # Down" / "Model Server Down" already say so, so the generic web-app alert
+  # leaves it out.
   config.fleet.webApps = lib.listToAttrs (
     map (
       n:
@@ -144,6 +147,7 @@ in
         serviceUrl = "http://${cfg.nodeHost n}:${toString n.providers.lemonade.port}";
         auth = "oidc";
         healthPath = "/live";
+        probeGroup = "machines";
       }
     ) (cfg.nodesOffering "lemonade")
   );

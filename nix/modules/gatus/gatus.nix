@@ -68,7 +68,7 @@ let
     name: w:
     {
       inherit name;
-      group = "web-apps";
+      group = w.probeGroup;
       url = "https://${w.hostname}${if w.healthPath != null then w.healthPath else "/"}";
       interval = "60s";
       conditions = [

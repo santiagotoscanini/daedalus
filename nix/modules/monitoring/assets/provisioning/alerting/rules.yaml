@@ -195,7 +195,10 @@ groups:
       # container runs but the app serves 5xx (e.g. an aardvark-dns
       # reload dropping a sibling's name — nextcloud 500'd for ~2h on
       # 2026-07-18 with every container "up"). 10m tolerance: probes
-      # run every 60s, so this needs a real outage, not a blip.
+      # run every 60s, so this needs a real outage, not a blip. Only the
+      # `web-apps` probe group: a webApp with another `probeGroup` (a
+      # machine's provider window, down whenever the machine is off) has
+      # alerts of its own.
       - uid: webapp-probe-failing-1
         title: Web App Probe Failing
         condition: C
@@ -206,7 +209,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: min by (name) (gatus_results_endpoint_success{name!="home-assistant"})  # HA-MUTED
+              expr: min by (name) (gatus_results_endpoint_success{group="web-apps", name!="home-assistant"})  # HA-MUTED
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200

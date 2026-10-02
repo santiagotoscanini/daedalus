@@ -734,6 +734,20 @@ in
                 '';
                 example = "/api/health";
               };
+              probeGroup = lib.mkOption {
+                type = lib.types.str;
+                default = "web-apps";
+                description = ''
+                  The gatus group this app's probe sits in, carried as the
+                  `group` label of `gatus_results_endpoint_success`. The
+                  "Web App Probe Failing" alert reads `web-apps` only, so a
+                  probe placed elsewhere is still probed, graphed and shown
+                  as a dot, but pages no one. For a window whose upstream
+                  is EXPECTED to come and go — a provider on a machine that
+                  sleeps — and that has alerts of its own (platform/nodes.nix).
+                '';
+                example = "machines";
+              };
               healthHeaders = lib.mkOption {
                 type = lib.types.attrsOf lib.types.str;
                 default = { };
