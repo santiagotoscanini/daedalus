@@ -468,12 +468,7 @@ Hand edits the UI cannot make for itself:
    Add that hex as the list's second entry in a release signed with the
    current key; from then on a release signed with the spare that drops
    the first is the way out of a lost or leaked current key.
-2. **Drop the PC's line from the household reservations.**
-   `host/sops/pihole/dhcp-hosts.sops` still names the gaming PC, which is
-   why the control plane skips that MAC in its own file ("named by the
-   household file" on Settings › Machines). Delete that line and rebuild:
-   the runtime line takes over on the next policy save.
-3. **The first `v*` tag** (Phase 10b, open decision 2) — one
+2. **The first `v*` tag** (Phase 10b, open decision 2) — one
    act, when the operator chooses.
 
 ## Engine polish
