@@ -326,8 +326,15 @@ const offboxId = withMessage(obj({ id: str }), 'expected a site id')
 export const fetchOffboxSite = readFn
   .validator(asValidator(offboxId))
   .handler(async ({ data, context }) => {
-    const { findExternalApp } = await import('../core/offbox')
-    return findExternalApp(await context.ctx(), data.id)
+    const [{ findExternalApp }, { siteIcon }] = await Promise.all([
+      import('../core/offbox'),
+      import('../host/app-icon'),
+    ])
+    const site = await findExternalApp(await context.ctx(), data.id)
+    // The same probe the list draws its icon with, and the same hour-long cache.
+    return site === null
+      ? null
+      : { ...site, hasIcon: (await siteIcon(site.id, site.host)) !== null }
   })
 
 /**

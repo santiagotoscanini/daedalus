@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
-import { Ago, When } from '../components/ago'
+import { Ago, Until, When } from '../components/ago'
 import { PLATFORM_ICONS, SITE_DOT } from '../components/apps/app-card'
 import { AppIcon, StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
@@ -61,7 +61,7 @@ function OffboxSite() {
       <PageHead
         title={
           <span className="inline-flex items-center gap-3">
-            <AppIcon name={site.id} hasIcon={false} size={34} />
+            <AppIcon name={site.id} hasIcon={site.hasIcon} size={34} />
             {site.name}
           </span>
         }
@@ -180,7 +180,8 @@ function PagesBoards({ site, d }: { site: ExternalApp; d: PagesDetail }) {
                     {d.certificate.expiresAt !== null && (
                       <>
                         {' '}
-                        · expires <When at={d.certificate.expiresAt} />
+                        · expires {d.certificate.expiresAt.slice(0, 10)}, in{' '}
+                        <Until at={d.certificate.expiresAt} />
                       </>
                     )}
                   </>
