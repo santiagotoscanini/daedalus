@@ -28,7 +28,7 @@ export function RecordView({ data: d }: { data: Record_ }) {
       <ServiceHead
         logo="/icon-getbased.svg"
         name="getbased"
-        version={d.build.running}
+        version={d.build.running?.slice(0, 7) ?? null}
         versionNote="a commit on upstream main"
         verdict={buildVerdict(d)}
         lede={
