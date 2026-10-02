@@ -79,11 +79,12 @@ let
     // lib.optionalAttrs (w.healthHeaders != { }) { headers = w.healthHeaders; }
   ) config.fleet.webApps;
 
-  # A model server on another machine is NOT probed from here: its agent
-  # reads it on that machine's loopback and the controller serves the
-  # result as `daedalus_agent_provider_up` (modules/monitoring's "Model
-  # Server Down" alert), so the box never dials the provider but for the
-  # gateway's model requests.
+  # A model server on another machine is read by its agent on that
+  # machine's loopback, and the controller serves the result as
+  # `daedalus_agent_provider_up` (modules/monitoring's "Model Server Down"
+  # alert). What is probed here is only its published window
+  # (platform/nodes.nix), a web app like any other: is the page reachable
+  # through traefik.
   endpoints = webAppEndpoints;
 
   # gatus reads YAML; JSON is a valid subset, so toJSON avoids quoting pain.

@@ -7,7 +7,7 @@ import { householdMacs } from '../../host/dhcp-hosts'
 import { fingerprintOf } from '../../host/enroll'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
 import type { NodeForFile } from '../nodes-file'
-import { slugOf } from '../nodes-file'
+import { netNameOf } from '../nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
 
 // The nodes table: the machines the box has decided about, and what it asks
@@ -63,11 +63,6 @@ export type NodeRow = {
   claude: Summary | null
   /** Seconds since the controller last heard from it (resolved on the server; the page streams). */
   lastSeenAgo: number
-}
-
-/** The network name a row resolves to: the policy's label, else the hostname's slug. */
-export function netNameOf(n: { hostname: string; policy: NodePolicy | null }): string {
-  return n.policy?.name ?? slugOf(n.hostname)
 }
 
 /** The providers a row could offer, every key resolved, for site/nodes.json and the page. */
@@ -170,7 +165,14 @@ export async function allNodeRows(): Promise<NodeRecord[]> {
 /** What the controller's desired set is built from (host/controller/nodes.ts `desiredSet`). */
 export async function decidedRows(): Promise<DecidedRow[]> {
   return db
-    .select({ id: nodes.id, publicKey: nodes.publicKey, state: nodes.state, policy: nodes.policy })
+    .select({
+      id: nodes.id,
+      publicKey: nodes.publicKey,
+      state: nodes.state,
+      policy: nodes.policy,
+      hostname: nodes.hostname,
+      lanIp: nodes.lanIp,
+    })
     .from(nodes)
 }
 

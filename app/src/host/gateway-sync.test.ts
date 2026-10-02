@@ -18,6 +18,7 @@ const pc: FleetProvider = {
   kind: 'lemonade',
   base: 'http://gaming-pc.lan:13305',
   offered: true,
+  ui: null,
 }
 
 const model = (id: string, over: Partial<ProviderModel> = {}): ProviderModel => ({

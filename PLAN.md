@@ -486,7 +486,7 @@ stable — code cites them.
       and down. AI › Providers per machine: version and update with notes
       (`versionGap`, a tag pattern for `vYYYY.WW.N`), Install/Update behind
       an armed confirm, Start/Stop, always-on, Open Lemonade
-      (`http://<name>.<lanDomain>:<port>`), load/unload, the last outcome
+      (`https://lemonade-<name>.<baseDomain>`, behind the gate), load/unload, the last outcome
       and its log tail. MCP write tools for install and power.
     - **Fixes.** A failed `/models` read reports an unknown catalog, never an
       empty one (today gateway-sync deletes every route of the node on it).

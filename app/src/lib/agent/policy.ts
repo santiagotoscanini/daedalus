@@ -1,7 +1,12 @@
 import type { Command, DesiredPolicy, ProviderPolicy } from '../../host/controller/generated'
 import { MAX_NODE_NAME } from '../../host/controller/generated/constants'
 import type { NodePolicy } from '../../host/schema'
-import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
+import {
+  DEFAULT_PORT,
+  lemonadeOrigins,
+  NODE_PROVIDER_KINDS,
+  type ProviderKind,
+} from '../providers/kinds'
 
 // What the box asks of a machine, as the machine hears it. The row's policy
 // (host/schema.ts `NodePolicy`) holds more than the agent is told — names,
@@ -49,22 +54,41 @@ export function effectivePolicy(p: NodePolicy): EffectivePolicy {
  * controller keeps for `/nodes/metrics` ("Model Server Down" fires on offered
  * providers, "Machine Link Down" on alerting machines) and the machine is not
  * told.
+ *
+ * `names` is how the network knows the machine — its name, its last
+ * address, the domains — from which its Lemonade's origins are spelled
+ * (`lemonadeOrigins`).
  */
-export function wirePolicy(p: NodePolicy): DesiredPolicy {
+export function wirePolicy(p: NodePolicy, names: MachineNames): DesiredPolicy {
   const e = effectivePolicy(p)
+  const port = e.providers.lemonade.port
   return {
     policy: {
       awake_hold: e.awakeHold,
       claude_remote_control: e.claudeRemoteControl,
       ...(e.claudeWorkdir === null ? {} : { claude_workdir: e.claudeWorkdir }),
       santree: e.santree,
-      // Where each provider listens, so the agent reads the right port, and
-      // its lifecycle: the pinned release, run or not, start on its own.
-      providers: { lemonade: wireProvider(p, 'lemonade', e.providers.lemonade.port) },
+      // Where each provider listens, so the agent reads the right port; its
+      // lifecycle: the pinned release, run or not, start on its own; and the
+      // origins a browser may write to it from.
+      providers: {
+        lemonade: {
+          ...wireProvider(p, 'lemonade', port),
+          allowed_origins: lemonadeOrigins({ ...names, port }),
+        },
+      },
     },
     offer_lemonade: p.providers?.lemonade?.offer === true,
     alert_link: p.alertLinkDown ?? POLICY_DEFAULTS.alertLinkDown,
   }
+}
+
+/** A machine as the network names it: `<netName>.<lanDomain>`, its address, the box's domain. */
+export type MachineNames = {
+  netName: string
+  lanIp: string | null
+  lanDomain: string
+  baseDomain: string
 }
 
 /** One provider as the agent hears it: the port always, a lifecycle key only when the policy sets it. */

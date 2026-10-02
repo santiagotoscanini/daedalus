@@ -1,3 +1,4 @@
+import type { NodePolicy } from '../host/schema'
 import { arrayOf, type Decoder, decode, int, obj, optional, recordOf, str } from './contract/decode'
 
 // `site/nodes.json`: the machines that joined this box, as nix needs them.
@@ -44,6 +45,11 @@ export function slugOf(hostname: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 32)
     .replace(/-+$/g, '')
+}
+
+/** The network name a row resolves to: the policy's label, else the hostname's slug. */
+export function netNameOf(n: { hostname: string; policy: NodePolicy | null }): string {
+  return n.policy?.name ?? slugOf(n.hostname)
 }
 
 /** What an approved node contributes; the caller has already resolved its policy. */

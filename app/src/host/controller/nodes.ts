@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
 import type { Ctx } from '../../core/ctx'
-import { wireName, wirePolicy } from '../../lib/agent/policy'
+import { type MachineNames, wireName, wirePolicy } from '../../lib/agent/policy'
+import { netNameOf } from '../../lib/nodes-file'
 import type { NodePolicy, NodeState } from '../schema'
+import { readSite } from '../site'
 import type { DesiredNode, NodeDetail, NodeSummary, SetDesiredOk } from './generated'
 import { ControllerError } from './wire'
 
@@ -37,16 +39,28 @@ export type DecidedRow = {
   publicKey: string
   state: NodeState
   policy: NodePolicy | null
+  /** What its agent last said, for the names a policy spells (`MachineNames`). */
+  hostname: string
+  lanIp: string | null
 }
 
+/** The domains every machine's names sit under: the LAN's and the box's. */
+export type Domains = Pick<MachineNames, 'lanDomain' | 'baseDomain'>
+
 /** An approved key's entry: its policy and, when it has one, the name the pages show. */
-function approvedEntry(id: string, key: string, policy: NodePolicy): DesiredNode {
+function approvedEntry(r: DecidedRow, key: string, domains: Domains): DesiredNode {
+  const policy = r.policy ?? {}
   const name = wireName(policy)
+  const names: MachineNames = {
+    ...domains,
+    netName: netNameOf({ hostname: r.hostname, policy }),
+    lanIp: r.lanIp,
+  }
   return {
-    id,
+    id: r.id,
     public_key: key,
     state: 'approved',
-    policy: wirePolicy(policy),
+    policy: wirePolicy(policy, names),
     ...(name === undefined ? {} : { name }),
   }
 }
@@ -59,7 +73,10 @@ function approvedEntry(id: string, key: string, policy: NodePolicy): DesiredNode
  * out and named; the controller checks every entry (an id is its key's)
  * before applying any.
  */
-export function desiredSet(rows: readonly DecidedRow[]): {
+export function desiredSet(
+  rows: readonly DecidedRow[],
+  domains: Domains,
+): {
   nodes: DesiredNode[]
   skipped: { id: string; reason: string }[]
 } {
@@ -73,7 +90,7 @@ export function desiredSet(rows: readonly DecidedRow[]): {
     }
     nodes.push(
       r.state === 'approved'
-        ? approvedEntry(r.id, key, r.policy ?? {})
+        ? approvedEntry(r, key, domains)
         : { id: r.id, public_key: key, state: 'revoked' },
     )
   }
@@ -111,14 +128,25 @@ async function decidedRows(): Promise<DecidedRow[]> {
 }
 
 type Rows = () => Promise<DecidedRow[]>
+type DomainsOf = () => Promise<Domains>
 
-async function runSync(ctx: Pick<Ctx, 'controller'>, rows: Rows): Promise<DesiredSync> {
+/** The box's: the LAN domain it publishes and the domain its web apps sit under. */
+async function boxDomains(): Promise<Domains> {
+  const { lanDomain } = await import('../providers/fleet')
+  return { lanDomain: (await lanDomain()).domain, baseDomain: readSite().baseDomain }
+}
+
+async function runSync(
+  ctx: Pick<Ctx, 'controller'>,
+  rows: Rows,
+  domains: DomainsOf,
+): Promise<DesiredSync> {
   const at = new Date().toISOString()
   let sent: DesiredSync['sent'] = []
   let skipped: DesiredSync['skipped'] = []
   let result: DesiredSync
   try {
-    const set = desiredSet(await rows())
+    const set = desiredSet(await rows(), await domains())
     sent = set.nodes.map((n) => ({ id: n.id, state: n.state }))
     skipped = set.skipped
     const answer = await ctx.controller.call('nodes.set_desired', { nodes: set.nodes })
@@ -144,12 +172,13 @@ async function runSync(ctx: Pick<Ctx, 'controller'>, rows: Rows): Promise<Desire
 export function syncDesired(
   ctx: Pick<Ctx, 'controller'>,
   rows: Rows = decidedRows,
+  domains: DomainsOf = boxDomains,
 ): Promise<DesiredSync> {
   const s = slot()
   if (s.queued !== null) return s.queued
   const q = s.tail.then(() => {
     s.queued = null
-    return runSync(ctx, rows)
+    return runSync(ctx, rows, domains)
   })
   s.queued = q
   s.tail = q.catch(() => undefined)

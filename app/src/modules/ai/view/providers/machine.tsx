@@ -29,25 +29,21 @@ const DOC_LINK = 'text-[0.74rem] text-muted-foreground no-underline hover:text-p
 /**
  * The provider's own window, and where its kind is documented.
  *
- * The open button is only drawn for a provider a browser could actually
- * reach: this box's own is at the host-gateway alias, which means nothing
- * outside a container. Everything the page does to a model it does through
- * a server function (server/providers.ts says why), so this link is for the
- * things the page deliberately does not do — registering a checkpoint,
- * installing a backend, deleting weights.
+ * The open button goes to the provider's published hostname (`m.ui`, behind
+ * the sign-in gate), drawn only while it answers. Everything the page does to
+ * a model it does through a server function (server/providers.ts says why),
+ * so this link is for the things the page deliberately does not do —
+ * registering a checkpoint, installing a backend, deleting weights.
  */
 function ProviderActions({ m }: { m: ProviderMachine }) {
   const docs = KIND_LINKS[m.kind] ?? []
-  // Only what a browser could actually open: this box's own provider is at
-  // the host-gateway alias, which means nothing outside a container, and a
-  // provider that is not answering has no window to open.
-  const openable = m.machine !== 'box' && m.reachable
-  if (!openable && docs.length === 0) return null
+  const open = m.reachable ? m.ui : null
+  if (open === null && docs.length === 0) return null
   return (
     <p className={ACTIONS}>
-      {openable && (
+      {open !== null && (
         <Button asChild size="sm" variant="outline">
-          <a href={`${m.base}/`} target="_blank" rel="noreferrer">
+          <a href={open} target="_blank" rel="noreferrer">
             Open {m.kindName} ↗
           </a>
         </Button>

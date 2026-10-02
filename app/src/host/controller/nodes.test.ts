@@ -21,11 +21,21 @@ const KEY_A = 'ab'.repeat(32)
 const KEY_B = 'cd'.repeat(32)
 const KEY_C = 'ef'.repeat(32)
 
+const DOMAINS = { lanDomain: 'lan', baseDomain: 'example.org' }
+const domains = () => Promise.resolve(DOMAINS)
+const origins = (port: number) => [
+  `http://gaming-pc.lan:${String(port)}`,
+  `http://192.0.2.10:${String(port)}`,
+  'https://lemonade-gaming-pc.example.org',
+]
+
 const row = (key: string, state: DecidedRow['state'], policy: DecidedRow['policy'] = {}) => ({
   id: nodeIdOf(key),
   publicKey: key,
   state,
   policy,
+  hostname: 'Gaming PC',
+  lanIp: '192.0.2.10',
 })
 
 describe('the desired set', () => {
@@ -36,18 +46,21 @@ describe('the desired set', () => {
   })
 
   it('carries every approved key with its policy and name, and every revoked key without either', () => {
-    const { nodes, skipped } = desiredSet([
-      row(KEY_A, 'approved', {
-        displayName: 'PC',
-        awakeHold: false,
-        claudeWorkdir: '  C:/p  ',
-        santree: true,
-        providers: { lemonade: { port: 8000, offer: true, models: {} } },
-        hardware: { finish: 'space-black' },
-      }),
-      row(KEY_B, 'revoked', { awakeHold: true, santree: true }),
-      row(KEY_C, 'approved'),
-    ])
+    const { nodes, skipped } = desiredSet(
+      [
+        row(KEY_A, 'approved', {
+          displayName: 'PC',
+          awakeHold: false,
+          claudeWorkdir: '  C:/p  ',
+          santree: true,
+          providers: { lemonade: { port: 8000, offer: true, models: {} } },
+          hardware: { finish: 'space-black' },
+        }),
+        row(KEY_B, 'revoked', { awakeHold: true, santree: true }),
+        row(KEY_C, 'approved'),
+      ],
+      DOMAINS,
+    )
     expect(skipped).toEqual([])
     const byId = new Map(nodes.map((n) => [n.id, n]))
     expect(byId.get(nodeIdOf(KEY_A))).toEqual({
@@ -65,7 +78,7 @@ describe('the desired set', () => {
           claude_remote_control: true,
           claude_workdir: 'C:/p',
           santree: true,
-          providers: { lemonade: { port: 8000 } },
+          providers: { lemonade: { port: 8000, allowed_origins: origins(8000) } },
         },
         offer_lemonade: true,
         alert_link: true,
@@ -85,7 +98,7 @@ describe('the desired set', () => {
         awake_hold: true,
         claude_remote_control: true,
         santree: false,
-        providers: { lemonade: { port: 13305 } },
+        providers: { lemonade: { port: 13305, allowed_origins: origins(13305) } },
       },
       offer_lemonade: false,
       alert_link: true,
@@ -95,10 +108,20 @@ describe('the desired set', () => {
   })
 
   it('leaves out a row whose key is not hex, and says so', () => {
-    const { nodes, skipped } = desiredSet([
-      { id: '0123456789abcdef', publicKey: 'not-a-key', state: 'approved', policy: {} },
-      row(KEY_C, 'revoked'),
-    ])
+    const { nodes, skipped } = desiredSet(
+      [
+        {
+          id: '0123456789abcdef',
+          publicKey: 'not-a-key',
+          state: 'approved',
+          policy: {},
+          hostname: 'x',
+          lanIp: null,
+        },
+        row(KEY_C, 'revoked'),
+      ],
+      DOMAINS,
+    )
     expect(nodes.map((n) => n.id)).toEqual([nodeIdOf(KEY_C)])
     expect(skipped.map((s) => s.id)).toEqual(['0123456789abcdef'])
   })
@@ -118,14 +141,14 @@ describe('the desired set', () => {
       },
     })
     const rows = () => Promise.resolve([row(KEY_A, 'approved'), row(KEY_B, 'revoked')])
-    const r = await syncDesired({ controller: client }, rows)
+    const r = await syncDesired({ controller: client }, rows, domains)
     expect(r.error).toBeNull()
     expect(r.answer?.nodes).toBe(2)
     expect(sent).toHaveLength(1)
     expect(r.sent.map((s) => s.state).sort()).toEqual(['approved', 'revoked'])
     expect(lastDesiredSync()).toBe(r)
 
-    const down = await syncDesired({ controller: fake({}) }, rows)
+    const down = await syncDesired({ controller: fake({}) }, rows, domains)
     expect(down.answer).toBeNull()
     expect(down.error).toMatch(/fake: nodes.set_desired/)
     expect(lastDesiredSync()).toBe(down)
@@ -141,8 +164,8 @@ describe('the desired set', () => {
     })
     const rows = () => Promise.resolve([])
     const [a, b] = [
-      syncDesired({ controller: client }, rows),
-      syncDesired({ controller: client }, rows),
+      syncDesired({ controller: client }, rows, domains),
+      syncDesired({ controller: client }, rows, domains),
     ]
     expect(a).toBe(b)
     await a

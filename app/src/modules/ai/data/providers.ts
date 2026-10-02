@@ -54,6 +54,8 @@ export type ProviderMachine = {
   kind: ProviderKind
   kindName: string
   base: string
+  /** Its own window for a browser (`FleetProvider.ui`); null when there is none to open. */
+  ui: string | null
   offered: boolean
   reachable: boolean
   version: string | null
@@ -185,6 +187,7 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       kind: provider.kind,
       kindName: PROVIDER_NAME[provider.kind],
       base: provider.base,
+      ui: provider.ui,
       offered: provider.offered,
       reachable: reading.reachable,
       reported: reading.reported,

@@ -227,5 +227,7 @@ describe('keeping what the controller observed', () => {
     expect(h.transactions).toBe(1)
     expect(h.sets).toEqual([{ lanIp: '192.0.2.7' }, { lanIp: '192.0.2.7' }])
     expect(h.dhcp).toBe(1)
+    // A new address is a new origin for its Lemonade: the machines hear it.
+    expect(h.desired).toBe(1)
   })
 })

@@ -130,6 +130,24 @@ in
   # the option is declared, rather than from the resolver: a box can carry
   # nodes without running pi-hole.
   config.fleet.export.domains.network.data.lanDomain = cfg.lanDomain;
+
+  # A provider with a window of its own (Lemonade's web UI) is published per
+  # node that offers it, as `<kind>-<name>.<baseDomain>`: HTTPS on the LAN
+  # through traefik, behind the sign-in gate, never through the tunnel. The
+  # app links it and spells the same name (app/src/lib/providers/kinds.ts
+  # `providerUiHost`), and tells the node's agent to accept it as an origin.
+  # The probe is Lemonade's unauthenticated liveness path.
+  config.fleet.webApps = lib.listToAttrs (
+    map (
+      n:
+      lib.nameValuePair "lemonade-${n.name}" {
+        serviceUrl = "http://${cfg.nodeHost n}:${toString n.providers.lemonade.port}";
+        auth = "oidc";
+        healthPath = "/live";
+      }
+    ) (cfg.nodesOffering "lemonade")
+  );
+
   config.assertions = [
     {
       assertion = duplicates == [ ];

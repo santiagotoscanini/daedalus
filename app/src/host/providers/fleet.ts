@@ -1,7 +1,8 @@
 import type { Ctx } from '../../core/ctx'
-import { DEFAULT_PORT, type ProviderKind } from '../../lib/providers/kinds'
+import { netNameOf } from '../../lib/nodes-file'
+import { DEFAULT_PORT, type ProviderKind, providerUiHost } from '../../lib/providers/kinds'
 import { BOX_PROVIDERS_KEY, isBoxProviderPolicy } from '../../lib/providers/policy'
-import { listNodes, type NodeRow, netNameOf, providersOf } from '../../lib/repo/nodes'
+import { listNodes, type NodeRow, providersOf } from '../../lib/repo/nodes'
 import { networkFacts } from '../contract/domains/network'
 import type { NodeProvidersOk } from '../controller/generated'
 import { nodeReading, type ProviderReading, readSubgen } from './read'
@@ -45,6 +46,12 @@ export type FleetProvider = {
   base: string
   /** Whether the operator offers it to the gateway (Settings › Machines). */
   offered: boolean
+  /**
+   * Its own window, at its published hostname behind the sign-in gate, for a
+   * browser; null for a kind without one, one not offered (a node's provider
+   * is published only while it is), and the box's own.
+   */
+  ui: string | null
 }
 
 /**
@@ -67,6 +74,7 @@ async function boxProviders(ctx: Ctx): Promise<FleetProvider[]> {
       kind: 'subgen',
       base: `${ctx.hosts.hc}:${String(DEFAULT_PORT.subgen)}`,
       offered: policy?.subgen?.offer === true,
+      ui: null,
     },
   ]
 }
@@ -76,7 +84,7 @@ async function boxProviders(ctx: Ctx): Promise<FleetProvider[]> {
  * page can say "not offered" and "not answering" apart. What the provider
  * answered is its agent's report, read beside this (./read.ts).
  */
-function nodeProviders(n: NodeRow, domain: string): FleetProvider[] {
+function nodeProviders(n: NodeRow, domain: string, baseDomain: string): FleetProvider[] {
   const name = netNameOf(n)
   const policy = providersOf(n.policy)
   return (Object.entries(policy) as [ProviderKind, { port: number; offer: boolean }][]).map(
@@ -87,9 +95,12 @@ function nodeProviders(n: NodeRow, domain: string): FleetProvider[] {
       kind,
       base: `http://${name}.${domain}:${String(p.port)}`,
       offered: p.offer,
+      ui: p.offer ? uiUrl(providerUiHost(kind, name, baseDomain)) : null,
     }),
   )
 }
+
+const uiUrl = (host: string | null) => (host === null ? null : `https://${host}/`)
 
 /** Every provider, this box first, then the nodes in the order they joined. */
 export async function fleetProviders(ctx: Ctx): Promise<FleetProvider[]> {
@@ -98,7 +109,7 @@ export async function fleetProviders(ctx: Ctx): Promise<FleetProvider[]> {
     listNodes(ctx).then((all) => all.filter((n) => n.state === 'approved')),
     lanDomain(),
   ])
-  return [...box, ...nodes.flatMap((n) => nodeProviders(n, domain))]
+  return [...box, ...nodes.flatMap((n) => nodeProviders(n, domain, ctx.site.baseDomain))]
 }
 
 /**

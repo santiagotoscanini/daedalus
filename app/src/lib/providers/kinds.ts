@@ -61,6 +61,47 @@ export function managesResidency(kind: ProviderKind): boolean {
   return MANAGED_RESIDENCY.includes(kind)
 }
 
+/**
+ * The kinds with a window of their own a browser opens. Every node that
+ * offers one is published at `<kind>-<node name>.<baseDomain>`, behind the
+ * sign-in gate: nix/platform/nodes.nix generates that web app from
+ * site/nodes.json under the same name.
+ */
+const UI_KINDS: readonly ProviderKind[] = ['lemonade']
+
+const uiHostOf = (kind: ProviderKind, netName: string, baseDomain: string) =>
+  `${kind}-${netName}.${baseDomain}`
+
+/** A node's provider window's hostname, or null for a kind without one. */
+export function providerUiHost(
+  kind: ProviderKind,
+  netName: string,
+  baseDomain: string,
+): string | null {
+  return UI_KINDS.includes(kind) ? uiHostOf(kind, netName, baseDomain) : null
+}
+
+/**
+ * Every origin a browser writes to a node's Lemonade from: its LAN name, its
+ * address and its published window. Lemonade refuses a write whose Origin is
+ * not one of its own names, and a non-empty list REPLACES that rule — so
+ * this is the whole list the agent sets (`allowed_origins`), in that order.
+ */
+export function lemonadeOrigins(n: {
+  netName: string
+  lanDomain: string
+  baseDomain: string
+  port: number
+  lanIp: string | null
+}): string[] {
+  const port = String(n.port)
+  return [
+    `http://${n.netName}.${n.lanDomain}:${port}`,
+    ...(n.lanIp === null || n.lanIp === '' ? [] : [`http://${n.lanIp}:${port}`]),
+    `https://${uiHostOf('lemonade', n.netName, n.baseDomain)}`,
+  ]
+}
+
 export function isProviderKind(v: unknown): v is ProviderKind {
   return typeof v === 'string' && (PROVIDER_KINDS as readonly string[]).includes(v)
 }

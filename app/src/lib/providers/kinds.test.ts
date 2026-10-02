@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { apiBase, defaultAlias, modelOf, modeOf, routeFor, upstreamFor } from './kinds'
+import {
+  apiBase,
+  defaultAlias,
+  lemonadeOrigins,
+  modelOf,
+  modeOf,
+  providerUiHost,
+  routeFor,
+  upstreamFor,
+} from './kinds'
 
 // The gaming PC's Lemonade 10.8.1 catalog of 2026-09-23, as its agent
 // carries it (agent/src/node/providers/: the provider's own words).
@@ -118,5 +127,30 @@ describe('the route a model becomes', () => {
     expect(defaultAlias('Whisper-Large-v3-Turbo')).toBe('whisper-large-v3-turbo')
     expect(defaultAlias('kokoro-v1')).toBe('kokoro-v1')
     expect(defaultAlias('Huihui-Gemma-4-12B-uncensored')).toBe('huihui-gemma-4-12b-uncensored')
+  })
+})
+
+describe('a node provider’s window', () => {
+  it('is published as <kind>-<node name> for a kind that has one', () => {
+    expect(providerUiHost('lemonade', 'gpu-box', 'example.org')).toBe(
+      'lemonade-gpu-box.example.org',
+    )
+    expect(providerUiHost('subgen', 'gpu-box', 'example.org')).toBeNull()
+  })
+
+  it('is one of the origins its Lemonade takes writes from', () => {
+    expect(
+      lemonadeOrigins({
+        netName: 'gpu-box',
+        lanDomain: 'lan',
+        baseDomain: 'example.org',
+        port: 13305,
+        lanIp: '192.0.2.10',
+      }),
+    ).toEqual([
+      'http://gpu-box.lan:13305',
+      'http://192.0.2.10:13305',
+      'https://lemonade-gpu-box.example.org',
+    ])
   })
 })

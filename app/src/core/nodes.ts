@@ -11,13 +11,13 @@ import { requestGatewaySync } from '../host/gateway-sync'
 import type { NodePolicy } from '../host/schema'
 import { readSessionHost } from '../host/session-host'
 import { keepLifecycle } from '../lib/agent/policy-patch'
+import { netNameOf } from '../lib/nodes-file'
 import { enrollStore } from '../lib/repo/enroll'
 import {
   allNodeRows,
   deleteNode,
   insertEnrolled,
   type NodeRecord,
-  netNameOf,
   netNameTakenBy,
   nodeById,
   type PolicyPatch,
@@ -249,6 +249,8 @@ export async function recordObserved(
   }
   await writeObserved(moved)
   if (dhcp) await publishDhcpHosts(ctx)
+  // A new address is a new origin for its Lemonade (lib/agent/policy.ts).
+  if (moved.some((m) => m.facts.lanIp !== undefined)) requestDesiredSync(ctx)
 }
 
 /**
