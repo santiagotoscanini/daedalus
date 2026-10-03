@@ -208,6 +208,14 @@ export const applyRegistry = adminFn.handler(
   },
 )
 
+/** The Apply bar's Discard: everything pending back to the last Apply (host/apply-flow.ts). */
+export const discardPending = adminFn.handler(
+  async ({ context }): Promise<Result<{ discarded: string[]; kept: string[] }>> => {
+    const { discardChanges } = await import('../host/apply-flow')
+    return discardChanges(await context.ctx())
+  },
+)
+
 export const fetchApplyStatus = readFn.handler(async ({ context }) => {
   const { readApplyStatus } = await import('../host/apply')
   return readApplyStatus(await context.ctx())

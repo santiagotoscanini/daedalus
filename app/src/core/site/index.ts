@@ -187,7 +187,25 @@ function setField(doc: SiteDocument, field: SiteField, value: unknown): SiteDocu
   return out as unknown as SiteDocument
 }
 
-const sameValue = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+/**
+ * Object keys sorted at every depth; arrays keep their order. The draft
+ * comes back from a jsonb column, which stores keys by length then bytes
+ * (`n8n` before `home-assistant`), while the committed file is rendered
+ * sorted — a plain stringify called the same switches a change, and the bar
+ * offered an Apply with nothing in it.
+ */
+function canonical(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonical)
+  if (v === null || typeof v !== 'object') return v
+  return Object.fromEntries(
+    Object.keys(v)
+      .sort()
+      .map((k) => [k, canonical((v as Record<string, unknown>)[k])]),
+  )
+}
+
+const sameValue = (a: unknown, b: unknown): boolean =>
+  JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
 
 export function changesBetween(committed: SiteDocument, desired: SiteDocument): SiteField[] {
   return EDITABLE.filter((f) => !sameValue(getField(committed, f), getField(desired, f)))

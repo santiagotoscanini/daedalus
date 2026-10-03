@@ -1,5 +1,6 @@
 import type { Ctx } from '../core/ctx'
 import { siteBarFields } from '../lib/module-switch'
+import type { Result } from '../lib/result'
 import { defineFlow, defineGate, type FlowOutcome } from './flow'
 
 // The one apply implementation.
@@ -213,6 +214,50 @@ const apply = defineFlow<
 
 export function runApply(ctx: Pick<Ctx, 'controller'>, actor: string): Promise<ApplyOutcome> {
   return apply({ ctx, actor })
+}
+
+/**
+ * Throw away what an Apply would carry, back to what the last one built.
+ *
+ * The site draft is dropped; an app edited since that build gets the build's
+ * manifest entry back (`revertApp`). Two kinds of change are not edits and
+ * stay, named in `kept`: an app created since the last Apply (discarding it
+ * would mean deleting it — its page does that, deliberately), and the
+ * machines (nodes.json follows the nodes table, which records machines that
+ * joined or were renamed, not a draft). Refused while an Apply runs, since
+ * that Apply is writing exactly these records.
+ */
+export async function discardChanges(
+  ctx: Pick<Ctx, 'controller' | 'store'>,
+): Promise<Result<{ discarded: string[]; kept: string[] }>> {
+  const blocked = await gate.blocked({ ctx })
+  if (blocked !== null) return { ok: false, reason: blocked.reason }
+
+  const { SETTING_KEYS } = await import('../lib/repo/settings')
+  const { revertApp } = await import('../lib/repo/apps')
+  const { manifestEntries } = await import('./nix-manifest')
+  const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
+  const { changed } = await currentChanges()
+
+  const discarded: string[] = []
+  const kept: string[] = []
+  for (const c of changed) {
+    if (c.name === 'site') {
+      await ctx.store.delete(SETTING_KEYS.siteDraft)
+      discarded.push('the site')
+    } else if (c.name === 'nodes') {
+      kept.push('the machines')
+    } else {
+      const entry = manifest.get(c.name)
+      if (entry === undefined) {
+        kept.push(`${c.name} (new since the last Apply)`)
+      } else {
+        await revertApp(c.name, entry)
+        discarded.push(c.name)
+      }
+    }
+  }
+  return { ok: true, value: { discarded, kept } }
 }
 
 export type VaultFile = import('../lib/vault').VaultFile

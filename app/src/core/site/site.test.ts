@@ -286,6 +286,16 @@ describe('changesBetween', () => {
     ])
   })
 
+  it('ignores key order, which a jsonb round trip changes', () => {
+    const committed = structuredClone(doc)
+    committed.modules.enabled = { 'home-assistant': false, n8n: false }
+    const fromDraft = structuredClone(doc)
+    fromDraft.modules.enabled = { n8n: false, 'home-assistant': false }
+    expect(changesBetween(committed, fromDraft)).toEqual([])
+    fromDraft.modules.enabled = { n8n: true, 'home-assistant': false }
+    expect(changesBetween(committed, fromDraft)).toEqual(['modules.enabled'])
+  })
+
   it('does not report a field nix does not source from site.json', () => {
     const edited = structuredClone(doc)
     edited.identity.hostname = 'renamed'

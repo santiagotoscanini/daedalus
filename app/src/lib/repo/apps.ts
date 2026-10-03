@@ -1,9 +1,10 @@
 import { asc, eq } from 'drizzle-orm'
 import { db, type Tx } from '../../host/db'
-import type { ManifestEnvVar, ManifestTask } from '../../host/nix-manifest'
+import type { ManifestEntry, ManifestEnvVar, ManifestTask } from '../../host/nix-manifest'
 import { appEnvVars, apps, appTasks } from '../../host/schema'
 import { readSite } from '../../host/site'
 import type { EnvVar } from '../apps/env-vars'
+import { toRow } from '../apps/manifest-map'
 import {
   type AppColumns,
   type AppPatch,
@@ -314,6 +315,30 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
 
     if (env !== undefined) await replaceEnvVars(tx, record.id, env)
     if (tasks !== undefined) await replaceTasks(tx, record.id, tasks)
+  })
+}
+
+/**
+ * Put an app back to what the last Apply built: every column the export
+ * carries, its env vars and its tasks, from that build's manifest entry.
+ *
+ * Not `updateApp`: that takes only what a form edits, and a pending edit can
+ * sit in columns other paths write (source mode, auth groups, egress, notes).
+ * Nor its checks: these values are the ones the box is running now, so a
+ * hostname "collision" with itself or a stage the image gate would question
+ * cannot be a reason to keep an edit nobody wants. One transaction, for the
+ * reason `updateApp` gives.
+ */
+export async function revertApp(name: string, entry: ManifestEntry): Promise<void> {
+  const record = await editableApp(name)
+  const { name: _name, managedInNix: _managed, ...columns } = toRow(entry)
+  await db.transaction(async (tx) => {
+    await tx
+      .update(apps)
+      .set({ ...columns, updatedAt: new Date() })
+      .where(eq(apps.name, name))
+    await replaceEnvVars(tx, record.id, entry.env)
+    await replaceTasks(tx, record.id, entry.tasks ?? [])
   })
 }
 

@@ -2,10 +2,13 @@ import { useRouter } from '@tanstack/react-router'
 import type { ApplyStatus } from '../host/apply'
 import { cn } from '../lib/cn'
 import { REBOOT_REQUIRED } from '../lib/reboot-required'
-import { applyRegistry, fetchApplyStatus } from '../server/registry'
+import { applyRegistry, discardPending, fetchApplyStatus } from '../server/registry'
+import { ARM_MS } from './armed-confirm'
 import { RebootRequired } from './reboot-required'
 import { usePolledStatus } from './status'
 import { Button } from './ui/button'
+import { useAction } from './use-action'
+import { useArmed } from './use-armed'
 
 // The commit bar. Appears when the database no longer describes what Nix
 // built, and stays until an apply reconciles them.
@@ -55,6 +58,10 @@ export function ApplyBar({
   initialStatus: ApplyStatus
 }) {
   const router = useRouter()
+  // Discard is two presses: the first arms it and says what it throws away,
+  // the second does it, and it disarms itself if nobody confirms.
+  const [armed, arm, disarm] = useArmed(ARM_MS)
+  const discard = useAction()
   // `refusal` is why the host would not start (already running, nothing to
   // apply) — distinct from status.error, which is a run that started and
   // failed.
@@ -148,22 +155,59 @@ export function ApplyBar({
               {changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
             </span>
             {refusal !== null && <span className="ml-2.5 text-danger">{refusal}</span>}
+            {discard.error !== null && <span className="ml-2.5 text-danger">{discard.error}</span>}
+            {discard.notice !== null && (
+              <span className="ml-2.5 text-muted-foreground">{discard.notice}</span>
+            )}
           </>
         )}
       </div>
 
-      <Button
-        type="button"
-        disabled={running || changed.length === 0}
-        onClick={() => {
-          start(async () => {
-            const r = await applyRegistry()
-            return r.ok ? { ok: true, value: r.value.id } : r
-          })
-        }}
-      >
-        {running ? 'Applying…' : 'Apply'}
-      </Button>
+      <div className="flex shrink-0 items-center gap-2">
+        {!running && changed.length > 0 && armed && (
+          <>
+            <span className="text-muted-foreground text-xs">
+              Back to the last Apply: every edit above is lost.
+            </span>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={discard.busy}
+              onClick={() => {
+                disarm()
+                discard.run(() => discardPending(), {
+                  notice: ({ value: v }) =>
+                    v.kept.length === 0
+                      ? 'Discarded.'
+                      : `Discarded; kept ${v.kept.join(', ')}, which an Apply carries or a page undoes.`,
+                })
+              }}
+            >
+              Discard
+            </Button>
+            <Button type="button" variant="ghost" onClick={disarm}>
+              Cancel
+            </Button>
+          </>
+        )}
+        {!running && changed.length > 0 && !armed && (
+          <Button type="button" variant="outline" disabled={discard.busy} onClick={arm}>
+            {discard.busy ? 'Discarding…' : 'Discard'}
+          </Button>
+        )}
+        <Button
+          type="button"
+          disabled={running || changed.length === 0 || armed || discard.busy}
+          onClick={() => {
+            start(async () => {
+              const r = await applyRegistry()
+              return r.ok ? { ok: true, value: r.value.id } : r
+            })
+          }}
+        >
+          {running ? 'Applying…' : 'Apply'}
+        </Button>
+      </div>
     </div>
   )
 }
