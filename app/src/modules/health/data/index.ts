@@ -10,6 +10,7 @@ import {
   versionGap,
 } from '../../../lib/dashboard/github'
 import { imageTag } from '../../../lib/dashboard/images'
+import { getJson } from '../../../lib/http'
 import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'
 import { releases } from '../releases'
@@ -30,17 +31,21 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   training: loadTraining,
 })
 
-/* ── Record: getbased and its sync relay ──────────────────────────────── */
+/* ── Record: getbased, its relay, and the agent tools ─────────────────── */
 
 /**
  * getbased keeps every profile in the browser that opened it, so the server
  * has nothing to report about the data itself: no counts, no sizes, no last
- * import. What this tab can say is where the two halves are, what each is
- * built from, and how far upstream has moved since.
+ * import. What this tab can say is where each piece is, what each is built
+ * from, and how far upstream has moved since.
  *
- * Both images are built on the box from pinned sources. The app follows
+ * Every image is built on the box from pinned sources. The app follows
  * upstream's main branch by commit (its release tags lag the fixes a local
- * model needs), so its distance is commits; the relay cuts releases.
+ * model needs), so its distance is commits; the relay cuts releases, and the
+ * context gateway ships inside the relay's repo at the same version. The
+ * agent tools — the knowledge base, its library manager, the MCP server —
+ * come from one getbased-agents commit whose per-package tags lag PyPI, so
+ * their distance is commits on that repo too.
  */
 type RecordData = {
   /** The app, as a browser opens it. */
@@ -49,19 +54,49 @@ type RecordData = {
   relayUrl: string
   build: CommitGap
   relay: { version: string | null; gap: VersionGap }
+  agents: {
+    build: CommitGap
+    rag: {
+      version: string | null
+      url: string
+      /** The knowledge base's own word, unauthenticated; null when it did not answer. */
+      health: { ready: boolean; chunks: number } | null
+    }
+    library: { version: string | null; url: string }
+    mcp: { version: string | null }
+  }
 }
 
 async function loadRecord(ctx: Ctx): Promise<RecordData> {
   const relayVersion = await imageTag('getbased-relay')
-  const [build, relayGap] = await Promise.all([
+  const ragUrl = ctx.hosts.base('getbased-rag')
+  const [build, relayGap, agentsBuild, ragHealth] = await Promise.all([
     commitsSince('elkimek/get-based', ctx.env('GETBASED_REV') || null, 'main'),
     versionGap('elkimek/getbased-relay', relayVersion),
+    commitsSince('elkimek/getbased-agents', ctx.env('GETBASED_AGENTS_REV') || null, 'main'),
+    getJson<{ rag_ready?: boolean; chunks?: number }>(`${ragUrl}/health`),
   ])
   return {
     url: ctx.hosts.base('getbased'),
     relayUrl: ctx.hosts.base('getbased-relay').replace(/^https:/, 'wss:'),
     build,
     relay: { version: relayVersion, gap: relayGap },
+    agents: {
+      build: agentsBuild,
+      rag: {
+        version: ctx.env('GETBASED_RAG_VERSION') || null,
+        url: ragUrl,
+        health:
+          ragHealth === null
+            ? null
+            : { ready: ragHealth.rag_ready === true, chunks: ragHealth.chunks ?? 0 },
+      },
+      library: {
+        version: ctx.env('GETBASED_DASHBOARD_VERSION') || null,
+        url: ctx.hosts.base('getbased-library'),
+      },
+      mcp: { version: ctx.env('GETBASED_MCP_VERSION') || null },
+    },
   }
 }
 

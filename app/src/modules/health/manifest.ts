@@ -19,7 +19,10 @@ export const manifest = {
     {
       id: 'record',
       label: 'Record',
-      probes: ['getbased', 'getbased-relay'],
+      // Every piece gatus can probe: the app, the relay, the knowledge base
+      // and its library manager (the context gateway and the MCP server have
+      // no webApp of their own).
+      probes: ['getbased', 'getbased-relay', 'getbased-rag', 'getbased-library'],
       boardSpans: [8, 4, 6, 6],
       nix: 'getbased',
     },

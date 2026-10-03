@@ -4,33 +4,43 @@ import { ServiceHead } from '../../../components/service-head'
 import { FOOT, MONO } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
-import { DASH } from '../../../lib/format'
+import { DASH, num } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
 import type { HealthData } from '../data'
 import { gapTitle, VersionAside } from './shared'
 
 // Health › Record: getbased — labs, genome, body and history in one record —
-// and the relay that keeps its copies in step across devices.
+// the relay that keeps its copies in step across devices, and the agent tools
+// beside it: the context gateway, the knowledge base and its library manager,
+// and the MCP server that puts the record on the LLM gateway.
 
 type Record_ = Extract<HealthData, { tab: 'record' }>
 
-function buildVerdict(d: Record_): { label: string; tone: Tone } {
-  if (d.build.running === null || d.build.note !== null) return { label: 'unknown', tone: 'muted' }
-  const n = d.build.behind.length
+function commitVerdict(build: Record_['build']): { label: string; tone: Tone } {
+  if (build.running === null || build.note !== null) return { label: 'unknown', tone: 'muted' }
+  const n = build.behind.length
   return n === 0
     ? { label: 'current', tone: 'ok' }
     : { label: `${String(n)} commits behind`, tone: 'warn' }
 }
 
+function commitTitle(label: string, build: Record_['build']): string {
+  const n = build.behind.length
+  return n === 0 ? `${label} — current` : `${label} — ${String(n)} commits since this build`
+}
+
+const short = (sha: string | null): string | null => sha?.slice(0, 7) ?? null
+
 export function RecordView({ data: d }: { data: Record_ }) {
+  const kb = d.agents.rag.health
   return (
     <>
       <ServiceHead
         logo="/icon-getbased.svg"
         name="getbased"
-        version={d.build.running?.slice(0, 7) ?? null}
+        version={short(d.build.running)}
         versionNote="a commit on upstream main"
-        verdict={buildVerdict(d)}
+        verdict={commitVerdict(d.build)}
         lede={
           <>
             Lab reports, DNA, wearables and medical history in one record, with lab PDFs read by the
@@ -85,16 +95,78 @@ export function RecordView({ data: d }: { data: Record_ }) {
           />
           <p className={FOOT}>
             An Evolu CRDT relay: devices push encrypted changes, and it stores and forwards what it
-            cannot read. Its owner-scoped storage endpoints share the hostname under /self.
+            cannot read. Its owner-scoped storage is under /self on the same hostname, and the
+            context gateway — the same release, a second container — under /api.
           </p>
         </Board>
 
-        <Changelog build={d.build} span={6} title={buildTitle(d)} />
+        <Changelog build={d.build} span={6} title={commitTitle('getbased', d.build)} />
         <Changelog
           gap={d.relay.gap}
           span={6}
-          title={gapTitle('Relay', d.relay.gap)}
+          title={gapTitle('Relay and context gateway', d.relay.gap)}
           aside={<VersionAside version={d.relay.version} />}
+        />
+
+        <Board
+          title="Agent tools"
+          icon="◇"
+          span={6}
+          aside={<VersionAside version={short(d.agents.build.running)} />}
+        >
+          <Facts
+            rows={[
+              {
+                k: 'Knowledge base',
+                v: (
+                  <>
+                    <span className={MONO}>getbased-rag {d.agents.rag.version ?? DASH}</span>{' '}
+                    {kb === null ? (
+                      <Chip tone="bad">not answering</Chip>
+                    ) : kb.chunks === 0 ? (
+                      <Chip tone="muted">empty library</Chip>
+                    ) : (
+                      <Chip tone="ok">{num(kb.chunks)} chunks</Chip>
+                    )}
+                  </>
+                ),
+              },
+              {
+                k: 'Library manager',
+                v: (
+                  <>
+                    <span className={MONO}>
+                      getbased-dashboard {d.agents.library.version ?? DASH}
+                    </span>{' '}
+                    <a href={d.agents.library.url} target="_blank" rel="noreferrer">
+                      open ↗
+                    </a>
+                  </>
+                ),
+              },
+              {
+                k: 'MCP server',
+                v: (
+                  <>
+                    <span className={MONO}>getbased-mcp {d.agents.mcp.version ?? DASH}</span> ·
+                    Getbased on the LLM gateway
+                  </>
+                ),
+              },
+            ]}
+          />
+          <p className={FOOT}>
+            One commit of the getbased-agents repository builds all three. The app&rsquo;s Knowledge
+            Base is the knowledge base above, at{' '}
+            <span className={MONO}>{d.agents.rag.url}/query</span>; documents go in through the
+            library manager, which asks for the same key. The MCP server reads what Agent Access
+            publishes through the context gateway and decrypts it in its own container.
+          </p>
+        </Board>
+        <Changelog
+          build={d.agents.build}
+          span={6}
+          title={commitTitle('getbased-agents', d.agents.build)}
         />
 
         <LogBoard
@@ -107,14 +179,33 @@ export function RecordView({ data: d }: { data: Record_ }) {
               role: 'what keeps the devices in step',
               note: 'One line per device connecting and leaving, and a warning when a write is refused for going over a storage quota. A device that will not sync shows here as a connection that closes at once, or as no connection at all.',
             },
+            {
+              source: { container: 'getbased-context' },
+              label: 'Context gateway',
+              role: 'where Agent Access publishes',
+              note: 'Stores the context a browser encrypted and the relay vouched for; the MCP server reads it back. A refused upload is a signature the relay would not confirm, or an owner over its quota.',
+            },
+            {
+              source: { container: 'getbased-rag' },
+              label: 'Knowledge base',
+              role: 'what the app and the MCP server search',
+              note: 'Each ingest and query, and the embedding model loading on first use. A query that fails here fails in the app as an empty Knowledge Base answer.',
+            },
+            {
+              source: { container: 'getbased-library' },
+              label: 'Library manager',
+              role: 'how documents get into the knowledge base',
+              note: 'Its own requests, and the uploads it forwards to the knowledge base.',
+            },
+            {
+              source: { container: 'mcp-getbased' },
+              label: 'MCP server',
+              role: 'the record as tools on the LLM gateway',
+              note: 'One child process per session, spawned by supergateway. “gateway returned 404” means no browser has published context through Agent Access yet.',
+            },
           ]}
         />
       </BoardGrid>
     </>
   )
-}
-
-function buildTitle(d: Record_): string {
-  const n = d.build.behind.length
-  return n === 0 ? 'getbased — current' : `getbased — ${String(n)} commits since this build`
 }

@@ -410,6 +410,27 @@ export const SCHEMA = {
     about: 'The getbased source commit the health record is built from.',
     source: 'stacks/getbased fleet.dashboard.getbased.env',
   },
+  GETBASED_AGENTS_REV: {
+    kind: 'string',
+    about:
+      'The getbased-agents commit the knowledge base, its library manager and the MCP server are built from.',
+    source: 'stacks/getbased fleet.dashboard.getbased.env',
+  },
+  GETBASED_RAG_VERSION: {
+    kind: 'string',
+    about: 'getbased-rag’s version at that commit.',
+    source: 'stacks/getbased fleet.dashboard.getbased.env',
+  },
+  GETBASED_DASHBOARD_VERSION: {
+    kind: 'string',
+    about: 'getbased-dashboard’s version at that commit.',
+    source: 'stacks/getbased fleet.dashboard.getbased.env',
+  },
+  GETBASED_MCP_VERSION: {
+    kind: 'string',
+    about: 'getbased-mcp’s version at that commit.',
+    source: 'stacks/getbased fleet.dashboard.getbased.env',
+  },
   PGVECTOR_REV: {
     kind: 'string',
     about: 'The source commit litellm-pgvector is built from.',
