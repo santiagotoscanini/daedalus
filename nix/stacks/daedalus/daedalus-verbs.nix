@@ -31,6 +31,8 @@ let
     secretSetScript
     applyScript
     applyReaper
+    registerScript
+    registerReaper
     powerScript
     workspaceCloneScript
     imageUpdateScript
@@ -297,6 +299,32 @@ in
             "network-online.target"
             "linger-users.service"
           ];
+          wants = [ "network-online.target" ];
+        };
+      })
+
+      # Register a new app: the root helper's `register`, the rendered
+      # apps.json its payload (host/register.sh). It commits entries awaiting
+      # their first image and rebuilds nothing, so a new app's first build
+      # needs no Apply before it. Root for the same reason secret-set is: the
+      # writes into the operator's tree drop to them, the lock under /run/lock
+      # is root's. A failed register leaves nothing changed and shows on the
+      # page that asked, so it does not mail.
+      (mkRootVerb {
+        verb = "register";
+        unit = "daedalus-register";
+        description = "Register a new app in site/apps.json, without a rebuild";
+        verbDescription = "Commit apps.json entries that await their first image; no rebuild";
+        script = registerScript;
+        # The rebuild lock's 20-minute wait, and a commit and a push.
+        timeoutStartSec = 25 * 60;
+        # The whole apps.json, as an Apply carries it.
+        payloadMax = 262144;
+        monitored = false;
+        execStopPost = [ "${registerReaper}/bin/daedalus-register-reaper" ];
+        serviceConfig.ExecStartPost = "+${config.systemd.package}/bin/systemctl start --no-block daedalus-repo-snapshot.service";
+        unitAttrs = {
+          after = [ "network-online.target" ];
           wants = [ "network-online.target" ];
         };
       })

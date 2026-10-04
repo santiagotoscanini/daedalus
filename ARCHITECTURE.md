@@ -186,8 +186,9 @@ for a commit of a fixed set of filenames and nothing else: the Apply's
 allowlist is `apps.json`, `nodes.json`, `site.json`, the two vault files, one
 `vault/apps/<name>-env.sops` per app already in the committed registry (the
 list is built host-side, never read from the request), `README.md` and the
-`daedalus.json` provenance stamp. It cannot run a command, name a path, or
-choose a unit to start.
+`daedalus.json` provenance stamp. A register writes apps.json alone, and is refused
+unless only the entries awaiting their first image change. It cannot run a
+command, name a path, or choose a unit to start.
 
 **The verbs** — THE list; `fleet.daedalus.rootVerbs` is its source, and
 `status` reads it back with each unit's state.
@@ -200,12 +201,13 @@ choose a unit to start.
 | `task-run {task}` | `app-<app>-task-<id>` | an app's scheduled task now; the value is `<app>-task-<id>`, one token per unit |
 | `github-token` | `daedalus-github-token` | mint the installation token now; refuses inside its one-mint-a-minute throttle |
 | `session-host-restart` | `daedalus-session-host-restart` | restart the session host: how a new build takes over, ending every live terminal |
-| `build-cancel {app}` | `daedalus-build-cancel@<app>` | stop the build in flight, only when it is that app's |
+| `build-cancel {app}` | `daedalus-build-cancel@<run>` | stop the build in flight, only when it is that app's; the app is a pattern, since a new app's first build runs before any rebuild could list it |
 | `workspace-clone {repo, actor}` | `daedalus-workspace-clone@<run>` | clone, or fast-forward an existing clone, over the operator's SSH identity |
 | `secret-set {app, action, key, actor}` + payload | `daedalus-secret-set@<run>` | merge or drop one key in `vault/apps/<app>-env.sops` and commit; the payload is the value sealed by the container |
 | `nodes-dhcp` + payload | `daedalus-nodes-dhcp@<run>` | the approved nodes' `dhcp-host` lines: kept in `/verbs`, handed to pi-hole, FTL reloaded (daedalus-nodes.nix) |
 | `build` + payload, detached | `daedalus-build@<run>` | build an app's image and start its deploy; status `/verbs/build-status.json`, followed by the scheduler (BUILDS.md) |
 | `apply` + payload, detached | `daedalus-apply@<run>` | write the managed files, commit, build, switch (or `test` under an engine override), roll back keeping the first error; the Apply loop, below |
+| `register` + payload, detached | `daedalus-register@<run>` | commit apps.json entries that await their first image, and nothing else (every other entry must stay as it is); no rebuild |
 | `image-update` + payload, detached | `daedalus-image-update@<run>` | move image pins: one commit, one rebuild, verify, revert on failure |
 | `version-update` + payload, detached | `daedalus-version-update@<run>` | move a stack's version strings, snapshot its dataset, switch, verify, roll both back on failure |
 | `engine-update` + payload, detached | `daedalus-engine-update@<run>` | fast-forward the engine clone, move the lock onto it, build, switch, verify the control plane answers, revert if not, push |

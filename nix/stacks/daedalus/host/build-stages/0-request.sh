@@ -82,7 +82,25 @@ REPO_ID="$(jq -r '.repoId | tostring' <<<"$REQ_JSON")"
 REQUESTED_BY="$(raw_field requestedBy)"
 
 [[ "$APP" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || fail "invalid build request: app is not an app name"
-in_list "$APP" "$BUILDABLE" || fail "$APP is not a registry app this box builds (it is not in site/apps.json, or its source is not the registry)"
+# Cache-mount ids are global to the BuildKit daemon, and this box namespaces
+# them `<app>-…`: Railpack's frontend prefixes every plan cache with the
+# cache-key (`<cache-key>-<name>`, railpack buildkit/build_llb/cache_store.go),
+# the repo Dockerfile scan below demands it, Dockerfile.checks uses it. A
+# hyphen in the app name would let app `foo` with cache `bar-x` meet app
+# `foo-bar` with cache `x`.
+if [[ "$APP" == *-* ]]; then
+  fail "request refused: app names containing '-' are not built on this box (cache mount ids are namespaced as <app>-…)"
+fi
+# Which apps this builds (build.sh, "which apps it builds"): one the committed
+# registry names, from the registry, and not one the host declares by hand.
+ENTRY="$(registry_entry "$APP")"
+[ -n "$ENTRY" ] || fail "$APP is not in the committed app registry (site/apps.json), so this box does not build it"
+[ "$(jq -r '.sourceMode // "registry"' <<<"$ENTRY")" = registry ] ||
+  fail "$APP's source is not the registry, so this box does not build it"
+! in_list "$APP" "$NIX_APPS" || fail "$APP is declared by hand on this host, not in the registry, so this box does not build it"
+# Still waiting for its first image: nothing exists for it yet but this
+# build (6-done.sh).
+AWAITING="$(jq -r 'if .awaitingImage == true then "yes" else "no" end' <<<"$ENTRY")"
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || fail "invalid build request: sha is not a 40-hex commit sha"
 [[ "$REPO_ID" =~ ^[1-9][0-9]{0,15}$ ]] || fail "invalid build request: repoId is not a positive integer"
 case "$STRATEGY" in
@@ -129,16 +147,6 @@ if [ ! -d "$WORK_ROOT" ]; then
 fi
 # Nothing has run as the build user yet in this unit's fresh /tmp.
 make_mise_mountpoint
-
-# Cache-mount ids are global to the BuildKit daemon, and this box namespaces
-# them `<app>-…`: Railpack's frontend prefixes every plan cache with the
-# cache-key (`<cache-key>-<name>`, railpack buildkit/build_llb/cache_store.go),
-# the repo Dockerfile scan below demands it, Dockerfile.checks uses it. A
-# hyphen in the app name would let app `foo` with cache `bar-x` meet app
-# `foo-bar` with cache `x`.
-if [[ "$APP" == *-* ]]; then
-  fail "request refused: app names containing '-' are not built on this box (cache mount ids are namespaced as <app>-…)"
-fi
 
 # Fail closed on the egress fence, per build. The unit runs the same check
 # before starting, but a firewall reload that failed since then removes the

@@ -26,8 +26,8 @@
 # (`NAME='value'` lines, fixed when the system is built), the shared helpers
 # (host/lib.sh — the rules for touching files the operator can write;
 # host/github-lib.sh for the build itself), then the script under host/. So
-# a change to apps.json or to a builder path is a new script, never a run-time
-# lookup. host/build.sh opens with the trust model.
+# a change to a builder path is a new script; the one run-time lookup is the
+# registry (host/build.sh opens with the trust model, and that is in it).
 #
 # Gated like the builder itself (`fleet.builder.enable`: the GitHub App's
 # vault file is in the flake). Nothing here exists before the App does. The
@@ -35,10 +35,12 @@
 # ./builder.nix; the Railpack and mise pins are ./railpack.nix.
 #
 # What it reads from elsewhere, and why each is a derivation rather than a copy:
-#   BUILDABLE, DEPLOYABLE  daedalus-lib.nix's `buildableApps` / `deployableApps`,
-#               from the committed site/apps.json — the same lists the root
-#               helper's `deploy` and `build-cancel` take, because a name in them becomes part of a unit
-#               root starts.
+#   DEPLOYABLE  daedalus-lib.nix's `deployableApps`, from the committed
+#               site/apps.json — the same list the root helper's `deploy`
+#               takes, because a name in it becomes part of a unit root starts.
+#               Which apps it may BUILD is not baked: build.sh reads the
+#               committed registry at run time (its header says why that
+#               holds), and NIX_APPS is the one list it needs beside it.
 #   OWNER_ID    fleet.github.expectedOwnerId — the box's constant, never
 #               site.json's copy (platform/site.nix asserts they agree).
 #   OWNER, CLIENT_ID  site.json's github.app, as the token minter reads them.
@@ -77,11 +79,14 @@ let
   inherit (config.fleet) builder;
   inherit (import ./daedalus-lib.nix { inherit config lib pkgs; })
     verbsDir
-    buildableApps
+    registryApps
     deployableApps
+    dropRunFile
     mkAgent
     mkRootVerb
     operatorVars
+    operatorHomeVars
+    rootRunDir
     ;
 
   # ── values the scripts are handed ─────────────────────────────────────────
@@ -132,14 +137,21 @@ let
       pkgs.gawk # the redact filter needs gensub + IGNORECASE
       pkgs.util-linux # setpriv, flock
       pkgs.systemd # systemctl, journalctl
+      pkgs.git # the registry read, as the operator
     ];
-    vars = operatorVars // {
+    vars = operatorHomeVars // {
       # where the status is published (the request is the run file's)
       VERBS_DIR = verbsDir;
 
-      # the allowlists: apps this may build at all, and apps whose deploy it
-      # starts once the image is pushed
-      BUILDABLE = lib.concatStringsSep " " buildableApps;
+      # which apps it may build: the committed registry in the site directory,
+      # read at run time, minus the apps the host declares by hand (an
+      # entry could shadow one: nix would refuse it, the read does not
+      # evaluate it)
+      SITE_DIR = config.fleet.site.path;
+      NIX_APPS = lib.concatStringsSep " " (
+        lib.attrNames (removeAttrs config.fleet.apps (lib.attrNames registryApps))
+      );
+      # the apps whose deploy it starts once the image is pushed
       DEPLOYABLE = lib.concatStringsSep " " deployableApps;
 
       # the GitHub App; its private key never leaves the host
@@ -224,7 +236,7 @@ let
   };
 
   # daedalus-build-cancel@'s ExecStart: stops the build in flight, and only
-  # when it is the named app's.
+  # when it is the named app's (the request's `app`, in its run file).
   cancelScript = mkAgent {
     name = "daedalus-build-cancel";
     runtimeInputs = [
@@ -235,7 +247,6 @@ let
     ];
     vars = operatorVars // {
       STATUS = "${verbsDir}/build-status.json";
-      BUILDABLE = lib.concatStringsSep " " buildableApps;
     };
     files = [
       ./host/lib.sh
@@ -365,12 +376,14 @@ in
       {
         # ── cancel ────────────────────────────────────────────────────────────
 
-        # The root helper's `build-cancel` (root-helper.nix): one instance
-        # per app, the app its instance name, so the value is a name from
-        # buildableApps and the script refuses a build in flight that is not
-        # that app's.
+        # The root helper's `build-cancel` (root-helper.nix): a template the
+        # run id instantiates, the app a pattern selector in its run file —
+        # not a list, because a new app's first build runs before any rebuild
+        # could have put its name in one. The name never reaches a unit name;
+        # the script stops the build in flight only when the status (written
+        # by the build, which authorized the app) names that app.
         systemd.services."daedalus-build-cancel@" = {
-          description = "Stop %i's build, on daedalus's behalf";
+          description = "Stop an app's build, on daedalus's behalf";
           # Deliberately NOT monitoredJobs: its refusals are the normal case
           # (a late cancel, a build that already finished) and they exit 0.
           # No start limit: the moment an operator presses Cancel twice is exactly
@@ -378,15 +391,21 @@ in
           startLimitIntervalSec = 0;
           serviceConfig = {
             Type = "oneshot";
-            ExecStart = "${cancelScript}/bin/daedalus-build-cancel %i";
+            ExecStart = "${cancelScript}/bin/daedalus-build-cancel";
+            LoadCredential = "request:${rootRunDir}/%i.json";
+            ExecStopPost = dropRunFile;
             NoNewPrivileges = true;
           };
         };
 
-        fleet.daedalus.rootVerbs.build-cancel = lib.mkIf (buildableApps != [ ]) {
-          unit = "daedalus-build-cancel@{app}.service";
+        fleet.daedalus.rootVerbs.build-cancel = {
+          unit = "daedalus-build-cancel@.service";
           description = "Stop an app's build in flight";
-          selectors.app = buildableApps;
+          # An app name the builder takes (host/build.sh): no hyphen.
+          patterns.app = {
+            regex = "^[a-z0-9]{1,63}$";
+            maxLength = 63;
+          };
           # The stop waits for the build's TERM trap and its reaper.
           timeoutSec = 150;
         };

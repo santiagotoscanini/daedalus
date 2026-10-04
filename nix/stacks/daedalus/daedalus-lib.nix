@@ -134,26 +134,24 @@ rec {
   # The committed registry, read from the same file declarations.nix reads
   # rather than from `config.fleet.apps` (see the note on `self` in daedalus.nix).
   # `fleet.registry.file` is safe to read here: it depends only on
-  # `fleet.site.source`, a path set in configuration.nix.
-  registryApps = (builtins.fromJSON (builtins.readFile config.fleet.registry.file)).apps;
-
-  # The two allowlists the host verbs are handed, both from the registry
-  # above. Defined once here because a name in either becomes part of a unit
-  # name root starts: the root helper's `deploy` verb (daedalus-verbs.nix) and
-  # the build agent (build-agent.nix) must never disagree about them.
-
-  # Apps the box builds: every registry-mode entry, `deploy.enable` ignored (a
-  # frozen app still builds; it is just not deployed) and `declared` included
-  # (being in apps.json is exactly what earns an app its first build).
-  buildableApps = lib.attrNames (
-    lib.filterAttrs (_: a: (a.sourceMode or "registry") == "registry") registryApps
-  );
+  # `fleet.site.source`, a path set in configuration.nix. Without the entries
+  # still waiting for their first image, exactly as declarations.nix filters
+  # them: nothing exists for such an app yet, so no list below may name it.
+  # (What the builder may build is not baked at all: host/build.sh reads the
+  # committed registry at run time.)
+  registryApps =
+    lib.filterAttrs (_: a: (a.awaitingImage or false) != true)
+      (builtins.fromJSON (builtins.readFile config.fleet.registry.file)).apps;
 
   # Apps that actually have an `app-<name>-deploy.service` to start: the
   # registry-mode entries whose deploy is not frozen (schema v2's
   # `deploy.enable`, absent = on — the same default the platform applies) and
   # that are past `declared` (a declared app has no container, so no deploy
-  # unit). A frozen app keeps its page and its env snapshot; what it loses is
+  # unit). Defined once here because a name in it becomes part of a unit name
+  # root starts: the root helper's `deploy` verb (daedalus-verbs.nix) and the
+  # build agent (build-agent.nix) must never disagree about it.
+  #
+  # A frozen app keeps its page and its env snapshot; what it loses is
   # exactly this — the verb has no such value, so a freeze holds against the UI's
   # Redeploy button too, not just the timer. A local-source app like daedalus
   # is excluded for free, because it has no deploy unit at all.

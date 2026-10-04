@@ -16,12 +16,13 @@
 #   host/build-stages/5-publish.sh    build the image and push it
 #   host/build-stages/6-done.sh       start the deploy, publish the final status
 #
-# The variables (build-agent.nix comments each one): VERBS_DIR,
-# BUILDABLE, DEPLOYABLE, OWNER, OWNER_ID, CLIENT_ID, PEM, REGISTRY,
+# The variables (build-agent.nix comments each one): VERBS_DIR, SITE_DIR,
+# NIX_APPS, DEPLOYABLE, OWNER, OWNER_ID, CLIENT_ID, PEM, REGISTRY,
 # NPM_MIRROR_HOST, LAN_IP, NODE_IMAGE, BUILDKIT_ADDR, RAILPACK_FRONTEND,
 # DOCKER_CONFIG_DIR, BUILD_ROOT, WORK_ROOT, MISE_CACHE_DIR, MISE_MOUNT,
 # MISE_PATH, MISE_BINARY, LOG_DIR, BUILD_USER, BUILD_GROUP, BUILD_PATH,
-# CHECKS_DOCKERFILE, FENCE_CHECK, OPERATOR_USER, OPERATOR_GROUP, SETPRIV.
+# CHECKS_DOCKERFILE, FENCE_CHECK, OPERATOR_USER, OPERATOR_GROUP, OPERATOR_HOME,
+# SETPRIV, ENV_BIN, GIT.
 #
 # ── in and out ────────────────────────────────────────────────────────────
 #
@@ -42,6 +43,38 @@
 # values, never real secrets, but handled as if they were: they reach Railpack
 # through its process environment and BuildKit through secret files, never an
 # argument, a log line or the status. Optional; absent means none.
+#
+# ── which apps it builds ──────────────────────────────────────────────────
+#
+# One the committed registry names, read when the run starts (0-request.sh,
+# helpers.sh registry_entry): the entry staged for site/apps.json in the
+# configuration repository, read through git as the operator. It must be a
+# registry-source entry, and not one of $NIX_APPS, the apps the host declares
+# by hand: nix would refuse an entry that shadows one, and this read does not
+# evaluate anything. No list is baked in, because a new app's entry waits for
+# its first image (`awaitingImage`) and no rebuild happens before that build.
+#
+# Why this gives the container nothing it did not have. The site directory,
+# its index and its commits are written only by root verbs (apply, register,
+# secret-set) and by the operator, and the container reaches those verbs with
+# bytes only. When the list was baked, one Apply (which the container may ask
+# for) made any name buildable, and the evaluation that Apply ran checked one
+# property that matters to a build: that the name is not a hand-declared app.
+# $NIX_APPS checks that now. `register` commits an entry without a rebuild, but
+# only an awaiting one, and nix builds nothing for an awaiting entry
+# (modules/apps/declarations.nix). So all an entry gets is this build of
+# github.com/$OWNER/<name>, the same as before: the owner id is the nix
+# constant, the repository id must be the one the app was linked to
+# (1-token.sh), and the image goes to <registry>/<name> only. The deploy it may
+# start is from the baked $DEPLOYABLE, so its unit exists only after an Apply
+# set the app up. An awaiting app is never in that list. Its container is
+# started by the activation of the Apply that sets it up, not by this run, so
+# the two cannot race.
+#
+# The name becomes part of paths (the mise cache, the cache repository), and
+# part of a unit name only through $DEPLOYABLE. It is held to
+# ^[a-z0-9]{1,63}$: the app-name rule, minus the hyphen that cache mount ids
+# cannot carry.
 #
 # ── who does what ─────────────────────────────────────────────────────────
 #
@@ -107,6 +140,8 @@ else
 fi
 
 MAX_REQUEST_BYTES=65536
+# The registry it authorizes the app against (helpers.sh registry_entry).
+MAX_REGISTRY_BYTES=$((4 * 1024 * 1024))
 MAX_CLONE_BYTES=$((2 * 1024 * 1024 * 1024))
 MAX_LOG_BYTES=$((20 * 1024 * 1024))
 # The status is re-read by the engine every few seconds; Railpack's two files

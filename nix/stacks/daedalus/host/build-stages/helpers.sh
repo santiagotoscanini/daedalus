@@ -17,6 +17,19 @@ in_list() {
   tr ' ' '\n' <<<"$2" | grep -Fxq -- "$1"
 }
 
+# App $1's entry in the registry, as one line of JSON, or nothing: the
+# configuration repository's STAGED $SITE_DIR/apps.json. The index is what the
+# next rebuild evaluates and the next commit records; a box that leaves
+# committing to the operator stages every site write all the same. Not the
+# work tree. Read through git as the operator (git_op): root never runs git in
+# their tree, and writes nothing there. build.sh's header has why this read is
+# the build's authorization.
+registry_entry() {
+  local raw
+  raw="$(git_op "$SITE_DIR" cat-file blob :./apps.json 2>/dev/null | head -c "$MAX_REGISTRY_BYTES")" || return 0
+  jq -c --arg a "$1" '.apps[$a] | objects' <<<"$raw" 2>/dev/null || true
+}
+
 # ── the log ───────────────────────────────────────────────────────────────
 
 # stdin → stdout with credentials cut out, one line at a time and flushed, so

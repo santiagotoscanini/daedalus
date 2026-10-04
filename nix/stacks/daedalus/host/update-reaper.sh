@@ -1,6 +1,6 @@
-# ExecStopPost of the rebuilding verbs — daedalus-apply, -image-update,
-# -engine-update, -version-update and -claude-code-update: the status file's
-# undertaker, one script for all five.
+# ExecStopPost of the verbs that report in a status file — daedalus-apply,
+# -register, -image-update, -engine-update, -version-update and
+# -claude-code-update: the status file's undertaker, one script for all six.
 #
 # Inlined by mkAgent after host/lib.sh; expects STATUS (the verb's status
 # file), NEXT_STEPS (what to check, as one sentence without its full stop),

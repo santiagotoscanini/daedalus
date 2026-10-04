@@ -1,10 +1,10 @@
-# The root helper's `build-cancel` verb: `daedalus-build-cancel@<app>.service`
+# The root helper's `build-cancel` verb: `daedalus-build-cancel@<run>.service`
 # (build-agent.nix), started by the helper (stacks/daedalus root-helper.nix)
-# with the app it names as the instance, `$1` here.
+# with the app it names in the run file (host/lib.sh take_request), held to
+# the verb's `patterns.app`.
 #
 # Inlined by build-agent.nix after host/lib.sh and host/build-stages/states.sh;
-# expects STATUS (build-status.json, in the root-only verbs directory) and
-# BUILDABLE.
+# expects STATUS (build-status.json, in the root-only verbs directory).
 #
 # The engine cannot stop a build itself — the agent is a root unit — so it
 # names the app whose build it means, and this turns that into the one thing
@@ -22,14 +22,11 @@
 # late is ordinary, and a failing unit here would mail the operator about
 # nothing.
 
-want="${1-}"
-# The helper passes only a value from BUILDABLE; asked again on the side that
-# stops a unit.
-[ -n "$want" ] || refuse "no app named"
-case " $BUILDABLE " in
-*" $want "*) ;;
-*) refuse "'$want' is not an app this box builds" ;;
-esac
+want="$(take_request | jq -r '.selectors.app // ""')" || exit 1
+# The helper holds the value to the verb's pattern; asked again on the side
+# that stops a unit. No list: the status below is the build's own word, and
+# the build authorized its app (host/build.sh) before it wrote one.
+[[ "$want" =~ ^[a-z0-9]{1,63}$ ]] || refuse "no app named"
 
 status_json="$(cat -- "$STATUS" 2>/dev/null)" || refuse "no build is running"
 [ "$(jq -r '.app // ""' <<<"$status_json" 2>/dev/null || true)" = "$want" ] ||

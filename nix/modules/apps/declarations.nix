@@ -34,8 +34,8 @@
 #      row, its postgres role and database, its data dir and its generated
 #      AUTH_SECRET — and no container, no deploy unit, no ingress.
 #   3. Apply. Nothing starts; what this buys is the app's presence in
-#      apps.json, which is what makes it buildable at all (build.sh's
-#      BUILDABLE is generated from this file).
+#      apps.json, which is what makes it buildable at all (build.sh reads
+#      this file's committed copy when a build starts).
 #   4. Push, or press Build now: the box's build (the root verb `build`)
 #      fetches the commit, runs the repo's checks inside the image build, and
 #      pushes `sha-<sha>` + `latest` to zot. Watch it with
@@ -83,7 +83,11 @@
 let
   registry = builtins.fromJSON (builtins.readFile config.fleet.registry.file);
 
-  inherit (registry) apps;
+  # Every entry but the ones still waiting for their first image: those
+  # materialize nothing (a new app between its registration and its first
+  # image; the builder reads them at run time, host/build.sh). Compared with
+  # `== true` so a malformed marker counts as none.
+  apps = lib.filterAttrs (_: a: (a.awaitingImage or false) != true) registry.apps;
 
   secretName = name: "app-${name}-env";
 

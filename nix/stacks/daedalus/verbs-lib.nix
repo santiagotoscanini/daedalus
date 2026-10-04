@@ -129,6 +129,42 @@ let
     ];
   };
 
+  # Register a new app without a rebuild: host/register.sh, the root helper's
+  # `register`. Writes apps.json (entries awaiting their first image only),
+  # stages and commits it; never runs nixos-rebuild.
+  registerScript = mkAgent {
+    name = "daedalus-register";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.git
+      pkgs.util-linux # setpriv, flock
+      pkgs.coreutils
+      pkgs.openssh # git push over ssh
+    ];
+    vars =
+      operatorHomeVars
+      // commitVars
+      // {
+        VERBS_DIR = verbsDir;
+        PREV_DIR = prevDir;
+        SITE_LOCK = siteLock;
+        SITE_DIR = config.fleet.site.path;
+        LOCKFILE = config.fleet.rebuildLock;
+      };
+    files = [
+      ./host/lib.sh
+      ./host/site-lib.sh
+      ./host/register.sh
+    ];
+  };
+
+  # The status file's undertaker for a register run (host/update-reaper.sh).
+  registerReaper = mkUpdateReaper {
+    name = "daedalus-register-reaper";
+    statusFile = "register-status.json";
+    nextSteps = "Check `journalctl -u 'daedalus-register@*'` and `git status` in ${config.fleet.config.repo} before creating the app again";
+  };
+
   # Restart the box: the root helper's `reboot` (root-helper.nix). It
   # takes nothing from anyone — host/power.sh has why poweroff exists nowhere.
   powerScript = mkAgent {
@@ -299,6 +335,8 @@ in
     secretSetScript
     applyScript
     applyReaper
+    registerScript
+    registerReaper
     powerScript
     workspaceCloneScript
     imageUpdateScript

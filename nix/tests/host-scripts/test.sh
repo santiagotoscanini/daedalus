@@ -263,14 +263,23 @@ echo "$*" >>"$CALLS"
 EOF
 : >"$CALLS"
 : >"$LOGGED"
-agent "$T/cancel.sh" "STATUS=$B/verbs/build-status.json BUILDABLE='blog shop'" \
+agent "$T/cancel.sh" "STATUS=$B/verbs/build-status.json" \
   lib.sh build-stages/states.sh build-cancel.sh
 echo '{"id":"0b6f3c1e-8a2d","app":"blog","state":"building"}' >"$B/verbs/build-status.json"
+mkdir -p "$B/cancel"
+cancel_run() {
+  jq -n --arg a "$1" '{id: "c1", verb: "build-cancel", selectors: {app: $a}}' >"$B/cancel/request"
+  CREDENTIALS_DIRECTORY="$B/cancel" bash "$T/cancel.sh" >/dev/null 2>&1
+}
 rc=0
-bash "$T/cancel.sh" shop >/dev/null 2>&1 || rc=$?
+cancel_run shop || rc=$?
 check "another app's build is refused, exit 0, nothing stopped" \
   '[ "$rc" -eq 0 ] && grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && [ ! -s "$CALLS" ]'
-bash "$T/cancel.sh" blog >/dev/null 2>&1
+: >"$LOGGED"
+cancel_run "blog/.." || true
+check "a name that is not an app name is refused, nothing stopped" \
+  'grep -qx "DAEDALUS_OUTCOME=refused" "$LOGGED" && [ ! -s "$CALLS" ]'
+cancel_run blog
 check "its own is stopped, whatever run it is" '[ "$(cat "$CALLS")" = "stop daedalus-build@*.service" ]'
 
 # ── 8. an image update reads its request from the run file ────────────────
@@ -372,7 +381,74 @@ bash "$T/nodes.sh" >/dev/null 2>&1
 check "at boot the kept copy goes back to the resolver" 'cmp -s "$N/run/dhcp-hosts" "$N/verbs/nodes-dhcp-hosts"'
 rm -f "$T/bin/install"
 
+# ── 13. the build authorizes its app from the STAGED registry ─────────────
+# The index, read through git: not the work tree, and nothing at all outside
+# a work tree. (host/build.sh, "which apps it builds".)
+echo "# build: the registry entry is read from the index"
+G="$T/reg"
+mkdir -p "$G/site"
+git init -q "$G"
+echo '{"apps":{"blog":{"stage":"lab","awaitingImage":true},"shop":{"sourceMode":"local"},"bad":1}}' >"$G/site/apps.json"
+git -C "$G" add -A
+agent "$T/entry.sh" "set -euo pipefail; SITE_DIR=$G/site MAX_REGISTRY_BYTES=65536" lib.sh build-stages/helpers.sh
+echo 'registry_entry "$1"' >>"$T/entry.sh"
+echo '{"apps":{"blog":{},"evil":{}}}' >"$G/site/apps.json"
+check "a staged entry is read, with its marker" '[ "$(bash "$T/entry.sh" blog | jq -r .awaitingImage)" = true ]'
+check "a name only the work tree holds is not" '[ -z "$(bash "$T/entry.sh" evil)" ]'
+check "nor an entry that is not an object" '[ -z "$(bash "$T/entry.sh" bad)" ]'
+agent "$T/entry2.sh" "set -euo pipefail; SITE_DIR=$T/apply MAX_REGISTRY_BYTES=65536" lib.sh build-stages/helpers.sh
+echo 'registry_entry "$1"' >>"$T/entry2.sh"
+check "outside a work tree there is no registry" '[ -z "$(bash "$T/entry2.sh" blog)" ]'
+
+# ── 14. register commits awaiting entries, and nothing else ───────────────
+echo "# register"
+S="$T/regconf"
+mkdir -p "$S/site" "$S/creds" "$S/verbs" "$S/prev"
+git init -q "$S"
+printf '%s\n' '{"schemaVersion":2,"apps":{"iris":{"stage":"live","postgres":true}}}' >"$S/site/apps.json"
+echo "{ }" >"$S/other.nix"
+git -C "$S" add -A
+git -C "$S" commit -qm init
+echo "{ edited = true; }" >"$S/other.nix"
+agent "$T/register.sh" "VERBS_DIR=$S/verbs PREV_DIR=$S/prev SITE_DIR=$S/site LOCKFILE=$T/rebuild.lock SITE_LOCK=$T/site.lock" \
+  lib.sh site-lib.sh register.sh
+register_run() {
+  jq -n --arg f "$1" --argjson c "${2:-true}" \
+    '{id: "r9", verb: "register", selectors: {}, payload: ({commit: $c, summary: "lintel: new", actor: "test", files: {"apps.json": $f}} | tojson)}' \
+    >"$S/creds/request"
+  CREDENTIALS_DIRECTORY="$S/creds" bash "$T/register.sh" >"$T/register.out" 2>&1
+}
+head0="$(git -C "$S" rev-parse HEAD)"
+rc=0
+register_run "$(printf '%s\n' '{"schemaVersion":2,"apps":{"iris":{"postgres":true,"stage":"live"},"lintel":{"stage":"lab","awaitingImage":true}}}')" || rc=$?
+check "an awaiting entry is committed, iris reordered but unchanged" \
+  '[ "$rc" -eq 0 ] && jq -e ".state == \"done\" and .phase == \"complete\"" "$S/verbs/register-status.json" >/dev/null && [ "$(git -C "$S" show HEAD:site/apps.json | jq -r .apps.lintel.awaitingImage)" = true ]'
+check "the commit holds apps.json alone, and the unrelated edit is untouched" \
+  '[ "$(git -C "$S" diff --name-only HEAD~1 HEAD)" = site/apps.json ] && [ "$(git -C "$S" log -1 --format=%s)" = "apps: lintel: new" ] && [ "$(cat "$S/other.nix")" = "{ edited = true; }" ]'
+head1="$(git -C "$S" rev-parse HEAD)"
+before="$(cat "$S/site/apps.json")"
+refused() {
+  local rc=0
+  register_run "$1" || rc=$?
+  [ "$rc" -ne 0 ] && jq -e ".state == \"failed\" and .phase == \"validating\"" "$S/verbs/register-status.json" >/dev/null &&
+    [ "$(git -C "$S" rev-parse HEAD)" = "$head1" ] && [ "$(cat "$S/site/apps.json")" = "$before" ]
+}
+check "a change to a running app is refused, nothing written" \
+  'refused "{\"schemaVersion\":2,\"apps\":{\"iris\":{\"stage\":\"off\",\"postgres\":true},\"lintel\":{\"stage\":\"lab\",\"awaitingImage\":true}}}"'
+check "a new entry that does not await its image is refused" \
+  'refused "{\"schemaVersion\":2,\"apps\":{\"iris\":{\"stage\":\"live\",\"postgres\":true},\"lintel\":{\"stage\":\"lab\"}}}"'
+check "a name that is not an app name is refused" \
+  'refused "{\"schemaVersion\":2,\"apps\":{\"iris\":{\"stage\":\"live\",\"postgres\":true},\"Bad/..\":{\"awaitingImage\":true}}}"'
+check "another schema version is refused" \
+  'refused "{\"schemaVersion\":3,\"apps\":{\"iris\":{\"stage\":\"live\",\"postgres\":true}}}"'
+check "bytes that are not JSON are refused" 'refused "not json"'
+rc=0
+register_run "$(printf '%s\n' '{"schemaVersion":2,"apps":{"iris":{"stage":"live","postgres":true}}}')" false || rc=$?
+check "an awaiting entry may go again; with commits off it is staged, not committed" \
+  '[ "$rc" -eq 0 ] && [ "$(git -C "$S" rev-parse HEAD)" = "$head1" ] && [ "$(git -C "$S" show :site/apps.json | jq -r ".apps | keys | join(\",\")")" = iris ]'
+
 if [ "$fails" -ne 0 ]; then
+  cat "$T/register.out" 2>/dev/null || true
   cat "$T/apply.out"
   echo "$fails check(s) failed"
   exit 1
