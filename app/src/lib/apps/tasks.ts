@@ -45,9 +45,9 @@ type TaskRow = {
 export type TasksPayload = {
   tasks: TaskRow[]
   /**
-   * Whether the app has a container to exec into at all. A `declared` app
-   * runs nothing, so nix generates no task units for it and a Run now would
-   * fail every time — the tab says so instead of offering the button.
+   * Whether the app has a container to exec into at all. A new app runs
+   * nothing until it is set up, so nix generates no task units for it and a
+   * Run now would fail every time — the tab says so instead of offering it.
    */
   running: boolean
 }
@@ -90,7 +90,7 @@ export async function loadTasksTab(name: string): Promise<TasksPayload> {
   }
 
   return {
-    running: record.stage !== 'declared',
+    running: !record.awaitingImage,
     tasks: record.tasks.map((t) => {
       const unit = taskUnitName(name, t.taskId)
       const run = runByUnit.get(unit)
@@ -120,7 +120,7 @@ export async function loadTasksTab(name: string): Promise<TasksPayload> {
  * otherwise reach the host as a `systemctl start` of something that does not
  * exist, and the honest answer to that is a sentence, not a failed unit. And
  * the app must be running: a task is `podman exec app-<name> …`, which fails
- * every tick against a `declared` app that has no container.
+ * every tick against a new app that has no container yet.
  */
 export async function runAppTaskNow(
   ctx: Pick<Ctx, 'controller'>,
@@ -132,9 +132,9 @@ export async function runAppTaskNow(
   if (!record.tasks.some((t) => t.taskId === input.task)) {
     throw new Error(`${input.name} declares no task called ${input.task}`)
   }
-  if (record.stage === 'declared') {
+  if (record.awaitingImage) {
     throw new Error(
-      `${input.name} is declared but not running — a task runs inside its container, and there is none yet`,
+      `${input.name} is not set up yet — a task runs inside its container, and there is none yet`,
     )
   }
 

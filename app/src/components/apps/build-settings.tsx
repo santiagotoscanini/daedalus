@@ -1,9 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import {
   boxBuildRefusal,
-  buildEnvSizeError,
   ENV_ENTRIES_MAX,
-  type EnvMapKind,
   envEntryError,
   envMapError,
 } from '../../lib/build-settings'
@@ -129,20 +127,8 @@ export function BuildSettings({ app }: { app: AppRecord }) {
 
         <div className="flex min-w-0 flex-col gap-5">
           <EnvMapEditor
-            kind="placeholders"
-            title="Build placeholders"
-            value={app.buildEnvPlaceholders}
-            other={app.railpackEnv}
-            keyPlaceholder="VITE_PUBLIC_URL"
-            help="Env names the build needs set but never uses for real: a build that reads DATABASE_URL at import time, say. Dummy values only, never secrets. The build sees them in the clear, and so does anyone with its log. Names the builder’s own tools read are refused: PATH, HOME, GIT_*, NODE_*, NPM_CONFIG_*, PNPM_* and the like."
-            busy={saving}
-            onSave={(v) => save({ buildEnvPlaceholders: v })}
-          />
-          <EnvMapEditor
-            kind="railpack"
             title="Railpack switches"
             value={app.railpackEnv}
-            other={app.buildEnvPlaceholders}
             keyPlaceholder="RAILPACK_PRUNE_DEPS"
             help={`The Railpack switches this box passes on: ${RAILPACK_KNOB_NAMES.join(', ')}. Start, build and install commands are not switches here: they belong in the repo’s railpack.json, where they are reviewed with the code. Ignored when the build uses the Dockerfile.`}
             busy={saving}
@@ -163,20 +149,15 @@ const INPUT = INPUT_MONO
 
 /** Name–value pairs, edited as a draft and saved together. */
 function EnvMapEditor({
-  kind,
   title,
   value,
-  other,
   keyPlaceholder,
   help,
   busy,
   onSave,
 }: {
-  kind: EnvMapKind
   title: string
   value: Record<string, string>
-  /** The app's other build env map, saved: the size cap is on both together. */
-  other: Record<string, string>
   keyPlaceholder: string
   help: string
   busy: boolean
@@ -197,9 +178,7 @@ function EnvMapEditor({
     .map((r): [string, string] => [r.key.trim(), r.value])
   const draft = Object.fromEntries(entries)
   const dirty = JSON.stringify(draft) !== saved || entries.length !== Object.keys(value).length
-  const problem =
-    envMapError(kind, entries) ??
-    (kind === 'placeholders' ? buildEnvSizeError(draft, other) : buildEnvSizeError(other, draft))
+  const problem = envMapError(entries)
 
   const set = (id: number, patch: Partial<Row>) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
@@ -215,7 +194,7 @@ function EnvMapEditor({
         <ul className="m-0 flex list-none flex-col gap-[0.4rem] p-0">
           {rows.map((r) => {
             const rowError =
-              r.key === '' && r.value === '' ? null : envEntryError(kind, r.key.trim(), r.value)
+              r.key === '' && r.value === '' ? null : envEntryError(r.key.trim(), r.value)
             return (
               <li
                 key={r.id}

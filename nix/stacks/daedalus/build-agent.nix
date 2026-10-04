@@ -309,8 +309,8 @@ in
         # publish 45, plus slack. The engine's hard cap is 100 min from
         # dispatch (BUILD_HARD_CAP_MS); this must stay under it.
         timeoutStartSec = 95 * 60;
-        # The engine's request, at most BUILD_REQUEST_MAX_BYTES (60 KiB);
-        # build.sh refuses one past 64 KiB on its own.
+        # The engine's request, a few KiB; build.sh refuses one past 64 KiB
+        # on its own.
         payloadMax = 65536;
         # Marks a run that died without publishing its own end, and drops its
         # work dir.

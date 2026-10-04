@@ -6,19 +6,12 @@
 
 import { type AppBuildFacts, type DispatchPlan, planDispatch } from '../../lib/build-dispatch'
 import { type BuildRow, type EnqueueIntent, enqueue, type SkipReason } from '../../lib/build-queue'
-import {
-  BUILD_REQUEST_MAX_BYTES,
-  type BuildRequest,
-  buildRequest,
-  buildRequestBytes,
-} from '../../lib/builds'
+import { type BuildRequest, buildRequest } from '../../lib/builds'
+import { isRecord } from '../../lib/is-record'
 import { errorText } from '../../lib/redact'
 import type { Ctx } from '../ctx'
 import type { SchedulerState } from './scheduler'
 import { logOnce } from './scheduler-log'
-
-/** A request over BUILD_REQUEST_MAX_BYTES is failed with this rather than written. */
-export const REQUEST_TOO_LARGE = 'request refused: too large'
 
 type Report = (row: BuildRow) => Promise<void>
 
@@ -62,16 +55,30 @@ async function readDispatchInputs(ctx: Ctx, inFlight: boolean): Promise<Dispatch
   const installed = !(installation.available && installation.data.state === 'not-installed')
   const apps = new Map(records.map((a) => [a.name, a as AppBuildFacts]))
   let inManifest: Set<string> | null = null
-  if (!inFlight && installed) {
-    const { manifestEntries } = await import('../../host/nix-manifest')
-    // apps.json: the registry-mode apps the host builder will accept.
-    inManifest = new Set(
-      (await manifestEntries())
-        .filter((e) => !e.managedInNix && e.sourceMode !== 'local')
-        .map((e) => e.name),
-    )
-  }
+  if (!inFlight && installed) inManifest = await buildableNames(ctx)
   return { queued, apps, installed, inManifest }
+}
+
+/**
+ * The apps the host builder will accept: the registry-source entries of the
+ * committed apps.json, which it authorizes a build from at run time
+ * (nix host/build.sh). While a register is writing that file, its awaiting
+ * entries wait: the work tree can hold one a moment before the index does.
+ */
+async function buildableNames(ctx: Ctx): Promise<Set<string>> {
+  const { isAwaitingEntry, readCommittedRegistry } = await import('../../host/site-registry')
+  const { readRegisterStatus } = await import('../../host/register')
+  const [committed, register] = await Promise.all([
+    readCommittedRegistry(),
+    readRegisterStatus(ctx),
+  ])
+  const writing = register.state === 'running'
+  return new Set(
+    Object.entries(committed?.apps ?? {})
+      .filter(([, e]) => !(isRecord(e) && e.sourceMode === 'local'))
+      .filter(([, e]) => !(writing && isAwaitingEntry(e)))
+      .map(([name]) => name),
+  )
 }
 
 /** Finish a queued or claimed row the engine gave up on, and report it. */
@@ -129,7 +136,7 @@ async function dispatchNext(
       publish: row.publish,
       requestedBy: row.requestedBy,
       at: now,
-      buildEnv: { placeholders: app.buildEnvPlaceholders, railpack: app.railpackEnv },
+      buildEnv: { railpack: app.railpackEnv },
     })
   } catch (e) {
     // Left queued it would be picked again every tick, refused every time.
@@ -142,17 +149,6 @@ async function dispatchNext(
     )
     return false
   }
-  // Below the host's own ceiling, so an oversized request is failed here with
-  // a reason rather than refused there with only a mail.
-  const bytes = buildRequestBytes(request)
-  if (bytes > BUILD_REQUEST_MAX_BYTES) {
-    console.warn(
-      `[builds] ${row.app}: refused ${row.sha.slice(0, 7)}: the request is ${String(bytes)} bytes, over ${String(BUILD_REQUEST_MAX_BYTES)}`,
-    )
-    await failBuild(row, { state: 'failed', error: REQUEST_TOO_LARGE }, now, report)
-    return false
-  }
-
   const repo = await import('../../lib/repo/builds')
   const claimed = await repo.claimQueued(row.id, now)
   if (claimed === undefined) return false

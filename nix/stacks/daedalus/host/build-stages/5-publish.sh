@@ -20,7 +20,7 @@ if [ "$RESOLVED" = railpack ]; then
     --frontend gateway.v0 --opt "source=$RAILPACK_FRONTEND"
     --local "context=$SRC" --local "dockerfile=$CTL/plan"
     # The build-arg: prefix is required; a bare cache-key is silently ignored.
-    --opt "build-arg:cache-key=$APP" "${HASH_ARGS[@]}"
+    --opt "build-arg:cache-key=$APP"
   )
 else
   FRONTEND_ARGS=(
@@ -54,7 +54,7 @@ with_lock _set_deadline "$BUILD_SECS" building
 BUILD_STARTED="$(date +%s)"
 rc=0
 timed_as_build "$((BUILD_SECS + PUBLISH_SECS))s" push buildctl --addr "$BUILDKIT_ADDR" build --progress=plain \
-  "${FRONTEND_ARGS[@]}" "${SECRET_ARGS[@]}" \
+  "${FRONTEND_ARGS[@]}" \
   --output "type=image,\"name=$TAGS\",push=true,oci-mediatypes=true,annotation.org.opencontainers.image.revision=$SHA,annotation.org.opencontainers.image.source=$SOURCE_URL" \
   --export-cache "type=registry,ref=$CACHE_REF,mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
   --import-cache "type=registry,ref=$CACHE_REF" \
@@ -217,8 +217,8 @@ else
   say "could not read the pushed image's manifest facts for the status"
 fi
 
-# `.build +=`, because the runner and the secrets hash were published into the
-# same object back in stage 3.
+# `.build +=`, because the runner was published into the same object back in
+# stage 4.
 if BUILD_FACTS="$(build_facts)" && [ -n "$BUILD_FACTS" ] && [ "$BUILD_FACTS" != "{}" ] &&
   jq -e . <<<"$BUILD_FACTS" >/dev/null 2>&1; then
   status_set '.build += $b' --argjson b "$BUILD_FACTS"

@@ -73,6 +73,12 @@ export type ManifestTask = {
 
 export type ManifestApp = {
   stage: AppStage
+  /**
+   * A new app before its first image: nix materializes nothing for it
+   * (nix/modules/apps/declarations.nix), and the builder still builds it.
+   * Written only when true.
+   */
+  awaitingImage?: boolean
   sourceMode?: SourceMode
   postgres: boolean
   storage: boolean
@@ -143,6 +149,7 @@ export const manifestApp: Decoder<ManifestApp> = obj({
   // From the tuple, so a rung added to the ladder is decodable here without a
   // second edit — and a file Nix accepts can never fail to parse here.
   stage: literal(...APP_STAGES),
+  awaitingImage: optional(bool, false),
   sourceMode: optional(literal(...SOURCE_MODES), 'registry'),
   postgres: bool,
   storage: bool,

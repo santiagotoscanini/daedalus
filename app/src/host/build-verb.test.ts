@@ -33,7 +33,7 @@ const REQUEST: BuildRequest = {
   publish: 'live',
   requestedBy: 'operator',
   at: '2026-09-11T20:00:00.000Z',
-  buildEnv: { placeholders: {}, railpack: {} },
+  buildEnv: { railpack: {} },
 }
 
 const writeStatus = (body: unknown) =>
@@ -88,7 +88,7 @@ describe('startBuild', () => {
   it('refuses a bad build env name before asking anything', async () => {
     const { ctx, asked } = controller(() => Promise.resolve(run(null)))
     await expect(
-      startBuild(ctx, { ...REQUEST, buildEnv: { placeholders: {}, railpack: { NODE_ENV: 'x' } } }),
+      startBuild(ctx, { ...REQUEST, buildEnv: { railpack: { NODE_ENV: 'x' } } }),
     ).rejects.toThrow(/buildEnv\.railpack/)
     await expect(startBuild(ctx, { ...REQUEST, id: '../x' })).rejects.toThrow(/id/)
     expect(asked).toEqual([])

@@ -3,17 +3,12 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   BUILD_ID_RE,
-  BUILD_REQUEST_MAX_BYTES,
   buildLogPath,
   buildRequest,
-  buildRequestBytes,
   buildRequestDecoder,
   buildStatusDecoder,
-  isReservedEnvName,
   RAILPACK_KNOB_NAMES,
   RAILPACK_KNOB_PATTERNS,
-  RESERVED_ENV_NAMES,
-  RESERVED_ENV_PREFIXES,
   railpackValueRefusal,
   serializeBuildRequest,
   tailFromBytes,
@@ -45,7 +40,7 @@ const request = {
   publish: 'live',
   requestedBy: 'webhook',
   at: '2026-09-11T20:00:00.000Z',
-  buildEnv: { placeholders: {}, railpack: {} },
+  buildEnv: { railpack: {} },
 }
 
 const status = {
@@ -72,7 +67,7 @@ describe('build request', () => {
       publish: 'live',
       requestedBy: 'webhook',
       at: new Date('2026-09-11T20:00:00Z'),
-      buildEnv: { placeholders: {}, railpack: {} },
+      buildEnv: { railpack: {} },
     })
     expect(r).toEqual(request)
   })
@@ -112,7 +107,6 @@ describe('build request', () => {
 
 describe('build request env', () => {
   const buildEnv = {
-    placeholders: { MAPBOX_ACCESS_TOKEN: 'pk.placeholder', _UNDERSCORED: '', A: 'x'.repeat(512) },
     railpack: { RAILPACK_PRUNE_DEPS: 'true', RAILPACK_NODE_PLAYWRIGHT_INSTALL: '1' },
   }
 
@@ -138,67 +132,46 @@ describe('build request env', () => {
     expect(decode(buildRequestDecoder, JSON.parse(JSON.stringify(r)))).toEqual(r)
   })
 
-  it('accepts empty maps', () => {
-    const env = { placeholders: {}, railpack: {} }
+  it('accepts an empty map', () => {
+    const env = { railpack: {} }
     expect(decode(buildRequestDecoder, { ...request, buildEnv: env }).buildEnv).toEqual(env)
   })
 
-  const P = 'buildEnv.placeholders'
   const R = 'buildEnv.railpack'
   it.each([
-    ['a lowercase placeholder', { placeholders: { auth_secret: 'x' }, railpack: {} }, P],
-    ['a placeholder starting with a digit', { placeholders: { '1X': 'x' }, railpack: {} }, P],
+    ['a railpack key without the prefix', { railpack: { NODE_VERSION: '24' } }, R],
+    ['a bare RAILPACK_', { railpack: { RAILPACK_: '1' } }, R],
+    ['a Railpack name past 64 chars', { railpack: { [`RAILPACK_${'A'.repeat(56)}`]: '1' } }, R],
+    ['a __proto__ key', { railpack: JSON.parse('{"__proto__":"x"}') }, R],
+    ['a Railpack command', { railpack: { RAILPACK_START_CMD: 'x' } }, R],
+    ['a Railpack switch this box does not pass on', { railpack: { RAILPACK_PACKAGES: 'node' } }, R],
     [
-      'a placeholder past 64 chars',
-      { placeholders: { [`A${'B'.repeat(64)}`]: 'x' }, railpack: {} },
-      P,
-    ],
-    ['a placeholder with a dash', { placeholders: { 'AUTH-SECRET': 'x' }, railpack: {} }, P],
-    ['a __proto__ key', { placeholders: JSON.parse('{"__proto__":"x"}'), railpack: {} }, P],
-    [
-      'a railpack key without the prefix',
-      { placeholders: {}, railpack: { NODE_VERSION: '24' } },
-      R,
-    ],
-    ['a bare RAILPACK_', { placeholders: {}, railpack: { RAILPACK_: '1' } }, R],
-    [
-      'a Railpack name past 64 chars',
-      { placeholders: {}, railpack: { [`RAILPACK_${'A'.repeat(56)}`]: '1' } },
-      R,
-    ],
-    ['a reserved placeholder', { placeholders: { NPM_CONFIG_REGISTRY: 'x' }, railpack: {} }, P],
-    ['a placeholder under NODE_', { placeholders: { NODE_ENV: 'production' }, railpack: {} }, P],
-    ['a Railpack command', { placeholders: {}, railpack: { RAILPACK_START_CMD: 'x' } }, R],
-    [
-      'a Railpack switch this box does not pass on',
-      { placeholders: {}, railpack: { RAILPACK_PACKAGES: 'node' } },
-      R,
-    ],
-    [
-      'more than 40 names in one map',
+      'more than 40 names',
       {
-        placeholders: Object.fromEntries(
-          Array.from({ length: 41 }, (_, i) => [`K${String(i)}`, 'v']),
+        railpack: Object.fromEntries(
+          Array.from({ length: 41 }, (_, i) => [`RAILPACK_K${String(i)}`, 'v']),
         ),
-        railpack: {},
       },
-      P,
+      R,
     ],
-    ['a non-string value', { placeholders: { A: 1 }, railpack: {} }, `${P}.A`],
-    ['a value past 512 chars', { placeholders: { A: 'x'.repeat(513) }, railpack: {} }, `${P}.A`],
+    ['a non-string value', { railpack: { RAILPACK_PRUNE_DEPS: 1 } }, `${R}.RAILPACK_PRUNE_DEPS`],
     [
-      'a NUL in a value',
-      { placeholders: {}, railpack: { RAILPACK_PRUNE_DEPS: 'a\0b' } },
+      'a value past 512 chars',
+      { railpack: { RAILPACK_DISABLE_CACHES: 'x'.repeat(513) } },
+      `${R}.RAILPACK_DISABLE_CACHES`,
+    ],
+    ['a NUL in a value', { railpack: { RAILPACK_PRUNE_DEPS: 'a\0b' } }, `${R}.RAILPACK_PRUNE_DEPS`],
+    [
+      'a line feed in a value',
+      { railpack: { RAILPACK_PRUNE_DEPS: 'true\nX=y' } },
       `${R}.RAILPACK_PRUNE_DEPS`,
     ],
-    ['a line feed in a value', { placeholders: { A: 'a\nB=b' }, railpack: {} }, `${P}.A`],
-    ['a carriage return in a value', { placeholders: { A: 'a\rb' }, railpack: {} }, `${P}.A`],
     [
       'a Railpack value Railpack would not read as meant',
-      { placeholders: {}, railpack: { RAILPACK_SPA_OUTPUT_DIR: '../..' } },
+      { railpack: { RAILPACK_SPA_OUTPUT_DIR: '../..' } },
       `${R}.RAILPACK_SPA_OUTPUT_DIR`,
     ],
-    ['a missing half', { placeholders: {} }, R],
+    ['the map missing', {}, R],
     ['an array', [], 'buildEnv'],
   ])('refuses %s', (_label, value, path) => {
     let caught: unknown = null
@@ -213,26 +186,23 @@ describe('build request env', () => {
 
   it('never quotes a value in the error', () => {
     const secretish = 'do-not-echo-this-value'
-    for (const env of [
-      { placeholders: { A: `${secretish}${'x'.repeat(600)}` }, railpack: {} },
-      { placeholders: { lower: secretish }, railpack: {} },
-    ]) {
-      let caught: unknown = null
-      try {
-        decode(buildRequestDecoder, { ...request, buildEnv: env })
-      } catch (e) {
-        caught = e
-      }
-      expect(caught).toBeInstanceOf(DecodeError)
-      expect((caught as Error).message).not.toContain(secretish)
+    let caught: unknown = null
+    try {
+      decode(buildRequestDecoder, {
+        ...request,
+        buildEnv: { railpack: { RAILPACK_PRUNE_DEPS: `${secretish}${'x'.repeat(600)}` } },
+      })
+    } catch (e) {
+      caught = e
     }
+    expect(caught).toBeInstanceOf(DecodeError)
+    expect((caught as Error).message).not.toContain(secretish)
   })
 })
 
 describe('the build rules, identical in the host scripts', () => {
   // host/build.sh and host/build-stages/states.sh sit in this same repository
-  // (nix/stacks/daedalus/host/), so their RESERVED_ENV_RE, RAILPACK_KNOBS and
-  // BUILD_ID_RE are read straight out of them and the engine's are held to that
+  // (nix/stacks/daedalus/host/), so their RAILPACK_KNOBS and BUILD_ID_RE are read straight out of them and the engine's are held to that
   // text. In the dev container app/ is mounted alone at /app and the whole
   // engine read-only at /engine, so that is looked at next — a missing file
   // fails, never skips.
@@ -260,109 +230,11 @@ describe('the build rules, identical in the host scripts', () => {
     expect(BUILD_ID_RE.source).toBe(assignment(hostFile('build-stages/states.sh'), 'BUILD_ID_RE'))
   })
 
-  const hostReserved = assignment(hostText, 'RESERVED_ENV_RE')
   const hostKnobs: Record<string, string> = JSON.parse(assignment(hostText, 'RAILPACK_KNOBS'))
-
-  it("build the host's reserved-name pattern from the engine's lists, in order", () => {
-    expect(`^(${RESERVED_ENV_NAMES.join('|')})$|^(${RESERVED_ENV_PREFIXES.join('|')})`).toBe(
-      hostReserved,
-    )
-  })
-
-  it('repeat no name a prefix already covers', () => {
-    for (const name of RESERVED_ENV_NAMES) {
-      expect(RESERVED_ENV_PREFIXES.filter((p) => name.startsWith(p))).toEqual([])
-    }
-  })
 
   it("pass on exactly the host's Railpack switches, with the host's value patterns", () => {
     expect(RAILPACK_KNOB_PATTERNS).toEqual(hostKnobs)
     expect(Object.keys(hostKnobs)).toEqual([...RAILPACK_KNOB_NAMES])
-  })
-
-  it('refuse the same names on both sides', () => {
-    const host = new RegExp(hostReserved)
-    const refused = [
-      'PATH',
-      'LD_PRELOAD',
-      'GIT_DIR',
-      'RAILPACK_X',
-      'SYSTEMD_EXEC_PID',
-      'NPM_CONFIG_REGISTRY',
-      'NODE_OPTIONS',
-      'BASH_ENV',
-      'PROMPT_COMMAND',
-      'GCONV_PATH',
-      'GLIBC_TUNABLES',
-      'LOCPATH',
-      'GOPROXY',
-      'GONOSUMDB',
-      'GOPRIVATE',
-      'GOTOOLCHAIN',
-      'GOEXPERIMENT',
-      'GOENV',
-      'GOCACHEPROG',
-      'CGO_LDFLAGS',
-      'PIP_INDEX_URL',
-      'UV_INDEX_URL',
-      'PYTHONPATH',
-      'PYTHONSTARTUP',
-      'PYTHON_GIL',
-      'CARGO_HOME',
-      'RUSTUP_TOOLCHAIN',
-      'RUSTC_WRAPPER',
-      'RUSTFLAGS',
-      'BUNDLE_GEMFILE',
-      'PERL5LIB',
-      'PERL5OPT',
-      'PERLLIB',
-      'RUBYOPT',
-      'GEM_HOME',
-      'JAVA_TOOL_OPTIONS',
-      '_JAVA_OPTIONS',
-    ]
-    for (const name of refused) {
-      expect([name, isReservedEnvName(name)]).toEqual([name, true])
-      expect([name, host.test(name)]).toEqual([name, true])
-    }
-    for (const name of [
-      'PATHS',
-      'MY_PATH',
-      'GOOGLE_ANALYTICS_ID',
-      'GOLD_API_KEY',
-      'PIPEDREAM_KEY',
-    ]) {
-      expect([name, isReservedEnvName(name)]).toEqual([name, false])
-      expect([name, host.test(name)]).toEqual([name, false])
-    }
-  })
-
-  // Every build-time placeholder the seven apps declare (the plan's railpack.json table).
-  const APP_PLACEHOLDERS = [
-    'DATABASE_URL',
-    'AUTH_SECRET',
-    'MAPBOX_ACCESS_TOKEN',
-    'GOOGLE_MAPS_API_KEY',
-    'GOOGLE_MAPS_MAP_ID',
-    'AVIATIONSTACK_API_KEY',
-    'GOOGLE_TIME_ZONE_API_KEY',
-    'LITELLM_BASE_URL',
-    'LITELLM_API_KEY',
-    'LITELLM_MODEL',
-  ]
-
-  it("let every app's real placeholder names through on both sides", () => {
-    const host = new RegExp(hostReserved)
-    for (const name of APP_PLACEHOLDERS) {
-      expect([name, isReservedEnvName(name)]).toEqual([name, false])
-      expect([name, host.test(name)]).toEqual([name, false])
-    }
-    const placeholders = Object.fromEntries(APP_PLACEHOLDERS.map((n) => [n, 'placeholder']))
-    const decoded = decode(buildRequestDecoder, {
-      ...request,
-      buildEnv: { placeholders, railpack: {} },
-    })
-    expect(Object.keys(decoded.buildEnv?.placeholders ?? {})).toEqual(APP_PLACEHOLDERS)
   })
 
   it('give each Railpack value the same verdict on both sides', () => {
@@ -429,14 +301,14 @@ describe('Railpack switches', () => {
     }
     const decoded = decode(buildRequestDecoder, {
       ...request,
-      buildEnv: { placeholders: {}, railpack },
+      buildEnv: { railpack },
     })
     expect(decoded.buildEnv?.railpack).toEqual(railpack)
   })
 })
 
-describe('request size', () => {
-  it('measures the exact bytes the host is handed, under its ceiling', () => {
+describe('the request as the host is handed it', () => {
+  it('is the request as indented JSON, one trailing newline', () => {
     const r = buildRequest({
       id: ID,
       app: 'iris',
@@ -446,14 +318,10 @@ describe('request size', () => {
       publish: 'live',
       requestedBy: 'webhook',
       at: new Date('2026-09-11T20:00:00Z'),
-      buildEnv: { placeholders: { A: '€' }, railpack: {} },
+      buildEnv: { railpack: { RAILPACK_PRUNE_DEPS: 'true' } },
     })
     const text = serializeBuildRequest(r)
     expect(text).toBe(`${JSON.stringify(r, null, 2)}\n`)
-    expect(buildRequestBytes(r)).toBe(Buffer.byteLength(text, 'utf8'))
-    expect(buildRequestBytes(r)).toBeGreaterThan(text.length)
-    expect(BUILD_REQUEST_MAX_BYTES).toBe(60 * 1024)
-    expect(BUILD_REQUEST_MAX_BYTES).toBeLessThan(65_536)
   })
 })
 

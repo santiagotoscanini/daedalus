@@ -1,13 +1,10 @@
 // Step 3 of "add an app": what the box will find when it goes to build and run
 // this repo — and, deliberately, nothing that stops it being created.
 //
-// The image check is not a gate. An entry whose image does not exist would
-// declare a container that cannot pull, failing the switch and reverting the
-// Apply — but the answer to that is the `declared` stage
-// (nix/modules/apps/apps.nix), not a disabled button. A new app is created
-// declared, so a missing image is the expected state, and the reason the entry
-// has to exist first: being in site/apps.json is what earns an app its first
-// build. Nothing in this file blocks, and nothing should.
+// The image check is not a gate. A new app waits for its first image before
+// anything of it is created (lib/apps/setup.ts): creating it registers it and
+// queues that build, so a missing image is the expected state. Nothing in this
+// file blocks, and nothing should.
 //
 // Pure on purpose — no React, no server imports. The component that renders
 // this should have nothing left to decide.
@@ -55,7 +52,7 @@ function imageCheck(state: ImageState, effectiveImage: string): Check {
       label: 'Image',
       state: 'ok',
       detail: `${effectiveImage} is already in the registry`,
-      fix: 'Already built, so this app can be promoted to internal or external as soon as the entry is applied.',
+      fix: 'Already built, so creating it goes straight to the Apply that sets it up.',
     }
   }
   if (state === 'unverifiable') {
@@ -71,10 +68,7 @@ function imageCheck(state: ImageState, effectiveImage: string): Check {
     label: 'Image',
     state: 'ok',
     detail: `${effectiveImage} does not exist yet — which is expected`,
-    fix:
-      'The entry comes first: the box only builds apps already in site/apps.json. Create it, ' +
-      'Apply, then build the repo from its app page — and promote it off `declared` once that ' +
-      'build has published an image.',
+    fix: 'Creating the app queues its first build; it is set up once that build has published.',
   }
 }
 
@@ -151,7 +145,7 @@ function headline(imageState: ImageState): string {
     return 'That image lives on a registry this box cannot see, so nothing here can confirm it'
   }
   if (imageState === 'present') {
-    return 'The image is published, so this app can be promoted as soon as it is applied'
+    return 'The image is published, so the app is set up right after it is created'
   }
-  return 'Nothing is blocking: a new app is created declared, and its first build comes after the Apply'
+  return 'Nothing is blocking: creating the app starts its first build, with no rebuild before it'
 }

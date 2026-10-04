@@ -264,27 +264,25 @@ loaded. They are not repeated here.
   every other origin — prometheus over its bridge, traefik, the internet —
   gets one patient attempt (`lib/http.ts` `attemptsFor`), and Loki one
   longer one. Never retry a busy upstream.
-- **Stages are a four-rung ladder, spelled out in exactly one place —
-  the `APP_STAGES` tuple in `lib/stage.ts`**: `declared` → `off` →
-  `lab` → `live`, each adding to the last. `declared` runs nothing at
-  all (no container, no deploy unit, no ingress) while still
-  materializing the app's postgres role, data dir and `AUTH_SECRET`,
-  so **a new app is created `declared`, and creating one is not gated
-  on anything**: `createApp` forces it and `validateNewApp` refuses
-  any other value, because the box only builds apps already present in
-  the committed `apps.json` and an entry above `declared` whose image
-  does not exist fails the switch and reverts its own Apply. The order
-  is create → Apply → build → promote → Apply, and the promotion is
-  offered on the app's page rather than left to be remembered. The
-  promotion waits for the image: `lib/apps/image-gate.ts` asks zot for
-  the exact reference the container pulls, and the exposure control,
-  the save and the Apply (preview included) all refuse a step into a
-  running rung while it is missing. Creating an app links it to its
-  repository at once (`core/builds/link.ts`, the lookup the hourly
-  sweep makes, shared with Build now and the webhook). When
-  reading a stage, ask the question you mean — `stageRuns` or
-  `stageExposed` — never `!== 'off'`, which counts a declared app as
-  exposed.
+- **Stages are three rungs, spelled out in exactly one place — the
+  `APP_STAGES` tuple in `lib/stage.ts`**: `off` → `lab` → `live`,
+  shown as Off, Lab and Public (`STAGE_LABEL`). A new app is not a
+  rung: it is created at Lab or Public with `awaitingImage`, and
+  `lib/apps/setup.ts` walks it to its first container with ONE rebuild —
+  the `register` root verb commits its apps.json entry without a
+  rebuild (nix makes nothing for an awaiting entry, and the builder
+  authorizes a build from the committed registry at run time), its
+  first build is queued at create, the scheduler tick clears the
+  marker once the image is in zot and runs the Apply that creates the
+  app (only when that is all the Apply would carry, and not again after
+  it failed), and the app's page draws `setting up · building ·
+  starting · running` with Retry on a step that failed. An awaiting
+  app never drifts (`driftOf`); one whose marker cleared drifts as
+  exactly `set up`. Creating an app links it to its repository at once
+  (`core/builds/link.ts`, the lookup the hourly sweep makes, shared with
+  Build now and the webhook). When reading whether an app can be
+  reached, ask `appReachable` (exposed and past its first image), never
+  `stage !== 'off'`.
 - The create form (`routes/apps.new.tsx` + `lib/readiness.ts`)
   **reports; it does not gate**. A missing image is the expected state
   of a new app, and a repo with neither a `railpack.json` nor a

@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { db, type Tx } from '../../host/db'
 import type { ManifestEntry, ManifestEnvVar, ManifestTask } from '../../host/nix-manifest'
 import { appEnvVars, apps, appTasks } from '../../host/schema'
@@ -13,7 +13,7 @@ import {
   type NewApp,
   normalizeAuthHealthPath,
 } from '../apps/validate'
-import type { BuildSettingsPatch } from '../build-settings'
+import { type BuildSettingsPatch, boxBuildRefusal } from '../build-settings'
 import { appNameError, effectiveHostname, hostnameError } from '../hostname'
 
 // Reads and writes over the app registry. The pure halves live beside it: the
@@ -120,19 +120,18 @@ async function replaceTasks(tx: Tx, appId: string, tasks: ManifestTask[]): Promi
   }
 }
 
+/** Where a new app is probed: the iris template's health route. */
+export const NEW_APP_HEALTH_PATH = '/api/healthz'
+
 /**
  * Create a registry entry. The row only — no repo, no image, no rebuild.
  *
- * Always at `declared`, the bottom rung: the row, its postgres role and
- * database, its data dir and its AUTH_SECRET, and nothing running. That is not
- * a conservative default, it is the only value that can be applied — an entry
- * whose image does not exist yet declares a container that cannot pull, which
- * fails the switch, which makes the Apply revert itself. And being in
- * site/apps.json is exactly what earns the app its first build, so `declared`
- * is the rung that ends the deadlock rather than one that waits it out.
- *
- * Exposure is chosen on the app's own page after that first build, where it is
- * one click and cannot fail.
+ * Born awaiting its first image, at the stage it will run at: apps.json
+ * carries it with `awaitingImage`, nix makes nothing for it, and the builder
+ * builds it. The marker clears once the image exists, and the Apply after
+ * that creates the app (lib/apps/setup.ts). It builds on the box from the
+ * start, signs in with its own OIDC client and is probed at /api/healthz, the
+ * iris template's defaults; its page changes any of them.
  *
  * What is enforced HERE is only what would corrupt the registry itself — a
  * duplicate name, a name Nix already owns, a colliding hostname.
@@ -166,7 +165,8 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
 
   await db.insert(apps).values({
     name,
-    stage: 'declared',
+    stage: input.stage,
+    awaitingImage: true,
     managedInNix: false,
     sourceMode: 'registry',
     image: input.image?.trim() || null,
@@ -175,12 +175,30 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
     storage: input.storage,
     litellm: input.litellm,
     prometheus: input.prometheus,
-    authMode: 'none',
+    authMode: 'native',
+    authHealthPath: NEW_APP_HEALTH_PATH,
+    // A name the builder refuses (a hyphen) gets its image some other way.
+    buildOnBox: boxBuildRefusal(name) === null,
     description: input.description.trim(),
     notes: {},
   })
 
   return { name }
+}
+
+/**
+ * Clear a new app's `awaitingImage`: its first image exists. True when this
+ * call cleared it, false when it was already clear (another tick, an edit).
+ * Not `updateApp`: the marker is not something a form edits, and `updatedAt`
+ * stays, since this is the box's fact rather than an edit.
+ */
+export async function markFirstImage(name: string): Promise<boolean> {
+  const cleared = await db
+    .update(apps)
+    .set({ awaitingImage: false })
+    .where(and(eq(apps.name, name), eq(apps.awaitingImage, true)))
+    .returning({ id: apps.id })
+  return cleared.length > 0
 }
 
 /**
@@ -378,9 +396,6 @@ export async function updateBuildSettings(name: string, patch: BuildSettingsPatc
   if (patch.buildOnBox !== undefined) set.buildOnBox = patch.buildOnBox
   if (patch.buildStrategy !== undefined) set.buildStrategy = patch.buildStrategy
   if (patch.buildPublish !== undefined) set.buildPublish = patch.buildPublish
-  if (patch.buildEnvPlaceholders !== undefined) {
-    set.buildEnvPlaceholders = patch.buildEnvPlaceholders
-  }
   if (patch.railpackEnv !== undefined) set.railpackEnv = patch.railpackEnv
   if (Object.keys(set).length === 0) return
   await db.update(apps).set(set).where(eq(apps.name, name))

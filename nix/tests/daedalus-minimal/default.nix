@@ -48,14 +48,6 @@
           fleet.modules = lib.genAttrs (lib.subtractLists keep (lib.attrNames options.fleet.modules)) (_: {
             enable = lib.mkForce false;
           });
-
-          # An app not yet past `declared` that signs in with its own OIDC: it
-          # has no container, so nothing may be written under one (its SSO
-          # client lists no consumer until it runs).
-          fleet.apps.native-declared = {
-            stage = "declared";
-            auth.mode = "native";
-          };
         }
       )
     ];

@@ -9,7 +9,9 @@ import { appNameError, hostnameError } from '../../lib/hostname'
 import { readiness } from '../../lib/readiness'
 import { defaultImage } from '../../lib/site'
 import { useSite } from '../../lib/site-context'
+import { NEW_APP_STAGES, type NewAppStage, STAGE_LABEL } from '../../lib/stage'
 import { createAppFn, fetchAppPreflight, type fetchNewAppOptions } from '../../server/registry'
+import { Segmented } from '../controls'
 import { Toggle } from '../slider'
 import { FOOT } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
@@ -57,6 +59,7 @@ export function Wizard({ options }: { options: Options }) {
   const [prometheus, setPrometheus] = useState(false)
   const [image, setImage] = useState('')
   const [hostname, setHostname] = useState('')
+  const [stage, setStage] = useState<NewAppStage>('lab')
 
   const [preflight, setPreflight] = useState<Preflight | null>(null)
   const [checking, setChecking] = useState(false)
@@ -139,6 +142,7 @@ export function Wizard({ options }: { options: Options }) {
           data: {
             app: {
               name,
+              stage,
               description: description.trim(),
               postgres,
               storage,
@@ -151,14 +155,12 @@ export function Wizard({ options }: { options: Options }) {
         }),
       {
         invalidate: false,
-        // Straight to the app's own page: the entry exists in the database as
-        // `declared`, and that page is where the Apply that makes it real
-        // lives — and, after the first build, the promotion off `declared`.
-        // Unless the repository could not be linked: that is said here, once,
-        // before leaving.
+        // Straight to the app's own page, where its way to its first
+        // container is one line (lib/apps/setup.ts). Unless the repository
+        // could not be linked: that is said here, once, before leaving.
         onDone: (r) =>
           r.link.ok
-            ? router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'settings' } })
+            ? router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'overview' } })
             : setUnlinked({ name: r.name, reason: r.link.reason }),
       },
     )
@@ -279,10 +281,10 @@ export function Wizard({ options }: { options: Options }) {
                   hint="Only once the app actually serves /metrics. Otherwise it is a permanently-down target."
                 />
                 <p className={FOOT}>
-                  Not here, on purpose. <b>SSO</b> is a second, deliberate step on the app’s own
-                  page: its client secret is generated on the box, so there is nothing to author
-                  first. <b>Operator secrets</b> have no switch at all. Once the entry is applied,
-                  set them on the app’s Secrets tab, which writes{' '}
+                  Not here, on purpose. <b>Sign-in</b> starts as the app’s own OIDC client, probed
+                  at <code>/api/healthz</code>, as an app made from the iris template expects; its
+                  page changes either. <b>Operator secrets</b> have no switch at all. Once the app
+                  is set up, set them on its Secrets tab, which writes{' '}
                   <code>site/vault/apps/{name || '<name>'}-env.sops</code>; the next rebuild loads
                   it. <b>VPN egress</b> is the one thing that still needs the flake. It wants a
                   gluetun instance to exist before anything can join its netns.
@@ -290,15 +292,16 @@ export function Wizard({ options }: { options: Options }) {
               </Board>
 
               <Board title="Address" icon="↗" span={4}>
-                {/* No exposure picker here, on purpose: a new app is created
-                    `declared` (the header says why), and the choice moves to
-                    the app's page, one click once its first build has
-                    published an image. */}
+                <Segmented
+                  value={stage}
+                  onChange={setStage}
+                  label="Where it runs"
+                  options={NEW_APP_STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] }))}
+                />
                 <p className={FOOT}>
-                  Created <b>declared</b>: the registry row, the database, the data directory and
-                  the generated secrets — and nothing running. Promote it to internal or external on
-                  its own page once its first build has published an image. The hostname below is
-                  the one it will answer on then.
+                  <b>Lab</b> answers on the LAN only; <b>Public</b> is also published through the
+                  tunnel. Nothing of the app exists until its first build has published an image;
+                  then one Apply creates it here.
                 </p>
                 <WizardField
                   label="Hostname"
@@ -363,12 +366,12 @@ export function Wizard({ options }: { options: Options }) {
 
             <div className="flex flex-wrap items-center gap-4">
               <Button type="button" size="sm" disabled={!canCreate} onClick={create}>
-                {busy ? 'Creating…' : 'Create entry'}
+                {busy ? 'Creating…' : 'Create app'}
               </Button>
               <p className="m-0 max-w-[46rem] text-[0.8rem] text-muted-foreground">
-                Writes the registry row, declared. The next Apply commits site/apps.json and
-                rebuilds — which creates its database, its data directory and its secrets, and
-                starts nothing. Being in that file is what lets the box build the repo at all.
+                Commits its entry to site/apps.json without a rebuild and queues its first build.
+                Once that build has published, one Apply creates its database, secrets, sign-in,
+                container, route and probe, and starts it.
               </p>
             </div>
           </section>

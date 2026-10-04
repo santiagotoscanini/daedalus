@@ -228,9 +228,7 @@ export function Settings({
               // than accepted and failed mid-Apply.
               disabled: !stageExposed(app.stage) || !app.authHealthPath,
               reason: !stageExposed(app.stage)
-                ? app.stage === 'declared'
-                  ? 'Nothing to gate: this app is declared only — no container, no ingress. Promote it first.'
-                  : 'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
+                ? 'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
                 : !app.authHealthPath
                   ? 'Set a health path first. It is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
                   : undefined,

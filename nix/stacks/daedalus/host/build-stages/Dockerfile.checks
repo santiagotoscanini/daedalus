@@ -59,17 +59,10 @@ ARG CHECKS
 # --network=none: a check is code from the repository, and once dependencies
 # are installed it has no business reaching anything.
 #
-# The app's build placeholders (dummy values, never real secrets) arrive as ONE
-# optional secret file of `export NAME='value'` lines, written by build.sh —
-# the Railpack path mounts every plan secret into its checks step the same way.
-# A secret, not build args: build args are recorded in the build history.
-#
 # `check failed: <name>` is the line build.sh reads back to report which
 # script failed, so it must stay exactly this shape.
 RUN --network=none \
-    --mount=type=secret,id=daedalus-check-env,target=/run/daedalus/check.env,required=false \
     set -eu; \
-    if [ -f /run/daedalus/check.env ]; then . /run/daedalus/check.env; fi; \
     for s in $CHECKS; do \
       echo "==> check: $s"; \
       if ! pnpm run "$s"; then echo "check failed: $s"; exit 1; fi; \

@@ -1,7 +1,7 @@
 # host/build-stages/3-detect.sh — stage 3 of the build (see host/build.sh).
 #
-# `railpack prepare` writes the build plan; the build-time placeholder values
-# become secret files BuildKit mounts, never arguments or layers.
+# `railpack prepare` writes the build plan. A plan that asks for a build secret
+# is refused: the box passes none.
 #
 # ── 3. detect (railpack) ──────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ publish_detected() {
 if [ "$RESOLVED" = railpack ]; then
   enter detecting "railpack prepare"
   ENV_ARGS=()
-  for n in "${PLACEHOLDER_NAMES[@]}" "${RAILPACK_NAMES[@]}"; do
+  for n in "${RAILPACK_NAMES[@]}"; do
     ENV_ARGS+=(--env "$n")
   done
   # This app's mise cache, for prepare alone ("Railpack's mise cache, one per
@@ -73,44 +73,11 @@ if [ "$RESOLVED" = railpack ]; then
   PROVIDER="$(jq -r '.detectedProviders[0] // "" | strings' "$P/info.json")"
   say "detected: ${PROVIDER:-no provider}"
 
-  mapfile -t SECRET_NAMES < <(jq -r '(.secrets // [])[]' "$CTL/plan/railpack-plan.json")
-  for n in "${SECRET_NAMES[@]}"; do
-    [[ "$n" =~ ^[A-Za-z_][A-Za-z0-9_]{0,127}$ ]] || fail "the Railpack plan declares a secret name this builder will not pass: ${n:0:80}"
-  done
-  # BuildKit fails on a missing secret only when a step runs, and a fully
-  # cached step does not (spike B11): this is the guard that holds.
-  MISSING=()
-  for n in "${SECRET_NAMES[@]}"; do
-    in_list "$n" "${PLACEHOLDER_NAMES[*]}" || MISSING+=("$n")
-  done
-  if [ "${#MISSING[@]}" -gt 0 ]; then
-    fail "the Railpack plan needs build secret(s) ${MISSING[*]}, but the app has no build placeholder for them (daedalus: the app's build settings)"
+  # What is left is the repository's own `secrets`. The box passes none, and
+  # BuildKit fails on a missing secret only when a step runs, which a fully
+  # cached step does not (spike B11): so the plan is refused here.
+  SECRET_LIST="$(jq -r '[(.secrets // [])[]? | tostring | .[0:64]] | join(", ") | .[0:300]' "$CTL/plan/railpack-plan.json")"
+  if [ -n "$SECRET_LIST" ]; then
+    fail "the Railpack plan declares build secret(s) $SECRET_LIST; the box passes none. Declare dummy build-time values in the repo's railpack.json instead."
   fi
-else
-  SECRET_NAMES=("${PLACEHOLDER_NAMES[@]}")
-fi
-
-# The secrets, as files BuildKit's client reads (root-owned, build-user
-# readable), and the Railpack cache-invalidation hash over the sorted
-# NAME=value lines — computed here, since the CLI's own iterates a Go map.
-SECRET_ARGS=()
-SECRETS_HASH=""
-HASH_ARGS=()
-: >"$P/secrets-hash-input"
-i=0
-for n in "${SECRET_NAMES[@]}"; do
-  i=$((i + 1))
-  jq -j --arg n "$n" '.buildEnv.placeholders[$n]' <<<"$REQ_JSON" >"$CTL/secrets/$i"
-  chgrp "$BUILD_GROUP" "$CTL/secrets/$i"
-  chmod 0440 "$CTL/secrets/$i"
-  SECRET_ARGS+=(--secret "id=$n,src=$CTL/secrets/$i")
-  {
-    printf '%s=' "$n"
-    cat "$CTL/secrets/$i"
-    printf '\n'
-  } >>"$P/secrets-hash-input"
-done
-if [ "$RESOLVED" = railpack ] && [ "$i" -gt 0 ]; then
-  SECRETS_HASH="$(LC_ALL=C sort "$P/secrets-hash-input" | sha256sum | cut -d' ' -f1)"
-  HASH_ARGS=(--opt "build-arg:secrets-hash=$SECRETS_HASH")
 fi

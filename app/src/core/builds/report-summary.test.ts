@@ -101,7 +101,6 @@ const cases: [string, BuildRow, Parameters<typeof summaryOf>[1]][] = [
         },
         run: {
           runner: 'buildkit',
-          secretsHash: null,
           cacheImported: true,
           cacheExported: true,
           stepsCached: 7,
@@ -125,7 +124,6 @@ const cases: [string, BuildRow, Parameters<typeof summaryOf>[1]][] = [
         image: null,
         run: {
           runner: null,
-          secretsHash: null,
           cacheImported: false,
           cacheExported: null,
           stepsCached: null,

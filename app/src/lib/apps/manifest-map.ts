@@ -28,6 +28,7 @@ export function toRow(entry: ManifestEntry) {
   return {
     name: entry.name,
     stage: entry.stage,
+    awaitingImage: entry.awaitingImage ?? false,
     managedInNix: entry.managedInNix,
     sourceMode: entry.sourceMode ?? 'registry',
     deployEnable: entry.deploy?.enable ?? deployDefault(entry.sourceMode),
@@ -98,6 +99,9 @@ const taskOf = (t: typeof appTasks.$inferSelect): ManifestTask => ({
   timeoutSec: t.timeoutSec,
 })
 
+/** The one drift field of an app the box has not set up yet. */
+export const SET_UP = 'set up'
+
 /**
  * Does the database still describe what Nix built?
  *
@@ -111,11 +115,14 @@ const taskOf = (t: typeof appTasks.$inferSelect): ManifestTask => ({
  * asserted by the field-coverage test in apps.test.ts.
  *
  * A nix-declared app never drifts: nothing here edits or exports it, and its
- * manifest is its truth (`asDeclared`).
+ * manifest is its truth (`asDeclared`). Nor does a new app awaiting its first
+ * image: nix makes nothing for it, the register verb writes its entry, and
+ * its edits ride the Apply that sets it up (lib/apps/setup.ts). That Apply is
+ * one change, `set up`, whatever else differs: the app is new to the box.
  */
 export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined): string[] {
-  if (record.managedInNix) return []
-  if (!manifest) return ['not in the last Nix build']
+  if (record.managedInNix || record.awaitingImage) return []
+  if (!manifest || manifest.awaitingImage === true) return [SET_UP]
 
   const fromDb = {
     stage: record.stage,
@@ -196,6 +203,8 @@ export function toRegistryExport(records: AppRecord[]): {
           r.name,
           {
             stage: r.stage as AppStage,
+            // Only while true: a set-up app's entry is the same bytes it was.
+            ...(r.awaitingImage ? { awaitingImage: true } : {}),
             postgres: r.postgres,
             storage: r.storage,
             litellm: r.litellm,

@@ -30,26 +30,24 @@
 #   1. Install the daedalus GitHub App on github.com/<owner>/<name>,
 #      so its pushes reach the webhook and the box may fetch it. No workflows
 #      and no repo secrets are needed — the box builds the image itself.
-#   2. Create the entry. It is created at `stage = "declared"`: the registry
-#      row, its postgres role and database, its data dir and its generated
-#      AUTH_SECRET — and no container, no deploy unit, no ingress.
-#   3. Apply. Nothing starts; what this buys is the app's presence in
-#      apps.json, which is what makes it buildable at all (build.sh reads
-#      this file's committed copy when a build starts).
-#   4. Push, or press Build now: the box's build (the root verb `build`)
-#      fetches the commit, runs the repo's checks inside the image build, and
-#      pushes `sha-<sha>` + `latest` to zot. Watch it with
+#   2. Create the entry. daedalus commits it to site/apps.json carrying
+#      `awaitingImage: true` (the root helper's `register` verb, no rebuild)
+#      and queues its first build. An awaiting entry materializes NOTHING:
+#      it is filtered out below, before any reader sees it, so an Apply in
+#      the meantime is harmless. What it does buy is the build: the builder
+#      authorizes an app by reading the committed registry at run time
+#      (stacks/daedalus/host/build.sh, "which apps it builds").
+#   3. The build fetches the commit, runs the repo's checks inside the image
+#      build, and pushes `sha-<sha>` + `latest` to zot. Watch it with
 #      `journalctl -fu 'daedalus-build@*'` or the build page.
-#   5. Promote it to "lab" (or "live") and Apply again. THAT is the Apply that
-#      creates the container, the route, the DNS record and the probe.
+#   4. Once the image is there, daedalus clears the marker and runs one
+#      Apply: THAT is the rebuild that creates the database, the secrets, the
+#      OIDC client, the container, the route, the DNS record and the probe —
+#      and its activation starts the container on the image just pushed.
 #
-# The order is load-bearing, and it runs entry-first for two reasons that
-# point the same way. The box only builds apps already declared here, so an
-# app that is not in this file can never get a first image. And a declaration
-# above "declared" whose image does not exist makes `podman run` fail, which
-# makes switch-to-configuration exit 4, which makes daedalus's apply revert
-# its own commit. "declared" is the rung that satisfies both: it declares
-# everything durable and starts nothing.
+# The marker exists because an entry whose image does not exist would make
+# `podman run` fail, switch-to-configuration exit 4, and the Apply revert its
+# own commit.
 #
 # Nothing in the create path writes code to GitHub. The only writes daedalus
 # makes there are a check run named `daedalus` and a Deployment, both
@@ -83,10 +81,8 @@
 let
   registry = builtins.fromJSON (builtins.readFile config.fleet.registry.file);
 
-  # Every entry but the ones still waiting for their first image: those
-  # materialize nothing (a new app between its registration and its first
-  # image; the builder reads them at run time, host/build.sh). Compared with
-  # `== true` so a malformed marker counts as none.
+  # Every entry but the ones still waiting for their first image (see the
+  # header). Compared with `== true` so a malformed marker counts as none.
   apps = lib.filterAttrs (_: a: (a.awaitingImage or false) != true) registry.apps;
 
   secretName = name: "app-${name}-env";

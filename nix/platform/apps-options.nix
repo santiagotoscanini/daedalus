@@ -155,33 +155,22 @@ in
 
             stage = lib.mkOption {
               type = lib.types.enum [
-                "declared"
                 "off"
                 "lab"
                 "live"
               ];
               default = "lab";
               description = ''
-                How the app is reachable — four rungs, each adding to the last.
-
-                "declared" = nothing runs. No container, no deploy unit, no
-                ingress. The row exists and so do the cheap durable things it
-                will want: its postgres role and database, its data directory,
-                its generated AUTH_SECRET. This is the rung every app sits on
-                between "the entry exists" and "there is an image to run", and
-                it is what makes that possible at all: the box only builds apps
-                already present in site/apps.json, so an app must be applied
-                before it can be built — and applying one whose image does not
-                exist yet would declare a container that cannot pull, fail the
-                switch, and roll the Apply back. Promote it once the first
-                build has published an image.
+                How the app is reachable — three rungs, each adding to the last.
+                (An app still waiting for its first image is not a rung: its
+                registry entry carries `awaitingImage` and becomes no
+                `fleet.apps` value at all — modules/apps/declarations.nix.)
 
                 "off"  = no ingress at all. No traefik router, no DNS entry,
                 no gatus probe, no Cloudflare route. The container still runs
                 and still deploys; nothing can reach it over HTTP. For an app
                 that is mid-migration, or one that only ever needed to talk to
-                the database. NOT the same as "declared", and not the same as
-                stopping it.
+                the database. Not the same as stopping it.
 
                 "lab"  = LAN-only (<name>.${site.baseDomain} via pi-hole + traefik).
 
@@ -598,10 +587,6 @@ in
                 `app-<name>-task-<id>.service` + `.timer`, registered in
                 `fleet.monitoredJobs` so a failed run mails like every other
                 scheduled job on the box.
-
-                Generated only while the app is past `stage = "declared"` —
-                a `podman exec` into a container that does not exist would
-                fail on every tick. The field validations apply either way.
               '';
             };
 

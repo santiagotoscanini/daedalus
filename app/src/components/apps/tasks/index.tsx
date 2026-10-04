@@ -79,8 +79,8 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
 
       {!running && (
         <p className={cn(LEDE, 'text-danger')}>
-          {app.name} is declared but not running, so it has no container to run a task inside. Tasks
-          can be authored now; the timers exist only once it is promoted.
+          {app.name} is not set up yet, so it has no container to run a task inside. Tasks can be
+          authored now; the timers exist once its first image is in and it is set up.
         </p>
       )}
 

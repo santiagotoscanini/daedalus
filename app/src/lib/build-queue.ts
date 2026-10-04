@@ -287,7 +287,7 @@ export function nextToRun(
     else {
       held.push({
         row: r,
-        reason: `${r.app} is not in the applied app manifest yet; it builds once Apply lands.`,
+        reason: `${r.app} is not in the committed app registry yet; it builds once it is registered.`,
       })
     }
   }

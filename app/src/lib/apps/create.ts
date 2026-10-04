@@ -1,3 +1,4 @@
+import { buildNow } from '../../core/builds/actions'
 import { linkAppRepo, type RepoLink } from '../../core/builds/link'
 import type { Ctx } from '../../core/ctx'
 import { repoFileExists } from '../../core/github-app'
@@ -10,6 +11,7 @@ import type { RepoBuild } from '../readiness'
 import { createApp, getApp, listAppNames } from '../repo/apps'
 import { appRepo, defaultImage } from '../site'
 import { gatedReference } from './image-gate'
+import { registerAwaiting } from './setup'
 import { validateNewApp } from './validate'
 
 // The reads behind the create form: what it can be pointed at, whether the
@@ -110,14 +112,16 @@ export async function appPreflight(ctx: Ctx, data: { name: string; image: string
 }
 
 /**
- * Create the entry, then link it to its GitHub repository straight away, so
- * its first push or Build now does not wait for the hourly sweep. The entry
- * stands either way: a link that fails is reported beside it, and Build now
- * (or the sweep) tries again.
+ * Create the entry, link it to its GitHub repository, register it and queue
+ * its first build — no rebuild (./setup.ts has the whole path). The entry
+ * stands whatever happens after: a link, a register or a build that did not
+ * start is reported beside it, the app's page offers Retry, and the next
+ * scheduler tick registers what is not registered yet.
  */
 export async function createAppLinked(
   ctx: Ctx,
   input: Record<string, unknown>,
+  actor: string,
 ): Promise<{ name: string; link: RepoLink }> {
   const { name } = await createApp(validateNewApp(input))
   const record = await getApp(name)
@@ -125,5 +129,13 @@ export async function createAppLinked(
     record === undefined
       ? { ok: false, reason: `${name} was created, but could not be read back to link it.` }
       : await linkAppRepo(ctx, record)
+  const registered = await registerAwaiting(ctx, actor)
+  if (!registered.ok) console.warn(`[setup] ${name}: not registered yet: ${registered.reason}`)
+  if (link.ok && record?.buildOnBox) {
+    // Queued now; it waits in the queue until the register has committed the
+    // entry the builder authorizes it from (core/builds/dispatch.ts).
+    const built = await buildNow({ app: name, actor })
+    if (!built.ok) console.warn(`[setup] ${name}: first build not queued: ${built.reason}`)
+  }
   return { name, link }
 }

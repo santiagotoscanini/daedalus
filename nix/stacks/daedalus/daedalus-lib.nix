@@ -145,10 +145,9 @@ rec {
 
   # Apps that actually have an `app-<name>-deploy.service` to start: the
   # registry-mode entries whose deploy is not frozen (schema v2's
-  # `deploy.enable`, absent = on — the same default the platform applies) and
-  # that are past `declared` (a declared app has no container, so no deploy
-  # unit). Defined once here because a name in it becomes part of a unit name
-  # root starts: the root helper's `deploy` verb (daedalus-verbs.nix) and the
+  # `deploy.enable`, absent = on — the same default the platform applies).
+  # Defined once here because a name in it becomes part of a unit name root
+  # starts: the root helper's `deploy` verb (daedalus-verbs.nix) and the
   # build agent (build-agent.nix) must never disagree about it.
   #
   # A frozen app keeps its page and its env snapshot; what it loses is
@@ -158,31 +157,22 @@ rec {
   #
   # This list is the security control on the `deploy` verb and on the build
   # agent's final step. It MUST stay in lockstep with the deploy units
-  # modules/apps/apps.nix generates (`deploy.enable && running`) — an
+  # modules/apps/apps.nix generates (`deploy.enable`) — an
   # allowlist wider than those units would let root start a unit that does
   # not exist, and the root helper's assertions (root-helper.nix) refuse one.
   deployableApps = lib.attrNames (
     lib.filterAttrs (
-      _: a:
-      (a.deploy.enable or true)
-      && ((a.sourceMode or "registry") == "registry")
-      && ((a.stage or "lab") != "declared")
+      _: a: (a.deploy.enable or true) && ((a.sourceMode or "registry") == "registry")
     ) registryApps
   );
 
   # The scheduled tasks that have an `app-<app>-task-<id>.service` to run
   # now, as that unit's name between `app-` and `.service`: the root helper's
   # `task-run` values (daedalus-verbs.nix). One token per unit, so an app's
-  # name cannot be paired with another app's task id. Same gate the platform
-  # applies (modules/apps generates a task's units only past `declared`); a
-  # local-source app is absent for free, like it is from deployableApps.
+  # name cannot be paired with another app's task id. A local-source app is
+  # absent for free, like it is from deployableApps.
   runnableTasks = lib.concatLists (
-    lib.mapAttrsToList (
-      appName: a:
-      lib.optionals ((a.stage or "lab") != "declared") (
-        map (t: "${appName}-task-${t.id}") (a.tasks or [ ])
-      )
-    ) registryApps
+    lib.mapAttrsToList (appName: a: map (t: "${appName}-task-${t.id}") (a.tasks or [ ])) registryApps
   );
   # The longest of those tasks' own timeouts (the registry's `timeoutSec`,
   # 900 unless it says otherwise).

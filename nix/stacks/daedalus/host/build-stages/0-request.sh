@@ -35,7 +35,7 @@ chmod 0755 "$CTL"
 P="$CTL/private"
 install -d -m 0700 "$P"
 install -d -m 0755 "$CTL/plan" "$CTL/checks" "$CTL/docker-none"
-install -d -m 0750 -g "$BUILD_GROUP" "$CTL/git" "$CTL/secrets"
+install -d -m 0750 -g "$BUILD_GROUP" "$CTL/git"
 
 # A string field of the request, or "" — for the status, before validation.
 raw_field() {
@@ -113,21 +113,18 @@ live | candidate) ;;
 esac
 [[ "$REQUESTED_BY" =~ ^[a-z]{0,16}$ ]] || REQUESTED_BY="?"
 
-# The build env rules (RESERVED_ENV_RE, RAILPACK_KNOBS above). The name
-# pattern ends in \z, not $: Oniguruma's $ also matches before a final
-# newline, and "NAME\n" would pass as a name the engine refuses.
-INVALID="$(jq -r --arg reserved "$RESERVED_ENV_RE" --argjson knobs "$RAILPACK_KNOBS" '
+# The Railpack switches (RAILPACK_KNOBS above): the only thing buildEnv carries.
+INVALID="$(jq -r --argjson knobs "$RAILPACK_KNOBS" '
   (.buildEnv // {}) as $b
   | if ($b | type) != "object" then "buildEnv must be an object"
-    else ($b.placeholders // {}) as $ph | ($b.railpack // {}) as $rp
+    elif ($b | keys - ["railpack"]) != [] then "buildEnv carries only railpack, not " + ($b | keys - ["railpack"] | join(", "))
+    else ($b.railpack // {}) as $rp
     | def bad_value: (type != "string") or length > 512 or (explode | any(. == 0 or . == 10 or . == 13));
-      def bad_placeholder: (test("^[A-Z_][A-Z0-9_]{0,63}\\z") | not) or test($reserved);
       def unknown_knob: . as $k | $knobs | has($k) | not;
       def bad_knob_value: .key as $k | .value | test($knobs[$k]) | not;
-    if ($ph | type) != "object" or ($rp | type) != "object" then "buildEnv.placeholders and buildEnv.railpack must be objects"
-    elif ($ph | length) > 40 or ($rp | length) > 40 then "buildEnv carries more than 40 names in one map"
-    elif ([$ph, $rp | to_entries[] | .value | bad_value] | any) then "every buildEnv value must be a single-line string of at most 512 characters"
-    elif ([$ph | keys[] | bad_placeholder] | any) then "placeholder names must be upper-case variable names the builder does not reserve: " + ([$ph | keys[] | select(bad_placeholder)] | join(", "))
+    if ($rp | type) != "object" then "buildEnv.railpack must be an object"
+    elif ($rp | length) > 40 then "buildEnv.railpack carries more than 40 names"
+    elif ([$rp | to_entries[] | .value | bad_value] | any) then "every buildEnv value must be a single-line string of at most 512 characters"
     elif ([$rp | keys[] | unknown_knob] | any) then "not a Railpack switch this builder passes on: " + ([$rp | keys[] | select(unknown_knob)] | join(", ")) + " (it passes on " + ($knobs | keys_unsorted | join(", ")) + ")"
     elif ([$rp | to_entries[] | bad_knob_value] | any) then "Railpack switch values this builder will not pass on (the app build settings say what each takes): " + ([$rp | to_entries[] | select(bad_knob_value) | .key] | join(", "))
     else "" end
@@ -135,9 +132,7 @@ INVALID="$(jq -r --arg reserved "$RESERVED_ENV_RE" --argjson knobs "$RAILPACK_KN
 [ -z "$INVALID" ] || fail "invalid build request: ${INVALID:0:400}"
 
 # NAME=value lines for build_env's with-env mode (root 0700 $P).
-jq -r '(.buildEnv // {}) | ((.placeholders // {}), (.railpack // {})) | to_entries[] | "\(.key)=\(.value)"' \
-  <<<"$REQ_JSON" >"$P/build-env"
-mapfile -t PLACEHOLDER_NAMES < <(jq -r '(.buildEnv.placeholders // {}) | keys[]' <<<"$REQ_JSON")
+jq -r '(.buildEnv.railpack // {}) | to_entries[] | "\(.key)=\(.value)"' <<<"$REQ_JSON" >"$P/build-env"
 mapfile -t RAILPACK_NAMES < <(jq -r '(.buildEnv.railpack // {}) | keys[]' <<<"$REQ_JSON")
 
 say "build $BUILD_ID: $APP at $SHA (strategy $STRATEGY, publish $PUBLISH, requested by $REQUESTED_BY)"

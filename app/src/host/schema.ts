@@ -88,9 +88,15 @@ export const apps = pgTable(
     // change without a migration of everything downstream.
     name: text('name').notNull(),
 
-    // One rung of APP_STAGES (lib/stage.ts): declared → off → lab → live.
-    // A new row is `declared` (createApp), so the default says so too.
-    stage: text('stage').$type<AppStage>().notNull().default('declared'),
+    // One rung of APP_STAGES (lib/stage.ts): off → lab → live. A new app is
+    // created at the rung it will land on (createApp).
+    stage: text('stage').$type<AppStage>().notNull().default('lab'),
+
+    // A new app before its first image: written to apps.json as
+    // `awaitingImage: true`, which nix materializes nothing for, and cleared
+    // once the image exists (lib/apps/setup.ts) — the Apply after that is the
+    // one that creates the app.
+    awaitingImage: boolean('awaiting_image').notNull().default(false),
 
     // True for apps declared by hand in Nix rather than managed here —
     // currently only daedalus itself. Shown read-only in the UI: an Apply that
@@ -180,12 +186,6 @@ export const apps = pgTable(
     buildStrategy: text('build_strategy').$type<BuildStrategy>().notNull().default('auto'),
     // "live" | "candidate" — a candidate is pushed but never deployed.
     buildPublish: text('build_publish').$type<BuildPublish>().notNull().default('live'),
-    // Build-time env names the app needs set but not real, name → placeholder
-    // value. Never secrets: they reach the build in the clear.
-    buildEnvPlaceholders: jsonb('build_env_placeholders')
-      .$type<Record<string, string>>()
-      .notNull()
-      .default({}),
     // Env handed to Railpack — its RAILPACK_* switches, such as
     // RAILPACK_NODE_PLAYWRIGHT_INSTALL.
     railpackEnv: jsonb('railpack_env').$type<Record<string, string>>().notNull().default({}),

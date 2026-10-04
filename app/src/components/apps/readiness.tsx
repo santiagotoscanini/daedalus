@@ -7,9 +7,10 @@
 // first, and anything settled folded away, so the step gets SHORTER the less
 // there is to say.
 //
-// Nothing it draws is a blocker. A new app is created `declared` — nothing
-// runs until it is promoted — so the step reports rather than gates, and a
-// missing image is the expected state of the app being created.
+// Nothing it draws is a blocker. A new app waits for its first image before
+// anything of it is created (lib/apps/setup.ts), so the step reports rather
+// than gates, and a missing image is the expected state of the app being
+// created.
 
 import { cn } from '../../lib/cn'
 import type { Check, CheckState, Readiness } from '../../lib/readiness'

@@ -9,11 +9,7 @@ import {
   type LiveBuild,
   summarizeBuild,
 } from '../lib/build-display'
-import {
-  type BuildSettingsPatch,
-  buildEnvSizeError,
-  validateBuildSettings,
-} from '../lib/build-settings'
+import { type BuildSettingsPatch, validateBuildSettings } from '../lib/build-settings'
 import { BUILD_SHA_RE } from '../lib/builds'
 import { asValidator, is, obj, str, withMessage } from '../lib/contract/decode'
 import { appNameField, pageSizeField } from '../lib/contract/fields'
@@ -311,15 +307,6 @@ export const setBuildSettingsFn = adminFn
     if (!record) return { ok: false, reason: `No app named ${data.app}.` }
     if (record.managedInNix || record.sourceMode === 'local') {
       return { ok: false, reason: `${data.app} runs its working tree; it has no builds to set.` }
-    }
-    const { buildEnvPlaceholders, railpackEnv } = data.patch
-    if (buildEnvPlaceholders !== undefined || railpackEnv !== undefined) {
-      // The cap is on both maps as a request carries them; a patch may hold one.
-      const tooBig = buildEnvSizeError(
-        buildEnvPlaceholders ?? record.buildEnvPlaceholders,
-        railpackEnv ?? record.railpackEnv,
-      )
-      if (tooBig !== null) return { ok: false, reason: tooBig }
     }
     const { updateBuildSettings } = await import('../lib/repo/apps')
     await updateBuildSettings(data.app, data.patch)

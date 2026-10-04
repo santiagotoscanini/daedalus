@@ -80,172 +80,29 @@ export const isActiveBuildState = (s: BuildState): boolean => ACTIVE_BUILD_STATE
 export const isTerminalBuildState = (s: BuildState): boolean => TERMINAL_BUILD_STATES.includes(s)
 
 /**
- * The app's build-time env, from its `buildEnvPlaceholders` and `railpackEnv`
- * columns. The host exports both into the builder's process env and passes the
- * names — never the values — on argv, so a name is a strict env identifier.
- * Placeholders are not secrets, but they are not image config either.
+ * The app's Railpack switches, from its `railpackEnv` column. The host exports
+ * them into Railpack's process env and passes the names — never the values —
+ * on argv, so a name is a strict env identifier. The box passes no build
+ * secrets: a repo that needs a build-time value declares a dummy one in its
+ * own railpack.json, and a plan that asks for a secret fails detection.
  */
 export type BuildEnv = {
-  placeholders: Record<string, string>
   railpack: Record<string, string>
 }
 
-export type BuildEnvKind = keyof BuildEnv
-
 // Every limit below is nix/stacks/daedalus/host/build.sh's own (its buildEnv
 // jq check), so a request this decoder passes is one the host accepts.
-export const BUILD_ENV_PLACEHOLDER_RE = /^[A-Z_][A-Z0-9_]{0,63}$/
 export const BUILD_ENV_RAILPACK_RE = /^RAILPACK_[A-Z0-9_]{1,55}$/
 export const BUILD_ENV_VALUE_MAX = 512
 export const BUILD_ENV_ENTRIES_MAX = 40
-/** Both maps together, measured as the request's JSON carries them (buildEnvBytes). */
-export const BUILD_ENV_MAX_BYTES = 32 * 1024
-/** The largest request the engine writes; the host refuses one past 65,536 bytes. */
-export const BUILD_REQUEST_MAX_BYTES = 60 * 1024
 
-// ── the build env rules, identical on the host ─────────────────────────────
+// ── the Railpack switches, identical on the host ───────────────────────────
 //
-// nix/stacks/daedalus/host/build.sh holds the same two rules as
-// two assignments: RESERVED_ENV_RE (built from the two lists below, in this
-// order) and RAILPACK_KNOBS (RAILPACK_KNOB_PATTERNS as JSON). The host refuses
-// on its own whatever this file refuses, because the container can write a
-// request directly. builds.test.ts reads those assignments out of the host
-// file when it can see one and fails on any difference; change both together.
-
-/**
- * Names a placeholder may not take, because the builder's own tools read them
- * rather than the app: the shell, the C library and dynamic loader, git, mise,
- * BuildKit, and the language toolchains and package managers, whose variables
- * can point an install at another registry or run a program of their choosing.
- * A name a prefix below already covers is not repeated here.
- *
- * Toolchains get exact names where a prefix would catch app names: `GO` would
- * refuse voyra's GOOGLE_MAPS_API_KEY, so Go's variables are listed one by one.
- */
-export const RESERVED_ENV_NAMES = [
-  // the shell and the process
-  'PATH',
-  'HOME',
-  'SHELL',
-  'USER',
-  'LOGNAME',
-  'PWD',
-  'OLDPWD',
-  'IFS',
-  'ENV',
-  'BASH',
-  'BASH_ENV',
-  'BASHOPTS',
-  'SHELLOPTS',
-  'CDPATH',
-  'GLOBIGNORE',
-  'PS4',
-  'PROMPT_COMMAND',
-  'UID',
-  'EUID',
-  'PPID',
-  'SHLVL',
-  'TMPDIR',
-  'TZ',
-  'LANG',
-  'LANGUAGE',
-  'TERM',
-  'HOSTNAME',
-  // the C library: charset converters and locale data it loads by path
-  'GCONV_PATH',
-  'GLIBC_TUNABLES',
-  'LOCPATH',
-  // the builder's own credentials and network
-  'GITHUB_TOKEN',
-  'DAEDALUS_TOKEN_FILE',
-  'NO_PROXY',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'FTP_PROXY',
-  // Go
-  'GODEBUG',
-  'GOFLAGS',
-  'GOTRACEBACK',
-  'GOENV',
-  'GOROOT',
-  'GOPATH',
-  'GOBIN',
-  'GOCACHE',
-  'GOCACHEPROG',
-  'GOMODCACHE',
-  'GOTMPDIR',
-  'GOWORK',
-  'GOPROXY',
-  'GONOPROXY',
-  'GOPRIVATE',
-  'GOSUMDB',
-  'GONOSUMDB',
-  'GONOSUMCHECK',
-  'GOINSECURE',
-  'GOVCS',
-  'GOAUTH',
-  'GOTOOLCHAIN',
-  'GOEXPERIMENT',
-  'GO111MODULE',
-  // Rust, beside CARGO_/RUSTUP_/RUSTC: cargo reads these under their own names
-  'RUSTDOC',
-  'RUSTFLAGS',
-  'RUSTDOCFLAGS',
-  // Ruby, Perl, the JVM
-  'RUBYOPT',
-  'RUBYLIB',
-  'GEM_PATH',
-  'GEM_HOME',
-  'PERLLIB',
-  'JAVA_TOOL_OPTIONS',
-  'JDK_JAVA_OPTIONS',
-  '_JAVA_OPTIONS',
-] as const
-
-/** Prefixes a placeholder may not start with; see RESERVED_ENV_NAMES. */
-export const RESERVED_ENV_PREFIXES = [
-  'LD_',
-  'BASH_FUNC_',
-  'GIT_',
-  'BUILDKIT_',
-  'BUILDCTL_',
-  'DOCKER_',
-  'MISE_',
-  'RAILPACK_',
-  'XDG_',
-  'LC_',
-  'SSL_',
-  'NIX_SSL_',
-  'CURL_',
-  'SYSTEMD_',
-  'NPM_CONFIG_',
-  'PNPM_',
-  'COREPACK_',
-  'YARN_',
-  'BUN_',
-  'NODE_',
-  // cgo's flags skip Go's own flag allowlist
-  'CGO_',
-  'PIP_',
-  'UV_',
-  // Python's own variables are PYTHON<WORD> and, since 3.13, PYTHON_<WORD>
-  'PYTHON',
-  'CARGO_',
-  'RUSTUP_',
-  // RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER: each names a program to run
-  'RUSTC',
-  // Bundler reads every BUNDLE_<KEY> as configuration
-  'BUNDLE_',
-  'PERL5',
-] as const
-
-export function isReservedEnvName(name: string): boolean {
-  return (
-    (RESERVED_ENV_NAMES as readonly string[]).includes(name) ||
-    RESERVED_ENV_PREFIXES.some((p) => name.startsWith(p))
-  )
-}
+// nix/stacks/daedalus/host/build.sh holds the same rule as one assignment,
+// RAILPACK_KNOBS (RAILPACK_KNOB_PATTERNS as JSON). The host refuses on its own
+// whatever this file refuses, because the container can write a request
+// directly. builds.test.ts reads that assignment out of the host file when it
+// can see one and fails on any difference; change both together.
 
 /**
  * A value pattern runs twice: here as a JavaScript RegExp and on the host in
@@ -314,15 +171,10 @@ export const RAILPACK_KNOB_PATTERNS: Readonly<Record<string, string>> = Object.f
 )
 
 /**
- * Why a well-formed name (it passed its map's pattern) is still refused, as the
- * rest of a sentence that starts "<NAME> is", or null.
+ * Why a well-formed name (it passed RAILPACK_*) is still refused, as the rest
+ * of a sentence that starts "<NAME> is", or null.
  */
-export function buildEnvNameRefusal(kind: BuildEnvKind, name: string): string | null {
-  if (kind === 'placeholders') {
-    return isReservedEnvName(name)
-      ? "reserved: the builder's own tools read it (the shell, git, mise, BuildKit, the language toolchains and package managers)"
-      : null
-  }
+export function buildEnvNameRefusal(name: string): string | null {
   if (name.endsWith('_CMD')) {
     return "a command, and start, build and install commands belong in the repo's railpack.json"
   }
@@ -339,19 +191,10 @@ export function railpackValueRefusal(name: string, value: string): string | null
   return knob === undefined || re === undefined || re.test(value) ? null : knob.says
 }
 
-const encoder = new TextEncoder()
-
 /** The request's exact bytes: the payload host/build-verb.ts hands the root helper. */
 export function serializeBuildRequest(req: BuildRequest): string {
   return `${JSON.stringify(req, null, 2)}\n`
 }
-
-export const buildRequestBytes = (req: BuildRequest): number =>
-  encoder.encode(serializeBuildRequest(req)).length
-
-/** Both maps as the request carries them: the `buildEnv` field, indented as the file is. */
-export const buildEnvBytes = (env: BuildEnv): number =>
-  encoder.encode(JSON.stringify({ buildEnv: env }, null, 2)).length
 
 export type BuildRequest = {
   version: 1
@@ -407,7 +250,7 @@ export type BuildStatus = {
   repo: unknown
   /** `{ tags, layers, layerSizes, configSize, mediaType }` — lib/build-facts.ts. */
   image: unknown
-  /** `{ runner, secretsHash, cacheImported, cacheExported, stepsCached, stepsTotal }`. */
+  /** `{ runner, cacheImported, cacheExported, stepsCached, stepsTotal }`. */
   build: unknown
   checks: BuildChecks | null
   /** Host words, already passed through redactSecrets. */
@@ -459,9 +302,7 @@ const LINE_BREAK_OR_NUL = /[\0\r\n]/
 
 // Error messages name the key's path — and a name once it is a well-formed env
 // identifier — but never quote a value.
-function envRecord(kind: BuildEnvKind): Decoder<Record<string, string>> {
-  const nameRe = kind === 'placeholders' ? BUILD_ENV_PLACEHOLDER_RE : BUILD_ENV_RAILPACK_RE
-  const what = kind === 'placeholders' ? 'placeholder env' : 'RAILPACK_*'
+function railpackRecord(): Decoder<Record<string, string>> {
   return (v, p) => {
     if (v === null || typeof v !== 'object' || Array.isArray(v)) {
       throw new DecodeError(p, 'expected an object')
@@ -473,8 +314,8 @@ function envRecord(kind: BuildEnvKind): Decoder<Record<string, string>> {
     const out: Record<string, string> = {}
     for (const [k, value] of entries) {
       // Checked before the assignment: a name like `__proto__` never reaches `out`.
-      if (!nameRe.test(k)) throw new DecodeError(p, `expected ${what} names`)
-      const refused = buildEnvNameRefusal(kind, k)
+      if (!BUILD_ENV_RAILPACK_RE.test(k)) throw new DecodeError(p, 'expected RAILPACK_* names')
+      const refused = buildEnvNameRefusal(k)
       if (refused !== null) throw new DecodeError(p, `${k} is ${refused}`)
       const at = `${p}.${k}`
       if (typeof value !== 'string') throw new DecodeError(at, 'expected a string')
@@ -484,7 +325,7 @@ function envRecord(kind: BuildEnvKind): Decoder<Record<string, string>> {
       if (LINE_BREAK_OR_NUL.test(value)) {
         throw new DecodeError(at, 'contains a line break or a NUL character')
       }
-      const shape = kind === 'railpack' ? railpackValueRefusal(k, value) : null
+      const shape = railpackValueRefusal(k, value)
       if (shape !== null) throw new DecodeError(at, `expected ${shape}`)
       out[k] = value
     }
@@ -492,10 +333,7 @@ function envRecord(kind: BuildEnvKind): Decoder<Record<string, string>> {
   }
 }
 
-const buildEnvDecoder: Decoder<BuildEnv> = obj({
-  placeholders: envRecord('placeholders'),
-  railpack: envRecord('railpack'),
-})
+const buildEnvDecoder: Decoder<BuildEnv> = obj({ railpack: railpackRecord() })
 
 export const buildRequestDecoder: Decoder<BuildRequest> = obj({
   version: versionOne,

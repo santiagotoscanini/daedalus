@@ -235,5 +235,4 @@ else
 fi
 
 CACHE_REF="$REGISTRY/cache/$APP:buildkit"
-SECRET_NAMES=()
 PROVIDER=""

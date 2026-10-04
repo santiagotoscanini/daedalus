@@ -51,19 +51,14 @@ export function Access({
       <BoardGrid>
         <Board title="Access patterns" icon="⊕" span={12}>
           <p className={EMPTY}>
-            {name} is{' '}
-            {stage === 'declared'
-              ? 'declared but not running'
-              : stage === 'off'
-                ? 'not exposed'
-                : 'internal'}
-            , so there are no remote clients to break down.
+            {name} is {stage === 'off' ? 'not exposed' : 'on the LAN only'}, so there are no remote
+            clients to break down.
           </p>
           <p className={FOOT}>
             Client IP and country come from the headers Cloudflare adds at the edge, which only
             exist on requests that arrive through the tunnel. LAN requests reach traefik through
             rootlessport, which replaces the source address: every phone, laptop and WireGuard peer
-            in the house shows up as the same bridge IP. Set exposure to <strong>External</strong>{' '}
+            in the house shows up as the same bridge IP. Set exposure to <strong>Public</strong>{' '}
             above to start collecting this.
           </p>
         </Board>

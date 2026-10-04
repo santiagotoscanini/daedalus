@@ -120,7 +120,7 @@ async function exportOnce(): Promise<void> {
     { makeCtx },
     { appIcon, siteIcon },
     { effectiveHostname },
-    { stageExposed },
+    { appReachable },
     { appRepo },
   ] = await Promise.all([
     import('./workspaces'),
@@ -143,7 +143,7 @@ async function exportOnce(): Promise<void> {
     const key = `app:${r.name}`
     projects.push({ repo: appRepo(ctx.site, r.name), key })
     resolvers.set(key, () =>
-      appIcon(r.name, effectiveHostname(ctx.site, r.name, r.hostname), stageExposed(r.stage)),
+      appIcon(r.name, effectiveHostname(ctx.site, r.name, r.hostname), appReachable(r)),
     )
   }
   for (const e of external) {

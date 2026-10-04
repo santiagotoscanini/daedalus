@@ -135,6 +135,22 @@ vi.mock('../../lib/repo/settings', () => ({
   SETTING_KEYS: { buildsLastSweep: 'builds.lastSweep' },
 }))
 vi.mock('../../host/nix-manifest', () => ({ manifestEntries: async () => h.manifest }))
+// The committed registry the dispatch holds builds on: the manifest's
+// registry entries, as the file carries them.
+vi.mock('../../host/site-registry', () => ({
+  readCommittedRegistry: async () => ({
+    text: '',
+    schemaVersion: 2,
+    apps: Object.fromEntries(
+      (h.manifest as { name: string; managedInNix: boolean; sourceMode?: string }[])
+        .filter((m) => !m.managedInNix)
+        .map((m) => [m.name, { sourceMode: m.sourceMode }]),
+    ),
+  }),
+  isAwaitingEntry: () => false,
+}))
+vi.mock('../../host/register', () => ({ readRegisterStatus: async () => ({ state: 'idle' }) }))
+vi.mock('../../lib/apps/setup', () => ({ settleNewApps: async () => undefined }))
 vi.mock('../../host/github-token', () => ({ tokenUsable: () => h.tokenOk }))
 vi.mock('../../host/app-icon', () => ({
   forgetAppIcon: (name: string) => {
@@ -181,7 +197,6 @@ vi.mock('../ctx', () => ({ makeCtx: async () => ctx }))
 const scheduler = await import('./scheduler')
 const { freshState, runTick } = scheduler
 const { runSweep } = await import('./sweep')
-const { REQUEST_TOO_LARGE } = await import('./dispatch')
 const { planDispatch, BOX_BUILDS_OFF, NO_INSTALLATION } = await import('../../lib/build-dispatch')
 
 function row(over: Partial<BuildRow> = {}): BuildRow {
@@ -235,7 +250,6 @@ function app(over: Rec = {}): Rec {
     githubRepoId: 555,
     buildStrategy: 'dockerfile',
     buildPublish: 'live',
-    buildEnvPlaceholders: { AUTH_SECRET: 'placeholder' },
     railpackEnv: { RAILPACK_PRUNE_DEPS: 'true' },
     ...over,
   }
@@ -337,10 +351,7 @@ describe('dispatch', () => {
         publish: 'live',
         requestedBy: 'webhook',
         at: NOW.toISOString(),
-        buildEnv: {
-          placeholders: { AUTH_SECRET: 'placeholder' },
-          railpack: { RAILPACK_PRUNE_DEPS: 'true' },
-        },
+        buildEnv: { railpack: { RAILPACK_PRUNE_DEPS: 'true' } },
       },
     ])
     expect(state.dispatched).toEqual({ id: ID, run: 'r1', at: NOW.getTime() })
@@ -408,25 +419,6 @@ describe('dispatch', () => {
     expect((h.calls.update[0]?.[1] as Rec | undefined)?.error).toContain(
       "RAILPACK_START_CMD is a command, and start, build and install commands belong in the repo's railpack.json",
     )
-  })
-
-  it('fails a request too large to write, without claiming it', async () => {
-    h.queued = [row()]
-    const placeholders = Object.fromEntries(
-      Array.from({ length: 40 }, (_, i) => [`K${String(i)}`, '€'.repeat(512)]),
-    )
-    h.apps = [app({ buildEnvPlaceholders: placeholders, railpackEnv: {} })]
-    await runTick(ctx, NOW, freshState(NOW.getTime()))
-    expect(h.calls.claim).toEqual([])
-    expect(h.calls.request).toEqual([])
-    expect(h.calls.update).toEqual([
-      [
-        ID,
-        { state: 'failed', error: REQUEST_TOO_LARGE, phase: 'failed', updatedAt: NOW },
-        'engine',
-      ],
-    ])
-    expect(REQUEST_TOO_LARGE).toBe('request refused: too large')
   })
 
   it('does not dispatch while the host reports a fresh unfinished build', async () => {

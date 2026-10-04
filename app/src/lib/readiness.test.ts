@@ -17,9 +17,9 @@ describe('readiness — the image has not been built', () => {
   })
 
   it('says what happens next instead of what is blocked', () => {
-    expect(r.verdict.headline).toContain('declared')
+    expect(r.verdict.headline).toContain('first build')
     expect(by(r, 'image')?.detail).toContain('expected')
-    expect(by(r, 'image')?.fix).toContain('site/apps.json')
+    expect(by(r, 'image')?.fix).toContain('queues its first build')
   })
 
   it('carries the effective image reference as the subject', () => {
@@ -30,11 +30,11 @@ describe('readiness — the image has not been built', () => {
 describe('readiness — the image is there', () => {
   const r = readiness({ imageState: 'present', effectiveImage: IMAGE, repoBuild: 'railpack' })
 
-  it('says the app can be promoted as soon as it is applied', () => {
+  it('says the app is set up right after it is created', () => {
     expect(r.ready).toBe(true)
     expect(r.act).toEqual([])
     expect(r.verdict.state).toBe('ok')
-    expect(r.verdict.headline).toContain('promoted')
+    expect(r.verdict.headline).toContain('set up')
   })
 })
 

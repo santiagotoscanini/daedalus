@@ -174,7 +174,9 @@ function RunNowButton({ app, task, running }: { app: string; task: TaskRow; runn
         size="sm"
         className={GHOST_BTN}
         disabled={inFlight || !running}
-        title={running ? undefined : 'the app is declared — there is no container to run this in'}
+        title={
+          running ? undefined : 'the app is not set up yet — there is no container to run this in'
+        }
         onClick={() => {
           start(() => runTaskNow({ data: { name: app, task: task.id } }))
         }}

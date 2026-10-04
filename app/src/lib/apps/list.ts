@@ -6,7 +6,7 @@ import { manifestEntries } from '../../host/nix-manifest'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { effectiveHostname } from '../hostname'
 import { listApps } from '../repo/apps'
-import { stageExposed } from '../stage'
+import { appReachable } from '../stage'
 import { asDeclared, driftOf } from './manifest-map'
 import { appStatuses } from './metrics'
 
@@ -43,7 +43,7 @@ export async function loadAppList(ctx: Ctx) {
           (await appIcon(
             r.name,
             effectiveHostname(ctx.site, r.name, r.hostname),
-            stageExposed(r.stage),
+            appReachable(r),
           )) !== null,
       ),
     ),
@@ -68,6 +68,8 @@ export async function loadAppList(ctx: Ctx) {
     apps: records.map((r, i) => ({
       name: r.name,
       stage: r.stage,
+      // Not on the box yet: awaiting its first image, or the Apply after it.
+      isNew: !r.managedInNix && (r.awaitingImage || manifest.get(r.name)?.awaitingImage !== false),
       managedInNix: r.managedInNix,
       sourceMode: r.sourceMode,
       description: r.description,

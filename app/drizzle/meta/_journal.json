@@ -183,6 +183,20 @@
       "when": 1790959586863,
       "tag": "0025_offbox_discovered",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791142492547,
+      "tag": "0026_drop_build_placeholders",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791142498844,
+      "tag": "0027_awaiting_image",
+      "breakpoints": true
     }
   ]
 }

@@ -341,6 +341,12 @@ export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promi
   // (d) the reporter's own rounds
   await quietly(state, 'report-tick', () => reportTick(ctx))
 
+  // (e) new apps, one step each: registered, marker cleared, set up
+  // (lib/apps/setup.ts). After the fold, so a build that just published is seen.
+  await quietly(state, 'setup', async () =>
+    (await import('../../lib/apps/setup')).settleNewApps(ctx),
+  )
+
   return inFlight || dispatched
 }
 

@@ -174,23 +174,13 @@ let
       storageEnabled = app.storage.enable;
       storageHostPath = "${appsDataRoot}/${name}/data";
 
-      # `stage = "declared"` is the bottom rung: the row exists, and so do the
-      # cheap durable things it will want — its postgres role, its data dir, its
-      # generated secrets — but NOTHING runs. No container, no deploy unit.
+      # Every app here runs: an entry still waiting for its first image never
+      # becomes a `fleet.apps` value at all (declarations.nix).
       #
-      # It exists because every app is in this state once, between "the entry
-      # exists" and "there is an image to run", and without a name for it that
-      # gap is a deadlock: the box only builds apps that are already in
-      # site/apps.json, and an apps.json entry whose image does not exist yet
-      # declares a container that cannot pull, which fails the switch, which
-      # makes the Apply revert the very entry that would have allowed the build.
-      running = app.stage != "declared";
-
       # `stage = "off"` means no ingress: no webApp, so no traefik router, no
       # DNS, no gatus probe, no Cloudflare route. The container still runs —
-      # that is the difference from "declared", and it is the point: an app that
-      # only ever talks to the database is off, not undeclared.
-      exposed = running && app.stage != "off";
+      # an app that only ever talks to the database is off, not gone.
+      exposed = app.stage != "off";
 
       # Dev mode (the control plane on the reference host): the same image,
       # run as a dev server over a checkout on this host. See the `source`
@@ -224,13 +214,7 @@ let
       # XDG_RUNTIME_DIR is what makes rootless podman work from a system
       # unit (the shape the host's nextcloud-cron uses). A task restarts nothing, so unlike the deploy unit
       # it needs no root and no setpriv.
-      #
-      # Gated on `running`: `podman exec` into a container that does not exist
-      # fails every tick, and a `declared` app has no container. The
-      # ASSERTIONS below are NOT gated — a malformed task is a malformed task
-      # whether or not its unit is generated today, and finding out only at
-      # promotion time would move the error away from the edit that caused it.
-      taskUnits = lib.optionals running app.tasks;
+      taskUnits = app.tasks;
       taskUnitName = t: "${cName}-task-${t.id}";
 
       # argv → one ExecStart line. `escapeShellArgs` gives systemd's own
@@ -333,7 +317,6 @@ let
         appDbEnvFile
         storageEnabled
         storageHostPath
-        running
         exposed
         dev
         resourceFlags
@@ -360,7 +343,6 @@ let
       proxyAuth,
       dev,
       exposed,
-      running,
       ...
     }:
     {
@@ -398,10 +380,8 @@ let
           message = "fleet.apps.${name}: `source.dev` cannot combine with `egress` — the dev server's install step needs the npm registry, which a VPN-only netns doesn't route to.";
         }
         {
-          # A `declared` app runs nothing, so its auth mode is a statement about
-          # its future and only has to hold once it does.
-          assertion = proxyAuth -> (exposed || !running);
-          message = "fleet.apps.${name}: `auth.mode = \"proxy\"` needs an ingress to gate — the forward-auth middleware is generated from the webApp, and `stage = \"off\"` emits none (a `declared` app carries the mode for later). Use `auth.mode = \"none\"` while it is unexposed, or expose it.";
+          assertion = proxyAuth -> exposed;
+          message = "fleet.apps.${name}: `auth.mode = \"proxy\"` needs an ingress to gate — the forward-auth middleware is generated from the webApp, and `stage = \"off\"` emits none. Use `auth.mode = \"none\"` while it is unexposed, or expose it.";
         }
         {
           assertion = app.prometheus.enable -> exposed;
@@ -482,7 +462,6 @@ let
       publicUrl,
       proxyAuth,
       nativeAuth,
-      running,
       exposed,
       oidcCallback,
       displayName,
@@ -509,10 +488,8 @@ let
             callbackURLs = [ oidcCallback ];
             logoutCallbackURLs = [ oidcCallback ];
             inherit (app.auth) allowedGroups;
-            # The container, once there is one: clients.nix writes the env
-            # file under each consumer, and cannot ask whether it exists (the
-            # answer would depend on its own definition).
-            consumers = lib.optional running cName;
+            # The container: clients.nix writes the env file under each consumer.
+            consumers = [ cName ];
           };
         }
         // lib.optionalAttrs (proxyAuth && exposed) {
@@ -530,7 +507,6 @@ let
       name,
       postgresEnabled,
       egressEnabled,
-      running,
       storageEnabled,
       storageHostPath,
       ...
@@ -547,15 +523,10 @@ let
       # path the TV stack's *arrs already take. Asking the operator to
       # state it as well would be a second fact that can disagree with
       # the first.
-      # The role and database are made even while `declared`: they are cheap,
-      # they survive, and the first build wants DATABASE_URL to exist. But the
-      # default consumer list names this app's container, and ordering against a
-      # unit that does not exist is how an allowlist outruns its units.
       fleet.appDatabases = lib.optionalAttrs postgresEnabled {
         "${name}" = {
           reach = if egressEnabled then "hostPort" else "bridge";
-        }
-        // lib.optionalAttrs (!running) { consumers = [ ]; };
+        };
       };
 
       # Persistent data dir — the fleet-standard statePaths convention
@@ -577,7 +548,6 @@ let
       app,
       cName,
       hostname,
-      running,
       exposed,
       egressEnabled,
       isolatedAuth,
@@ -586,11 +556,9 @@ let
       ...
     }:
     {
-      # The key is emitted for every RUNNING app, even as `[ ]`: registration
-      # is what earns the mandatory Type=oneshot systemd override (rootless
-      # podman cannot do Type=notify). Not for a `declared` one — a membership
-      # naming a container this configuration never declares fails eval on
-      # the missing image.
+      # The key is emitted for every app, even as `[ ]`: registration is what
+      # earns the mandatory Type=oneshot systemd override (rootless podman
+      # cannot do Type=notify).
       #
       # "traefik" joins the shared bridge for DNS routing, and only while
       # `exposed` (an app with no router has no reason to sit on it). `[ ]`
@@ -600,11 +568,9 @@ let
       # one whose membership comes from webApps.isolated; listing "traefik"
       # here as well would re-open the shared path (assertion in
       # platform/isolation.nix).
-      fleet.bridgeMemberships = lib.optionalAttrs running {
-        "${cName}" =
-          lib.optional (exposed && !egressEnabled && !isolatedAuth) "traefik"
-          ++ lib.optional (postgresEnabled && !egressEnabled) "app-db";
-      };
+      fleet.bridgeMemberships."${cName}" =
+        lib.optional (exposed && !egressEnabled && !isolatedAuth) "traefik"
+        ++ lib.optional (postgresEnabled && !egressEnabled) "app-db";
 
       # Web exposure — hardcoded internal port 3000. Bridge-routed by default
       # (serviceName on traefik-net). In egress mode the app can't ride
@@ -685,7 +651,6 @@ let
       app,
       cName,
       appSecretsFile,
-      running,
       egressEnabled,
       taskUnits,
       taskUnitName,
@@ -695,8 +660,8 @@ let
     }:
     {
       # One attrset rather than several `systemd.services."x" = …` statements:
-      # a unit that must be ABSENT for some apps (the task units, the deploy
-      # unit of a `declared` app) cannot be expressed by mixing
+      # a unit that must be ABSENT for some apps (the task units) cannot be
+      # expressed by mixing
       # `lib.optionalAttrs` with dotted-path definitions of the same attribute.
       systemd.services = {
         # Baseline secrets bootstrap. Generates AUTH_SECRET on first boot
@@ -738,9 +703,7 @@ let
         # No RemainAfterExit — unlike every bootstrap oneshot here, this one has
         # to run again on every tick.
         "app-${name}-deploy" = {
-          # A `declared` app has no container to redeploy into, and its image
-          # is the thing that does not exist yet.
-          enable = app.deploy.enable && running;
+          enable = app.deploy.enable;
           description = "Redeploy app-${name} when a new image lands on the registry";
           # linger-users gates /run/user/1000 → rootless podman → newuidmap.
           after = [
@@ -763,8 +726,6 @@ let
         # netns owner. The pg + per-app-bootstrap edges are NOT repeated
         # here — appDatabases.consumers already generates both (including
         # the transaction-proof direct podman-pg edge).
-      }
-      // lib.optionalAttrs running {
         "podman-${cName}" = {
           after = [
             "app-${name}-secrets-bootstrap.service"
@@ -807,7 +768,7 @@ let
 
       systemd.timers = {
         "app-${name}-deploy" = {
-          enable = app.deploy.enable && running;
+          enable = app.deploy.enable;
           description = "Poll the registry for a new app-${name} image";
           wantedBy = [ "timers.target" ];
           timerConfig = {
@@ -837,8 +798,7 @@ let
 
       # A failed run is exactly the thing worth an email — nobody is watching
       # a 04:23 job. Registered only for units that exist: mail.nix asserts
-      # every monitoredJobs entry names a real unit with an ExecStart, so a
-      # `declared` app's tasks must not appear here either.
+      # every monitoredJobs entry names a real unit with an ExecStart.
       fleet.monitoredJobs = lib.listToAttrs (
         map (t: {
           name = taskUnitName t;
@@ -854,7 +814,6 @@ let
       cName,
       hostname,
       publicUrl,
-      running,
       dev,
       storageEnabled,
       storageHostPath,
@@ -870,7 +829,7 @@ let
     {
       # The container itself — pure declarative, identical pattern to
       # every other stack on the box.
-      virtualisation.oci-containers.containers = lib.optionalAttrs running {
+      virtualisation.oci-containers.containers = {
         "${cName}" = mkRootlessContainer (
           {
             inherit (app) image;

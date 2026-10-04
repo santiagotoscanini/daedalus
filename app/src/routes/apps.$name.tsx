@@ -1,11 +1,11 @@
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { ApplyBar } from '../components/apply-bar'
+import { SetupLine } from '../components/apps/setup-line'
 import { type AppRecord, CHIP, LEDE } from '../components/apps/shared'
 import { TabBody } from '../components/apps/tab-views'
 import { AppIcon, type AppState, Segmented, StatePill } from '../components/controls'
 import { Crumbs, PageHead } from '../components/page'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
-import { Button } from '../components/ui/button'
 import { useAction } from '../components/use-action'
 import { Chip } from '../components/viz'
 // lib/access-window, NOT host/access. The window table is a value the picker
@@ -18,6 +18,7 @@ import { isAppName } from '../lib/hostname'
 import { known } from '../lib/known'
 import { appRepo } from '../lib/site'
 import { useSite } from '../lib/site-context'
+import { STAGE_LABEL } from '../lib/stage'
 import { type Tone, toneStyle } from '../lib/tone'
 import { fetchApp, fetchAppTab, saveApp } from '../server/registry'
 
@@ -64,12 +65,6 @@ const HERO_EXPOSURE =
   'text-right max-rail:col-span-full max-rail:text-left max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center'
 const EXPOSURE_NOTE =
   'mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground'
-/** Why the running rungs are closed to an app with no image yet; absent when they are open. */
-const IMAGE_WAIT: Partial<Record<NonNullable<AppRecord['firstImage']>, string>> = {
-  missing: "First build pending. The container can run once its image is in the box's registry.",
-  unknown: "The box's registry did not answer, so whether this app has an image yet is not known.",
-}
-
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
   // it is linkable ("look at argus's settings"), and it renders on the
@@ -147,7 +142,7 @@ type AppSearch = { tab: Tab; range?: AccessWindow }
 
 function AppDetail() {
   const loaded = Route.useLoaderData()
-  const { app, drift, status, applyStatus, tabData } = loaded
+  const { app, drift, status, applyStatus, setup, tabData } = loaded
   const { tab, range } = Route.useSearch()
 
   const readOnly = app.managedInNix
@@ -194,43 +189,8 @@ function AppDetail() {
         </Alert>
       )}
 
-      {/* The last step of adding an app, on the page where it happens.
-          `declared` is a resting state the platform is perfectly happy to
-          leave an app in forever, and forever is what it would be if the only
-          way to leave it were to remember the exposure control in the corner.
-          One affordance, the one that is right in almost every case: internal.
-          External is the same control above, one click further. */}
-      {!readOnly && app.stage === 'declared' && (
-        <Alert className="mb-[1.35rem]">
-          <AlertTitle>Declared — nothing is running yet</AlertTitle>
-          <AlertDescription>
-            <p className="m-0">
-              {drift.length > 0
-                ? 'Apply first: that writes site/apps.json and rebuilds, which creates this app’s database, data directory and secrets — and is what lets the box build its repo at all. Then build it, and promote it here.'
-                : 'Applied. Build it from its deployments tab; once that build has published an image, promote it and Apply again.'}
-            </p>
-            <div className="mt-[0.7rem] flex flex-wrap items-center gap-3">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  patch({ stage: 'lab' })
-                }}
-              >
-                Promote to internal
-              </Button>
-              <Link
-                to="/apps/$name"
-                params={{ name: app.name }}
-                search={{ tab: 'deployments' as const }}
-                className="text-[0.82rem]"
-              >
-                Builds and deployments →
-              </Link>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* A new app on its way to its first container (lib/apps/setup.ts). */}
+      {!readOnly && setup !== null && <SetupLine name={app.name} setup={setup} />}
 
       {/* No tab bar here: inside an app the sections live in the left rail —
           the shell swaps the category nav for the app-scoped one while this
@@ -264,7 +224,6 @@ function AppHero({
   const site = useSite()
   const readOnly = app.managedInNix
   const iconTone = ICON_TONE[state]
-  const imageWait = app.firstImage === null ? undefined : IMAGE_WAIT[app.firstImage]
   return (
     <section className={HERO}>
       {/* The app's own icon, in a frame that keeps carrying state. Identity
@@ -285,8 +244,8 @@ function AppHero({
         </h1>
         <p className={LEDE}>{app.description || 'No description.'}</p>
         <p className={HERO_LINKS}>
-          {app.stage === 'declared' ? (
-            <span className="text-subdued">◌ not running</span>
+          {app.awaitingImage ? (
+            <span className="text-subdued">◌ not running yet</span>
           ) : app.stage === 'off' ? (
             <span className="text-subdued">⏻ not exposed</span>
           ) : (
@@ -319,78 +278,36 @@ function AppHero({
           onChange={(v) => {
             patch({ stage: v })
           }}
-          // Four rungs, each adding to the last. "Declared" runs nothing at
-          // all: the row, its database, its data directory and its secrets,
-          // and no container — where every app sits between being created
-          // and having an image. "Off" adds the container back and withholds
-          // only the ingress: no traefik router, no DNS, no probe, but it
-          // runs and it deploys.
-          //
-          // Every rung that runs a container waits for the first image: an
-          // Apply that declares one with nothing to pull fails the switch and
-          // rolls back (lib/apps/image-gate.ts). The save and the Apply refuse
-          // it too; this is where it is explained.
+          // Three rungs, each adding to the last. "Off" runs the container
+          // and withholds only the ingress: no traefik router, no DNS, no
+          // probe, but it runs and it deploys. A new app picks its rung
+          // before it has an image: nothing of it exists until then
+          // (lib/apps/setup.ts), so the choice is free.
           options={[
             {
-              value: 'declared',
-              label: 'Declared',
-              icon: '◌',
-              // Refused like "Off" below, though stricter than the
-              // platform: apps.nix's assertion lets a declared app keep
-              // proxy mode for later, since it has no ingress to lose.
-              disabled: app.authMode === 'proxy',
-              reason:
-                app.authMode === 'proxy'
-                  ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
-                  : 'Nothing runs: no container, no deploy unit, no ingress. The database, the data directory and the secrets stay.',
-            },
-            {
               value: 'off',
-              label: 'Off',
+              label: STAGE_LABEL.off,
               icon: '⏻',
               // The forward-auth middleware is generated FROM the ingress,
               // so an app gated that way has nothing left to gate once the
               // ingress is gone. The platform asserts this
               // (nix/modules/apps/apps.nix); catching it here turns a failed
               // Apply into an explanation.
-              disabled: imageWait !== undefined || app.authMode === 'proxy',
+              disabled: app.authMode === 'proxy',
               reason:
-                imageWait ??
-                (app.authMode === 'proxy'
+                app.authMode === 'proxy'
                   ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
-                  : undefined),
+                  : undefined,
             },
-            {
-              value: 'lab',
-              label: 'Internal',
-              icon: '⛨',
-              disabled: imageWait !== undefined,
-              reason: imageWait,
-            },
-            {
-              value: 'live',
-              label: 'External',
-              icon: '↗',
-              disabled: imageWait !== undefined,
-              reason: imageWait,
-            },
+            { value: 'lab', label: STAGE_LABEL.lab, icon: '⛨' },
+            { value: 'live', label: STAGE_LABEL.live, icon: '↗' },
           ]}
         />
-        {/* A saved stage above declared with no image yet (saved before the
-            gate, or the image went away) is said too: the Apply refuses it. */}
-        {imageWait !== undefined ? (
-          <p className={EXPOSURE_NOTE}>
-            {app.firstImage === 'missing'
-              ? 'First build pending. The other rungs open once it has published an image.'
-              : imageWait}
-          </p>
-        ) : app.stage === 'off' ? (
-          <p className={EXPOSURE_NOTE}>No route, DNS or probe. The container still runs.</p>
+        {app.awaitingImage ? (
+          <p className={EXPOSURE_NOTE}>Where it runs once its first image is in.</p>
         ) : (
-          app.stage === 'declared' && (
-            <p className={EXPOSURE_NOTE}>
-              Nothing runs. Its database, data directory and secrets exist.
-            </p>
+          app.stage === 'off' && (
+            <p className={EXPOSURE_NOTE}>No route, DNS or probe. The container still runs.</p>
           )
         )}
       </div>

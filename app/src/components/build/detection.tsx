@@ -182,14 +182,6 @@ export function ImageBoard({ build }: { build: BuildView }) {
           .join(', '),
       })
     }
-    if (run.secretsHash !== null) {
-      // The fingerprint, never a value: it is here so two builds can be told
-      // apart by whether their secrets changed.
-      rows.push({
-        k: 'secrets hash',
-        v: <code title={run.secretsHash}>{run.secretsHash.slice(0, 12)}</code>,
-      })
-    }
   }
   const layers = image?.layerSizes ?? []
   return (

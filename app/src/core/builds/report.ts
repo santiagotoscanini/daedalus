@@ -335,9 +335,8 @@ async function followDeployment(
     if (match !== null) {
       status = {
         ...deployStatus(match),
-        // No ingress, no environment to link: `off` and `declared` both leave
-        // the deployment URL empty rather than pointing GitHub at a hostname
-        // nothing answers on.
+        // No ingress, no environment to link: `off` leaves the deployment URL
+        // empty rather than pointing GitHub at a hostname nothing answers on.
         environmentUrl: stageExposed(app.stage)
           ? `https://${effectiveHostname(ctx.site, app.name, app.hostname)}`
           : null,

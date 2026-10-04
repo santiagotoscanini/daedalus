@@ -10,10 +10,10 @@ import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
 import { getApp } from '../repo/apps'
 import { appRepo, defaultImage } from '../site'
-import { stageExposed, stageRuns } from '../stage'
-import { type FirstImage, firstImage } from './image-gate'
+import { appReachable } from '../stage'
 import { asDeclared, driftOf } from './manifest-map'
 import { appStatuses } from './metrics'
+import { setupProgress } from './setup'
 
 // The app detail page's frame: the record, whether it has drifted from nix,
 // and the live signals the hero draws. Null for a name the registry does not
@@ -52,7 +52,6 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     workspaces,
     deployShot,
     site,
-    image,
   ] = await Promise.all([
     appStatuses(ctx, [name]),
     readApplyStatus(ctx),
@@ -61,17 +60,19 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     // So the hostname field can reject a collision as it is typed rather
     // than during the rebuild it would otherwise fail.
     publishingFacts(),
-    appIcon(record.name, hostname, stageExposed(record.stage)).then((icon) => icon !== null),
+    appIcon(record.name, hostname, appReachable(record)).then((icon) => icon !== null),
     readWorkspaces(),
     readDeployShot(name),
     siteIdentity(),
-    // Asked only of an app that runs nothing on the box yet (its APPLIED
-    // stage): the exposure control offers the running rungs once its first
-    // image exists (./image-gate.ts), whatever stage is saved but unapplied.
-    manifest !== undefined && stageRuns(manifest.stage)
-      ? Promise.resolve(null)
-      : firstImage(box, record),
   ])
+  const status = statuses[name] ?? null
+  // A new app's way to its first running container (./setup.ts).
+  const setup = await setupProgress(ctx, record, manifest, {
+    // Unknown (no metrics) counts as up: only a container known to be down
+    // that never deployed reads as still starting.
+    containerUp: status?.containerUp !== false,
+    deployedOnce: deploy !== null,
+  })
 
   return {
     applyStatus,
@@ -94,7 +95,8 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     // The post-deploy screenshot pointer — the Overview's Vercel card.
     deployShot,
     drift: driftOf(record, manifest),
-    status: statuses[name] ?? null,
+    status,
+    setup,
     app: {
       name: record.name,
       stage: record.stage,
@@ -103,8 +105,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
       deployEnable: record.deployEnable,
       image: record.image,
       effectiveImage: record.image ?? defaultImage(box, record.name),
-      /** Null for an app already running; see image-gate.ts. */
-      firstImage: image as FirstImage | null,
+      awaitingImage: record.awaitingImage,
       hostname: record.hostname,
       effectiveHostname: hostname,
       description: record.description,
@@ -132,7 +133,6 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
       buildOnBox: record.buildOnBox,
       buildStrategy: record.buildStrategy,
       buildPublish: record.buildPublish,
-      buildEnvPlaceholders: record.buildEnvPlaceholders,
       railpackEnv: record.railpackEnv,
       githubRepoId: record.githubRepoId,
       updatedAt: record.updatedAt.toISOString(),

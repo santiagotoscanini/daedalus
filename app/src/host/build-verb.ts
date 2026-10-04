@@ -50,7 +50,6 @@ export async function startBuild(
 ): Promise<BuildStart> {
   const checked = buildRequestDecoder(req, '')
   try {
-    // The same bytes core/builds/dispatch.ts measured against BUILD_REQUEST_MAX_BYTES.
     const r = await ctx.controller.call('root.run', {
       verb: 'build',
       selectors: {},

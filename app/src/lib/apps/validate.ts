@@ -1,7 +1,7 @@
 import type { ManifestTask } from '../../host/nix-manifest'
 import type { apps } from '../../host/schema'
 import { AUTH_MODES } from '../app-modes'
-import { APP_STAGES, isAppStage, stageExposed } from '../stage'
+import { APP_STAGES, isAppStage, NEW_APP_STAGES, type NewAppStage, stageExposed } from '../stage'
 import { taskCommandError, taskIdError, taskScheduleError, taskTimeoutError } from '../tasks'
 import { type EnvVar, validateEnvVars } from './env-vars'
 
@@ -25,16 +25,21 @@ import { type EnvVar, validateEnvVars } from './env-vars'
  * the create form asks only for what cannot be sensibly defaulted, plus the
  * toggles somebody adding an app already knows the answer to.
  *
- * `authMode` and `egress` are not here: a new app arrives ungated and gets its
- * gate in a second, deliberate step, and egress needs a gluetun instance to
- * exist before anything can join its netns. Operator secrets are not a field:
+ * `authMode` and the health path are not asked: a new app is born signing in
+ * with its own OIDC client (`native`) and probed at `/api/healthz`, which is
+ * what every app made from the iris template does; its page changes either.
+ * `egress` is not here: it needs a gluetun instance to exist before anything
+ * can join its netns. Operator secrets are not a field:
  * the presence of `site/vault/apps/<name>-env.sops` is the whole switch.
  *
- * `stage` is not here either, and that one is not a default but a fact: a new
- * app is born `declared` (see createApp). There is nothing to choose yet.
+ * `stage` is where it will run, Lab or Public: the rung it lands on once its
+ * first image exists. It is born awaiting that image (createApp), so the
+ * choice costs nothing until then.
  */
 export type NewApp = {
   name: string
+  /** Where it runs once it has an image. */
+  stage: NewAppStage
   description: string
   postgres: boolean
   storage: boolean
@@ -63,18 +68,13 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
     if (v !== null && typeof v !== 'string') throw new Error(`${k} must be a string or null`)
     return v
   }
-  // Refused rather than ignored: created exposed, an app whose image does not
-  // exist yet would fail the switch and revert the very Apply shipping it (see
-  // lib/stage.ts). Saying so beats silently creating something other than
-  // what was asked for.
-  if (input.stage !== undefined && input.stage !== 'declared') {
-    throw new Error(
-      'stage cannot be chosen at create: a new app is declared — the row, its database and its ' +
-        'secrets, and nothing running. Promote it once its first build has published an image.',
-    )
+  const stage = input.stage
+  if (!(NEW_APP_STAGES as readonly unknown[]).includes(stage)) {
+    throw new Error(`stage must be ${NEW_APP_STAGES.join(' | ')}`)
   }
   return {
     name: str('name'),
+    stage: stage as NewAppStage,
     description: str('description'),
     postgres: bool('postgres'),
     storage: bool('storage'),
@@ -294,10 +294,6 @@ export function assertAuthRules(
     )
   }
   if (mode === 'proxy' && !stageExposed(stage)) {
-    throw new Error(
-      stage === 'declared'
-        ? 'forward-auth (proxy) needs an ingress to gate, and a declared app has none — promote it first'
-        : 'forward-auth (proxy) needs an ingress to gate; this app is not exposed',
-    )
+    throw new Error('forward-auth (proxy) needs an ingress to gate; this app is not exposed')
   }
 }

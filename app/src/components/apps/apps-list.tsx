@@ -2,9 +2,8 @@
 
 import { Link } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
-import { cn } from '../../lib/cn'
 import { PLATFORMS } from '../../lib/external-apps'
-import type { AppStage } from '../../lib/stage'
+import { APP_STAGES, type AppStage, STAGE_LABEL } from '../../lib/stage'
 import type { fetchAppsTab } from '../../routes/apps.index'
 import { ApplyBar } from '../apply-bar'
 import { AppIcon, type AppState, Segmented, StateDot } from '../controls'
@@ -44,10 +43,10 @@ export function AppsList({ data }: { data: ListData }) {
       attention: apps.filter((r) => r.status.state === 'attention').length,
       stopped: apps.filter((r) => r.status.state === 'stopped' || r.status.state === 'unknown')
         .length,
-      // Not a state anything probes — nothing is running to probe — so it is
-      // counted off the registry rather than off prometheus. It is the one
-      // tally that is a to-do: these are waiting to be built and promoted.
-      declared: apps.filter((r) => r.stage === 'declared').length,
+      // Not a state anything probes — nothing runs yet — so it is counted off
+      // the registry rather than off prometheus: apps on their way to their
+      // first container (lib/apps/setup.ts).
+      settingUp: apps.filter((r) => r.isNew).length,
     }),
     [apps],
   )
@@ -104,23 +103,17 @@ export function AppsList({ data }: { data: ListData }) {
           <StateDot state="stopped" /> <b className={TALLY_COUNT}>{counts.stopped}</b> stopped
         </span>
         {/* Only when there are any: a zero here would be a permanent slot for
-            a state most of the fleet is never in. Clicking it filters, because
-            the next thing anybody does with this number is go look. */}
-        {counts.declared > 0 && (
-          <Button
-            type="button"
-            variant="link"
-            className={cn(TALLY, 'h-auto p-0 font-normal text-inherit text-[length:inherit]')}
-            title="Declared only: no container, no ingress. Build the repo, then set exposure on the app’s page."
-            onClick={() => {
-              setExposure('declared')
-            }}
+            a state most of the fleet is never in. */}
+        {counts.settingUp > 0 && (
+          <span
+            className={TALLY}
+            title="New apps on their way to their first container: registered, building, or starting. Each app's page says which."
           >
             <span aria-hidden="true" className="text-muted-foreground">
               ◌
             </span>{' '}
-            <b className={TALLY_COUNT}>{counts.declared}</b> declared
-          </Button>
+            <b className={TALLY_COUNT}>{counts.settingUp}</b> setting up
+          </span>
         )}
         {/* The create flow is a page rather than a dialog: it makes a GitHub
             round trip per repo it checks, and a checklist you can leave open
@@ -160,10 +153,7 @@ export function AppsList({ data }: { data: ListData }) {
           label="Filter by exposure"
           options={[
             { value: 'all', label: 'all' },
-            { value: 'live', label: 'external' },
-            { value: 'lab', label: 'internal' },
-            { value: 'off', label: 'off' },
-            { value: 'declared', label: 'declared' },
+            ...APP_STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s].toLowerCase() })).reverse(),
           ]}
         />
       </div>

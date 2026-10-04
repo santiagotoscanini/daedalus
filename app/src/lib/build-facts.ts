@@ -11,10 +11,9 @@
 //          actually pushed rather than what the publish mode predicts, and the
 //          sizes are the COMPRESSED bytes the manifest lists — a pull, not a
 //          disk footprint.
-//   build  { runner, secretsHash, cacheImported, cacheExported, stepsCached,
-//          stepsTotal }
-//          How the build itself went: which builder ran it, a fingerprint of
-//          the build secrets (never a value), and what the cache did.
+//   build  { runner, cacheImported, cacheExported, stepsCached, stepsTotal }
+//          How the build itself went: which builder ran it, and what the cache
+//          did.
 //
 // Held on the row as one `facts` jsonb rather than five columns: none of it is
 // queried, compared or indexed — it is read back whole, for one page and one
@@ -46,8 +45,6 @@ type ImageFacts = {
 /** The wire calls this `build`; on the row it is `run`, so nothing reads `facts.build.build`. */
 export type RunFacts = {
   runner: string | null
-  /** A fingerprint of the build secrets. A hash, never a value. */
-  secretsHash: string | null
   cacheImported: boolean | null
   cacheExported: boolean | null
   stepsCached: number | null
@@ -60,12 +57,12 @@ export type BuildFacts = { image: ImageFacts | null; run: RunFacts | null }
  * Null-as-absent, applied to the decoded object as a whole.
  *
  * The contract is that the agent OMITS a key it has nothing to say about, but
- * it has published explicit nulls — `secretsHash: null` for an app with no
- * build secrets — and an older agent's habits are not something this side gets
- * to depend on. Every field decoder already reads a null as null, so the only
- * thing left to decide is what an object of nothing but nulls means: it means
- * the agent said nothing, so the whole key reads as absent and the view falls
- * back to "nobody said" rather than rendering a card of empty rows.
+ * it has published explicit nulls, and an agent's habits are not something
+ * this side gets to depend on. Every field decoder already reads a null as
+ * null, so the only thing left to decide is what an object of nothing but
+ * nulls means: it means the agent said nothing, so the whole key reads as
+ * absent and the view falls back to "nobody said" rather than rendering a card
+ * of empty rows.
  */
 function saidSomething<T extends object>(decoded: T): T | null {
   return Object.values(decoded).some((v) =>
@@ -90,7 +87,6 @@ function readRun(raw: unknown): RunFacts | null {
   if (!isRecord(raw)) return null
   return saidSomething({
     runner: text(raw.runner),
-    secretsHash: text(raw.secretsHash),
     cacheImported: flag(raw.cacheImported),
     cacheExported: flag(raw.cacheExported),
     stepsCached: count(raw.stepsCached),

@@ -6,15 +6,9 @@
 #
 # ── 4. checks ─────────────────────────────────────────────────────────────
 
-# The two facts this stage worked out and used to throw away. The runner is
-# the one every check command is prefixed with; the hash is a sha256 over
-# NAME=value lines, so it is not itself a secret — but the status carries only
-# its first 12 characters anyway: enough to see at a glance that a rebuild's
-# cache key moved, far too little to confirm a guessed value against.
+# The fact this stage worked out and used to throw away: the runner every
+# check command is prefixed with.
 status_set '.build.runner = $r' --arg r "$RUNNER"
-if [ -n "$SECRETS_HASH" ]; then
-  status_set '.build.secretsHash = $h' --arg h "${SECRETS_HASH:0:12}"
-fi
 
 if [ "$RESOLVED" = railpack ]; then
   [ "$PROVIDER" = node ] && NODE=1 || NODE=0
@@ -88,21 +82,16 @@ else
     timed_as_build "$CHECKS_LIMIT" plain buildctl --addr "$BUILDKIT_ADDR" build --progress=plain \
       --frontend gateway.v0 --opt "source=$RAILPACK_FRONTEND" \
       --local "context=$SRC" --local "dockerfile=$CTL/checks" \
-      --opt "build-arg:cache-key=$APP" "${HASH_ARGS[@]}" "${SECRET_ARGS[@]}" \
+      --opt "build-arg:cache-key=$APP" \
       --import-cache "type=registry,ref=$CACHE_REF" || rc=$?
   else
     cp -- "$CHECKS_DOCKERFILE" "$CTL/checks/Dockerfile"
     chmod 0644 "$CTL/checks/Dockerfile"
-    jq -r '(.buildEnv.placeholders // {}) | to_entries[] | @sh "export \(.key)=\(.value)"' \
-      <<<"$REQ_JSON" >"$CTL/secrets/check-env"
-    chgrp "$BUILD_GROUP" "$CTL/secrets/check-env"
-    chmod 0440 "$CTL/secrets/check-env"
     timed_as_build "$CHECKS_LIMIT" plain buildctl --addr "$BUILDKIT_ADDR" build --progress=plain \
       --frontend dockerfile.v0 --local "context=$SRC" --local "dockerfile=$CTL/checks" \
       --opt target=checks --opt "build-arg:NODE_IMAGE=$NODE_IMAGE" --opt "build-arg:APP=$APP" \
       --opt "build-arg:REGISTRY_URL=$NPM_REGISTRY_URL" --opt "build-arg:CHECKS=${CHECK_NAMES[*]}" \
-      "${NPM_MIRROR_ARGS[@]}" \
-      --secret "id=daedalus-check-env,src=$CTL/secrets/check-env" || rc=$?
+      "${NPM_MIRROR_ARGS[@]}" || rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
     FAILED_CHECK="$(failed_check)"

@@ -75,11 +75,11 @@ describe('runAppTaskNow', () => {
     expect(h.requested).toEqual([])
   })
 
-  it('refuses a declared app — there is no container to exec into', async () => {
-    h.record = { name: 'hermes', stage: 'declared', tasks: [task('digest')] }
+  it('refuses an app not set up yet — there is no container to exec into', async () => {
+    h.record = { name: 'hermes', stage: 'lab', awaitingImage: true, tasks: [task('digest')] }
     await expect(
       runAppTaskNow(CTX, { name: 'hermes', task: 'digest', actor: ACTOR }),
-    ).rejects.toThrow('not running')
+    ).rejects.toThrow('not set up yet')
     expect(h.requested).toEqual([])
   })
 
@@ -160,8 +160,8 @@ describe('loadTasksTab', () => {
     expect(payload.tasks[0]?.schedule).toBe('*-*-* 04:23:00')
   })
 
-  it('says an app is not running when it is only declared', async () => {
-    h.record = { name: 'hermes', stage: 'declared', tasks: [task('digest')] }
+  it('says an app is not running before it is set up', async () => {
+    h.record = { name: 'hermes', stage: 'lab', awaitingImage: true, tasks: [task('digest')] }
     expect((await loadTasksTab('hermes')).running).toBe(false)
   })
 

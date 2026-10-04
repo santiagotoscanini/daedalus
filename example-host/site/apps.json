@@ -1,9 +1,10 @@
 {
-  "_why": "Example value, apps.json (the app registry) at schemaVersion 2 — one entry with every field the version defines, at the values the writer emits for a fresh app. Also the sample both halves of the file-format contract are held to: the app's vitest parses it through the real registry reader and re-renders it (app/src/host/contract/site-files.test.ts), and nix flake check maps every entry through platform/lib/registry-lib.nix (the example-host check).",
+  "_why": "Example value, apps.json (the app registry) at schemaVersion 2 — one entry with every field the version defines, at the values the writer emits for a fresh app, still awaiting its first image. Also the sample both halves of the file-format contract are held to: the app's vitest parses it through the real registry reader and re-renders it (app/src/host/contract/site-files.test.ts), and nix flake check maps every entry through platform/lib/registry-lib.nix (the example-host check).",
   "schemaVersion": 2,
   "apps": {
     "example": {
-      "stage": "declared",
+      "stage": "lab",
+      "awaitingImage": true,
       "postgres": true,
       "storage": false,
       "litellm": false,

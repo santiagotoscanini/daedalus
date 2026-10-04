@@ -10,19 +10,15 @@ import { fetchNewAppOptions } from '../server/registry'
 //
 // The platform half of this is one entry: nix/modules/apps turns a
 // `fleet.apps.<name>` into a container, a route, DNS, a probe, a database and
-// a deploy timer. An entry whose image was never published restart-loops from
-// the moment it is applied, which fails the switch and reverts the Apply —
-// but gating creation on an image is a deadlock, because the box only builds
-// apps already in site/apps.json. The `declared` stage breaks it: an entry
-// that materializes the app's database, data dir and secrets and runs
-// NOTHING. So this form writes the row, always declared, and the order is
-//
-//   create (declared) → Apply → build → promote to internal/external → Apply
-//
-// with the promotion offered on the app's own page once the build lands.
+// a deploy timer. An entry whose image was never published would fail the
+// switch, so a new app is born awaiting its first image: committed to
+// site/apps.json without a rebuild (nix makes nothing for it, and the builder
+// builds it), its first build queued at once, and set up by ONE Apply when
+// that build has published (lib/apps/setup.ts). The form asks where it runs,
+// Lab or Public, and the app's page shows the way there.
 // Step 3 below reports what the box will find when it builds the repo. It
 // gates nothing: no fact about a repository is a reason to refuse a row that
-// starts nothing.
+// starts nothing yet.
 //
 // What this page deliberately cannot do: create the repo or push to it.
 // Daedalus reads a repository's contents and never writes them; all it posts

@@ -493,7 +493,8 @@ erDiagram
   apps {
     uuid id PK
     text name UK "drives hostname, container, pg role, repo"
-    text stage "declared, off, lab or live"
+    text stage "off, lab or live"
+    boolean awaiting_image "a new app before its first image"
     text source_mode "registry or local"
     boolean managed_in_nix "true only for daedalus itself"
     text auth_mode "none, proxy or native"
@@ -501,7 +502,6 @@ erDiagram
     boolean build_on_box
     text build_strategy "auto, railpack or dockerfile"
     text build_publish "live or candidate"
-    jsonb build_env_placeholders
     jsonb railpack_env
     jsonb notes "the why behind each setting"
   }
@@ -630,13 +630,15 @@ Most of this vocabulary is invented here, so it is worth stating plainly.
   `apps.json`, `nodes.json`, the `daedalus.json` stamp and the sops vault. The
   one directory the engine owns.
 - **Drift** — the database and the committed file disagree; an Apply is owed.
-- **Stage** — how much of an app exists, as four rungs: `declared` (the row,
-  its database, data dir and secrets — no container, no ingress), `off` (the
-  container runs, nothing can reach it), `lab` (LAN only), `live` (published
-  through the tunnel). A new app is created `declared`, because the box only
-  builds apps already in the committed registry and an entry whose image does
-  not exist yet would fail the switch and revert its own Apply. The order is
-  create → Apply → build → promote → Apply.
+- **Stage** — how much of an app exists once it runs, as three rungs: `off`
+  (the container runs, nothing can reach it), `lab` (LAN only, shown as Lab),
+  `live` (published through the tunnel, shown as Public).
+- **Awaiting its first image** — a new app between its create and its first
+  image: its apps.json entry carries `awaitingImage`, nix makes nothing for it,
+  and the builder builds it, because the build authorizes an app from the
+  committed registry at run time. The order is create (the `register` verb, no
+  rebuild) → first build → ONE Apply, which creates the app and starts it
+  (app `lib/apps/setup.ts`).
 - **Publish mode** — what a build does with its image: `live` deploys it,
   `candidate` only publishes it ([BUILDS.md](BUILDS.md#publish-modes)).
 - **Lane** — which stream of commits a build belongs to. One queued build per

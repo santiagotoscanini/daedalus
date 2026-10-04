@@ -38,11 +38,12 @@
 #   $LOG_DIR/<id>.log              root 0644, redacted as it is written, capped
 #                                  at 20 MiB; the container reads it at /builds
 #
-# `buildEnv` — { placeholders: { NAME: value }, railpack: { RAILPACK_X: value } }
-# — carries the app's build-time placeholder values and Railpack knobs. Dummy
-# values, never real secrets, but handled as if they were: they reach Railpack
-# through its process environment and BuildKit through secret files, never an
-# argument, a log line or the status. Optional; absent means none.
+# `buildEnv` — { railpack: { RAILPACK_X: value } } — carries the app's Railpack
+# switches (RAILPACK_KNOBS below). They reach Railpack through its process
+# environment, never an argument. Optional; absent means none. The box passes
+# no build secrets at all: a plan that declares one fails detection
+# (3-detect.sh), and a repo that needs a build-time value declares a dummy
+# one in its own railpack.json.
 #
 # ── which apps it builds ──────────────────────────────────────────────────
 #
@@ -170,24 +171,14 @@ CHECKS_LIMIT=30m
 BUILD_SECS=1800
 PUBLISH_SECS=900
 
-# ── the build env rules ───────────────────────────────────────────────────
+# ── the Railpack switches ─────────────────────────────────────────────────
 #
-# The same two rules as the engine's (app/src/lib/builds.ts), refused here on
-# their own because the container can write a request without the engine: a
-# request this host accepts is exactly one the engine's decoder accepts.
-# builds.test.ts reads both assignments out of this file (it sits in the same
-# repository) and fails on any difference, so each stays one
-# `NAME='…'` assignment and changes together with the engine.
-#
-# RESERVED_ENV_RE — names a placeholder may not take: they steer the tools
-# that see placeholders (Railpack, its mise, git, buildctl, the shell, the C
-# library, and in the build steps the toolchains and package managers) rather
-# than the app. Exact names, then prefixes; builds.ts says why each is there.
-# A denylist, not an allowlist, and knowingly so: placeholder names are the
-# app's own env names (DATABASE_URL, MAPBOX_ACCESS_TOKEN, GOOGLE_MAPS_API_KEY
-# …), and no allow pattern admits those while shutting out tool knobs — which
-# is also why Go's variables are listed by name, not as a GO prefix.
-RESERVED_ENV_RE='^(PATH|HOME|SHELL|USER|LOGNAME|PWD|OLDPWD|IFS|ENV|BASH|BASH_ENV|BASHOPTS|SHELLOPTS|CDPATH|GLOBIGNORE|PS4|PROMPT_COMMAND|UID|EUID|PPID|SHLVL|TMPDIR|TZ|LANG|LANGUAGE|TERM|HOSTNAME|GCONV_PATH|GLIBC_TUNABLES|LOCPATH|GITHUB_TOKEN|DAEDALUS_TOKEN_FILE|NO_PROXY|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|FTP_PROXY|GODEBUG|GOFLAGS|GOTRACEBACK|GOENV|GOROOT|GOPATH|GOBIN|GOCACHE|GOCACHEPROG|GOMODCACHE|GOTMPDIR|GOWORK|GOPROXY|GONOPROXY|GOPRIVATE|GOSUMDB|GONOSUMDB|GONOSUMCHECK|GOINSECURE|GOVCS|GOAUTH|GOTOOLCHAIN|GOEXPERIMENT|GO111MODULE|RUSTDOC|RUSTFLAGS|RUSTDOCFLAGS|RUBYOPT|RUBYLIB|GEM_PATH|GEM_HOME|PERLLIB|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$|^(LD_|BASH_FUNC_|GIT_|BUILDKIT_|BUILDCTL_|DOCKER_|MISE_|RAILPACK_|XDG_|LC_|SSL_|NIX_SSL_|CURL_|SYSTEMD_|NPM_CONFIG_|PNPM_|COREPACK_|YARN_|BUN_|NODE_|CGO_|PIP_|UV_|PYTHON|CARGO_|RUSTUP_|RUSTC|BUNDLE_|PERL5)'
+# The engine's rule too (app/src/lib/builds.ts), refused here on its own
+# because the container can write a request without the engine: a request
+# this host accepts is exactly one the engine's decoder accepts.
+# builds.test.ts reads the assignment out of this file (it sits in the same
+# repository) and fails on any difference, so it stays one `NAME='…'`
+# assignment and changes together with the engine.
 #
 # RAILPACK_KNOBS — the Railpack switches passed on, and the pattern each value
 # must match. Nothing else under RAILPACK_ reaches Railpack: every *_CMD, the

@@ -327,7 +327,7 @@ describe('nextToRun', () => {
     expect(next.row).toBe(ready)
     expect(next.held).toHaveLength(1)
     expect(next.held[0]?.row).toBe(unapplied)
-    expect(next.held[0]?.reason).toMatch(/voyra is not in the applied app manifest/)
+    expect(next.held[0]?.reason).toMatch(/voyra is not in the committed app registry/)
   })
 
   it('returns nothing when every queued row is held', () => {

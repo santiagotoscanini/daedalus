@@ -148,15 +148,27 @@ export const createAppFn = adminFn
   .validator(asValidator(withMessage(obj({ app: recordField }), 'expected an app to create')))
   .handler(async ({ data, context }) => {
     const { createAppLinked } = await import('../lib/apps/create')
-    return createAppLinked(await context.ctx(), data.app)
+    return createAppLinked(await context.ctx(), data.app, context.actor)
   })
 
 export const deleteAppFn = adminFn
   .validator(asValidator(withMessage(obj({ name: appNameField }), 'expected an app name')))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { deleteApp } = await import('../lib/repo/apps')
+    const { registerAwaiting } = await import('../lib/apps/setup')
     await deleteApp(data.name)
+    // An app deleted before its first image leaves apps.json at once, rather
+    // than at the next Apply: its entry is what the builder builds it from.
+    await registerAwaiting(await context.ctx(), context.actor)
     return { ok: true }
+  })
+
+/** Retry the step a new app stopped at: its register, its first build, or the Apply that sets it up. */
+export const retryAppSetupFn = adminFn
+  .validator(asValidator(withMessage(obj({ name: appNameField }), 'expected an app name')))
+  .handler(async ({ data, context }): Promise<Result<null>> => {
+    const { retrySetup } = await import('../lib/apps/setup')
+    return retrySetup(await context.ctx(), data.name, context.actor)
   })
 
 export const saveApp = adminFn
@@ -173,18 +185,10 @@ export const saveApp = adminFn
       ),
     ),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
     const { updateApp } = await import('../lib/repo/apps')
     const { validateAppPatch } = await import('../lib/apps/validate')
-    const { stageChangeRefusal } = await import('../lib/apps/image-gate')
-    const patch = validateAppPatch(data.patch)
-    // A rung that runs a container needs an image to pull: refused here, as
-    // the exposure control already says, rather than at the Apply's switch.
-    if (patch.stage !== undefined) {
-      const refused = await stageChangeRefusal(await context.ctx(), data.name, patch.stage)
-      if (refused !== null) throw new Error(refused)
-    }
-    await updateApp(data.name, patch)
+    await updateApp(data.name, validateAppPatch(data.patch))
     return { ok: true }
   })
 

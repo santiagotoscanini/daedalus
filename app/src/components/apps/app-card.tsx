@@ -131,22 +131,17 @@ export const CARD_FOOT = 'mt-auto flex items-center gap-[0.6rem] pt-[0.15rem] [&
 
 /** The exposure chip, by stage — the label included, so the row has nothing
     left to decide. `lab` is the fourth status colour: a fact about where the
-    app is reachable, not a verdict on it. `declared` is dashed, the same
+    app is reachable, not a verdict on it. A new app's chip is dashed, the same
     visual the aside cards use for "listed here, not one of the things being
-    run". */
+    run": it is where the app WILL run. */
 export const STAGE_CHIP: Record<AppStage, { tone: Tone; className: string; label: string }> = {
-  live: { tone: 'ok', className: CHIP, label: 'external' },
+  live: { tone: 'ok', className: CHIP, label: 'public' },
   lab: {
     tone: 'info',
     className: cn(CHIP, 'bg-info/8'),
-    label: 'internal',
+    label: 'lab',
   },
-  off: { tone: 'muted', className: CHIP, label: 'not exposed' },
-  declared: {
-    tone: 'muted',
-    className: cn(CHIP, 'border-dashed'),
-    label: 'declared',
-  },
+  off: { tone: 'muted', className: CHIP, label: 'off' },
 }
 
 export function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
@@ -192,7 +187,11 @@ export function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
         <p className={APP_DESC}>{row.description || '—'}</p>
 
         <div className={CARD_FOOT}>
-          <Chip tone={stage.tone} className={stage.className}>
+          <Chip
+            tone={row.isNew ? 'muted' : stage.tone}
+            className={row.isNew ? cn(CHIP, 'border-dashed') : stage.className}
+            title={row.isNew ? 'Setting up: this is where it will run' : undefined}
+          >
             {stage.label}
           </Chip>
 

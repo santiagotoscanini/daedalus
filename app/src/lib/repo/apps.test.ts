@@ -73,7 +73,6 @@ function recordOf(entry: ManifestEntry): AppRecord {
     githubRepoId: null,
     buildStrategy: 'auto',
     buildPublish: 'live',
-    buildEnvPlaceholders: {},
     railpackEnv: {},
     buildOnBox: false,
     createdAt: NOW,
@@ -136,7 +135,6 @@ describe('engine-only columns', () => {
     githubRepoId: 987_654_321,
     buildStrategy: 'dockerfile',
     buildPublish: 'candidate',
-    buildEnvPlaceholders: { VITE_PUBLIC_KEY: 'placeholder', DATABASE_URL: 'postgres://build' },
     railpackEnv: { RAILPACK_NODE_PLAYWRIGHT_INSTALL: 'true' },
     buildOnBox: true,
   }
@@ -171,7 +169,6 @@ describe('engine-only columns', () => {
       'githubRepoId',
       'buildStrategy',
       'buildPublish',
-      'buildEnvPlaceholders',
       'railpackEnv',
       'buildOnBox',
     ]) {
@@ -188,8 +185,22 @@ describe('driftOf', () => {
     expect(driftOf(record, entry)).toEqual([])
   })
 
-  it('flags an app nix has not built yet', () => {
-    expect(driftOf(recordOf(RICH), undefined)).toEqual(['not in the last Nix build'])
+  it('flags an app nix has not set up yet: not built, or built awaiting its image', () => {
+    expect(driftOf(recordOf(RICH), undefined)).toEqual(['set up'])
+    expect(driftOf(recordOf(RICH), { ...RICH, awaitingImage: true })).toEqual(['set up'])
+  })
+
+  it('never reports an app still awaiting its first image: nothing of it is built', () => {
+    const record = { ...recordOf(RICH), awaitingImage: true }
+    expect(driftOf(record, undefined)).toEqual([])
+    expect(driftOf(record, { ...RICH, awaitingImage: true })).toEqual([])
+  })
+
+  it('writes the marker only while it holds, so a set-up entry keeps its bytes', () => {
+    const plain = renderRegistryFile(toRegistryExport([recordOf(RICH)]))
+    const awaiting = toRegistryExport([{ ...recordOf(RICH), awaitingImage: true }])
+    expect(awaiting.apps.demo?.awaitingImage).toBe(true)
+    expect(plain).not.toContain('awaitingImage')
   })
 
   it('never reports a nix-declared app, and shows it as its manifest says', () => {
@@ -334,10 +345,9 @@ describe('driftOf', () => {
       validateAppPatch({ stage: 'live', postgres: true, limitCpus: 1.5, image: null }),
     ).toEqual({ stage: 'live', postgres: true, limitCpus: 1.5, image: null })
 
-    // The promote patch, which is how an app leaves `declared`, and the
-    // demote back to it — both plain stage edits.
-    expect(validateAppPatch({ stage: 'declared' })).toEqual({ stage: 'declared' })
-    expect(() => validateAppPatch({ stage: 'production' })).toThrow('declared | off | lab | live')
+    expect(validateAppPatch({ stage: 'off' })).toEqual({ stage: 'off' })
+    expect(() => validateAppPatch({ stage: 'declared' })).toThrow('off | lab | live')
+    expect(() => validateAppPatch({ stage: 'production' })).toThrow('off | lab | live')
     expect(() => validateAppPatch({ authMode: 'oauth' })).toThrow('none | proxy | native')
     expect(() => validateAppPatch({ postgres: 'yes' })).toThrow('boolean')
     expect(() => validateAppPatch({ deployEnable: 'frozen' })).toThrow('boolean')
@@ -352,6 +362,7 @@ describe('driftOf', () => {
   it('validateNewApp accepts the create shape and refuses the rest', () => {
     const good = {
       name: 'demo',
+      stage: 'lab',
       description: 'x',
       postgres: true,
       storage: false,
@@ -361,12 +372,12 @@ describe('driftOf', () => {
       hostname: null,
     }
     expect(validateNewApp(good)).toEqual(good)
-    // A new app is born `declared` — there is nothing to choose, and a caller
-    // asking for anything else is told so rather than quietly given a row that
-    // would fail its first Apply.
-    expect(validateNewApp({ ...good, stage: 'declared' })).toEqual(good)
-    expect(() => validateNewApp({ ...good, stage: 'live' })).toThrow('cannot be chosen at create')
-    expect(() => validateNewApp({ ...good, stage: 'lab' })).toThrow('Promote it')
+    expect(validateNewApp({ ...good, stage: 'live' })).toEqual({ ...good, stage: 'live' })
+    // Lab or Public: nobody creates an app to be unreachable, and there is no
+    // rung below `off` any more.
+    expect(() => validateNewApp({ ...good, stage: 'off' })).toThrow('lab | live')
+    expect(() => validateNewApp({ ...good, stage: 'declared' })).toThrow('lab | live')
+    expect(() => validateNewApp({ ...good, stage: undefined })).toThrow('lab | live')
     expect(() => validateNewApp({ ...good, name: 7 })).toThrow('name must be a string')
     expect(() => validateNewApp({ ...good, postgres: 'yes' })).toThrow('boolean')
     expect(() => validateNewApp({ ...good, hostname: 7 })).toThrow('string or null')

@@ -16,7 +16,6 @@ export type AppBuildFacts = {
   githubRepoId: number | null
   buildStrategy: string
   buildPublish: string
-  buildEnvPlaceholders: Record<string, string>
   railpackEnv: Record<string, string>
 }
 
