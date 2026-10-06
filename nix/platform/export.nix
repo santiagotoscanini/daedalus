@@ -700,12 +700,15 @@ in
       serviceConfig = (import ./lib/hardening-lib.nix).hardening // {
         Type = "oneshot";
         RemainAfterExit = true;
-        # It writes the publish directory and nothing else, offline: made
-        # first, outside the sandbox, which can then write only it.
+        # It writes the publish directory and nothing else, offline. The `-`:
+        # systemd builds the mount sandbox for the `+` pre-start too, and a
+        # ReadWritePaths entry that does not exist yet fails it (226/NAMESPACE)
+        # — on tmpfs, every first start after a boot — so the bind is skipped
+        # until mkdir has made it (see lib/secret-render-lib.nix).
         ExecStartPre = "+${pkgs.coreutils}/bin/mkdir -p -m 0755 ${publishDir}";
         ProtectSystem = "strict";
         ProtectHome = true;
-        ReadWritePaths = [ publishDir ];
+        ReadWritePaths = [ "-${publishDir}" ];
         PrivateDevices = true;
         PrivateNetwork = true;
         RestrictAddressFamilies = "AF_UNIX";

@@ -79,14 +79,20 @@ assert lib.assertMsg (!(lib.hasInfix "$(" content || lib.hasInfix "`" content)) 
     Restart = "on-failure";
     RestartSec = "5s";
     # The render reads what it must (a decrypted secret, a machine-made file
-    # under the state tree) and writes its own directory, nothing else: made
-    # first, outside the sandbox, which can then write only it. No network,
-    # no devices; root only to read other owners' files and to hand the
-    # result to its owner.
+    # under the state tree) and writes its own directory, nothing else. The
+    # privileged pre-start makes that directory — but systemd builds the
+    # mount sandbox for EVERY command, the `+` one included, and a
+    # ReadWritePaths entry whose path does not exist fails that setup
+    # (226/NAMESPACE) before the pre-start that would create it can run: on
+    # tmpfs, every first start after a boot. The `-` prefix lets the bind be
+    # skipped while the directory is absent; the pre-start creates it, and
+    # the main command's sandbox, built afresh, binds it writable. No
+    # network, no devices; root only to read other owners' files and to hand
+    # the result to its owner.
     ExecStartPre = "+${pkgs.coreutils}/bin/install -d -m 0755 -o ${operator.user} -g ${operator.group} ${dir}";
     ProtectSystem = "strict";
     ProtectHome = "read-only";
-    ReadWritePaths = [ dir ];
+    ReadWritePaths = [ "-${dir}" ];
     PrivateNetwork = true;
     PrivateDevices = true;
     RestrictAddressFamilies = "AF_UNIX";
