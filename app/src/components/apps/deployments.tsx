@@ -8,6 +8,7 @@ import type { AppTabData } from '../../server/registry'
 import { When } from '../ago'
 import { EMPTY, FOOT } from '../tokens'
 import { Board, BoardGrid, Chip } from '../viz'
+import { GLASS } from '../viz/board'
 import { BuildsBoard } from './builds'
 import { type AppRecord, CHIP, LEDE, SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
 
@@ -28,7 +29,7 @@ export function Deployments({
           each of them below its content instead, which is what broke the glyph
           away from the repo name onto its own line. `shrink-0` on the children
           makes them wrap as whole units. */}
-      <p className="mt-0 mr-0 mb-[1.2rem] ml-0 flex flex-wrap items-center gap-x-[1.1rem] gap-y-[0.6rem] font-mono text-[0.82rem] [&>*]:shrink-0">
+      <p className="mt-0 mr-0 mb-5 ml-0 flex flex-wrap items-center gap-x-4 gap-y-2.5 font-mono text-[0.82rem] [&>*]:shrink-0">
         {app.sourceMode === 'local' ? (
           <>
             <span className="text-subdued">⎇ stacks/{app.name}/app</span>
@@ -47,7 +48,7 @@ export function Deployments({
       </p>
 
       {app.sourceMode !== 'local' && (
-        <div className="mb-[0.8rem]">
+        <div className="mb-3">
           <BoardGrid>
             <BuildsBoard
               app={app.name}
@@ -78,9 +79,9 @@ export function Deployments({
           {/* The rail is the list's own ::before, inset top and bottom so it
               starts and ends at the first and last node rather than running
               past them. */}
-          <ol className="relative m-0 list-none p-0 pl-6 before:absolute before:top-3 before:bottom-3 before:left-[5px] before:w-px before:bg-border before:content-['']">
+          <ol className="relative m-0 list-none p-0 pl-6 before:absolute before:top-3 before:bottom-3 before:left-[5px] before:w-px before:bg-hairline before:content-['']">
             {td.deployments.map((d) => (
-              <li key={d.id} className="relative mb-[0.6rem]">
+              <li key={d.id} className="relative mb-3">
                 <span
                   className={cn(
                     'absolute top-[1.15rem] -left-6 size-[11px] rounded-full border-2 border-background bg-background shadow-[0_0_0_1.5px_var(--tone)]',
@@ -98,13 +99,13 @@ export function Deployments({
                 />
                 <div
                   className={cn(
-                    'rounded-lg border border-subtle bg-card px-[1.05rem] py-[0.8rem]',
-                    d.isCurrent &&
-                      'border-primary/40 bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))]',
+                    GLASS,
+                    'rounded-xl px-4 py-3',
+                    d.isCurrent && 'border-foreground/15 bg-surface-hover',
                   )}
                 >
-                  <div className="flex flex-wrap items-center gap-x-[0.85rem] gap-y-[0.4rem]">
-                    <code className="text-[0.95rem] font-semibold">
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
+                    <code className="text-[0.9rem] font-[560]">
                       {d.shortRevision ?? d.digest.slice(0, 12)}
                     </code>
                     {d.isCurrent ? (
@@ -130,7 +131,7 @@ export function Deployments({
                       </span>
                     )}
                   </div>
-                  <div className="mt-[0.4rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-muted-foreground">
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] text-muted-foreground">
                     <span>{<When at={d.startedAt} />}</span>
                     <span>{ms(d.durationMs)}</span>
                     <code>{d.digest.slice(0, 12)}</code>
@@ -162,7 +163,7 @@ function Activity({ activity }: { activity: ActivityData }) {
         title="Deploy activity"
         icon="logs"
         span={12}
-        aside={<span className="text-[0.73rem] text-muted-foreground">last 6 hours</span>}
+        aside={<span className="text-[0.75rem] text-muted-foreground">last 6 hours</span>}
       >
         {rolled.length === 0 ? (
           <p className={EMPTY}>Nothing in the last 6 hours.</p>
@@ -170,11 +171,11 @@ function Activity({ activity }: { activity: ActivityData }) {
           // Scrolls inside its own bordered box, and takes no negative margins
           // to bleed to the board's edges: a caption follows it, and margins
           // that pulled outward would pull that caption up over the last rows.
-          <div className="max-h-80 overflow-auto overscroll-contain rounded-[9px] border border-subtle bg-background font-mono text-[0.75rem]">
+          <div className="max-h-80 overflow-auto overscroll-contain rounded-xl border border-hairline bg-foreground/[0.03] font-mono text-[0.75rem]">
             {rolled.map((l) => (
               <div
                 key={l.key}
-                className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-[0.7rem] border-t border-t-subtle px-[0.7rem] py-[0.26rem] first:border-t-0"
+                className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-3 border-hairline border-t px-3 py-1 first:border-t-0"
               >
                 {/* Already formatted by the server — see ActivityRow. */}
                 <time className="whitespace-nowrap text-muted-foreground" dateTime={l.ts}>
@@ -185,7 +186,7 @@ function Activity({ activity }: { activity: ActivityData }) {
                   // The repeat count for a folded run. Right-aligned in its own
                   // column so the messages stay on one left edge.
                   <span
-                    className="rounded-[5px] bg-raised px-1 tabular-nums whitespace-nowrap text-muted-foreground"
+                    className="rounded-[5px] bg-foreground/[0.06] px-1 tabular-nums whitespace-nowrap text-muted-foreground"
                     title={`Repeated ${String(l.count)} times, most recently at ${l.lastAt}`}
                   >
                     ×{l.count}

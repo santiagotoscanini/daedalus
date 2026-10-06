@@ -4,7 +4,7 @@ import { cn } from '../../lib/cn'
 import { num } from '../../lib/format'
 import { useSite } from '../../lib/site-context'
 import type { AppTabData } from '../../server/registry'
-import { EMPTY, FOOT } from '../tokens'
+import { EMPTY, FOOT, SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Board, BoardGrid, Stat, StatStrip } from '../viz'
 import {
@@ -71,7 +71,7 @@ export function Access({
   const picker = (
     // Deliberately links, not buttons — the window is in the URL, so a chosen
     // range survives a refresh and can be sent to someone.
-    <nav className="inline-flex gap-[0.15rem] rounded-[8px] border bg-card p-[0.15rem]">
+    <nav className={SEGMENT_TRACK}>
       {ACCESS_WINDOWS.map((w) => (
         <Link
           key={w}
@@ -79,8 +79,9 @@ export function Access({
           params={{ name }}
           search={(prev) => ({ ...prev, tab: 'access' as const, range: w })}
           className={cn(
-            'rounded-[6px] px-[0.6rem] py-[0.2rem] text-[0.8rem] text-subdued no-underline hover:text-foreground hover:no-underline',
-            w === range && 'bg-lifted text-foreground',
+            SEGMENT_ITEM,
+            'px-2.5 py-0.5 text-[0.78rem]',
+            w === range && SEGMENT_ITEM_ON,
           )}
           // "true", not "page": the active window is the current selection,
           // not the current location — the page is the same either side.
@@ -109,8 +110,8 @@ export function Access({
     // margin, for normal flow, is meant to be taken back off so the two do not
     // add up. StatStrip no longer carries a `.strip` class (its box is
     // viz.tsx's STAT_STRIP), so `[&>.strip]:mb-0` currently matches nothing.
-    <div className="flex flex-col gap-[0.85rem] [&>.strip]:mb-0">
-      <div className="flex flex-wrap items-baseline justify-between gap-[0.6rem]">
+    <div className="flex flex-col gap-3.5 [&>.strip]:mb-0">
+      <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         {/* No cap on the measure: the sentence names a hostname and a window
             and belongs on one line whenever the page is wide enough for it. */}
         <p className={cn(LEDE, 'm-0 max-w-none flex-[1_1_20rem]')}>
@@ -121,7 +122,7 @@ export function Access({
       </div>
 
       {access.truncated && (
-        <Alert className="mb-[1.35rem] border-info/35 bg-info/7 text-subdued">
+        <Alert className="mb-5 border-info/35 bg-info/7 text-subdued">
           <AlertDescription>
             More requests than one query can return. The totals below are exact; the breakdowns
             describe the most recent {num(access.sampled)}.

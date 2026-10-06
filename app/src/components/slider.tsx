@@ -47,15 +47,15 @@ export function Slider({
         // without wrapping one word per line. `board` is the query container
         // declared on `BOARD_BODY` (viz.tsx), so the shape follows the panel's
         // width rather than the viewport's.
-        'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-[0.4rem] border-b border-b-subtle py-[0.7rem] last-of-type:border-b-0',
+        'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 border-hairline border-b py-3 last-of-type:border-b-0',
         '@min-[34rem]/board:grid-cols-[minmax(15rem,1fr)_minmax(10rem,1.5fr)_6.5rem] @min-[34rem]/board:gap-x-6 @min-[34rem]/board:gap-y-2',
         disabled === true && 'opacity-50',
       )}
     >
-      <div className="min-w-0 text-[0.9rem]">
+      <div className="min-w-0 text-[0.875rem] text-foreground">
         {label}
         {hint !== undefined && (
-          <small className="mt-[0.15rem] block text-[0.76rem] leading-[1.4] text-muted-foreground">
+          <small className="mt-0.5 block text-[0.75rem] leading-[1.45] text-muted-foreground">
             {hint}
           </small>
         )}
@@ -65,15 +65,15 @@ export function Slider({
         className={cn(
           // Full width under the label in the stacked shape; its own column
           // once the container query has room for one.
-          'col-span-full mt-[0.3rem] w-full cursor-pointer bg-transparent [-webkit-appearance:none] [appearance:none] disabled:cursor-not-allowed',
+          'col-span-full mt-1 w-full cursor-pointer bg-transparent [-webkit-appearance:none] [appearance:none] disabled:cursor-not-allowed',
           '@min-[34rem]/board:col-auto @min-[34rem]/board:mt-0',
           // Track and thumb need both vendor spellings. Each utility emits its
           // own rule, so an engine that does not know one selector drops only
           // that rule rather than the whole declaration block.
-          '[&::-webkit-slider-runnable-track]:h-[3px] [&::-webkit-slider-runnable-track]:rounded-[2px] [&::-webkit-slider-runnable-track]:bg-border',
-          '[&::-moz-range-track]:h-[3px] [&::-moz-range-track]:rounded-[2px] [&::-moz-range-track]:bg-border',
-          '[&::-webkit-slider-thumb]:[-webkit-appearance:none] [&::-webkit-slider-thumb]:[appearance:none] [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:size-[15px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-card',
-          '[&::-moz-range-thumb]:size-[15px] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-card',
+          '[&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-foreground/[0.1]',
+          '[&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-foreground/[0.1]',
+          '[&::-webkit-slider-thumb]:[-webkit-appearance:none] [&::-webkit-slider-thumb]:[appearance:none] [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-card',
+          '[&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-card',
           // At the sentinel the control is OFF, not at zero. Drawn as a solid
           // thumb on a full track it would read as a slider that failed to
           // load its value rather than as a ceiling nobody set.
@@ -92,9 +92,9 @@ export function Slider({
           onChange(v <= OFF ? null : v)
         }}
       />
-      <div className="min-w-[5.5rem] text-right font-mono text-base whitespace-nowrap text-primary [&_small]:ml-[0.2rem] [&_small]:text-[0.72rem] [&_small]:text-muted-foreground">
+      <div className="min-w-[5.5rem] text-right font-mono text-[0.875rem] tabular-nums whitespace-nowrap text-primary [&_small]:ml-1 [&_small]:text-[0.72rem] [&_small]:text-muted-foreground">
         {value === null ? (
-          <span className="text-[0.86rem] text-muted-foreground">uncapped</span>
+          <span className="text-[0.8rem] text-muted-foreground">uncapped</span>
         ) : (
           format(value)
         )}
@@ -121,21 +121,28 @@ export function Toggle({
     <label
       htmlFor={id}
       className={cn(
-        'flex cursor-pointer items-start gap-[0.7rem] border-b border-b-subtle py-[0.55rem] last:border-b-0',
+        'flex cursor-pointer items-start gap-3 border-hairline border-b py-2.5 last:border-b-0',
         disabled === true && 'cursor-not-allowed opacity-50',
       )}
     >
       <Switch
         id={id}
-        className="mt-[0.15rem] disabled:opacity-100"
+        className={cn(
+          // The primitive's 20×36 track, refined: no outline shadow on the
+          // track, a soft contact shadow under the thumb so it reads as a knob.
+          'mt-px shadow-none disabled:opacity-100',
+          '[&>span]:shadow-[0_1px_2px_color-mix(in_oklch,var(--overlay)_30%,transparent),0_0_0_0.5px_color-mix(in_oklch,var(--overlay)_8%,transparent)]',
+        )}
         checked={checked}
         disabled={disabled}
         onCheckedChange={onChange}
       />
-      <span className="text-[0.9rem]">
+      <span className="min-w-0 text-[0.875rem] leading-5 text-foreground">
         {label}
         {hint && (
-          <small className="block text-[0.76rem] leading-[1.4] text-muted-foreground">{hint}</small>
+          <small className="mt-0.5 block text-[0.75rem] leading-[1.45] text-muted-foreground">
+            {hint}
+          </small>
         )}
       </span>
     </label>

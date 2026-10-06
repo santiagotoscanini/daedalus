@@ -1,7 +1,7 @@
 // The registration list: five deep until asked, a usage bar per client.
 
 import { useState } from 'react'
-import { EMPTY, FOOT, SUB } from '../../../components/tokens'
+import { CAPTION, EMPTY, SUB } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Chip } from '../../../components/viz'
 import { DASH, num } from '../../../lib/format'
@@ -14,28 +14,27 @@ const APPS_SHOWN = 5
 /* The "show all N" toggle under the registration list, on `Button
    variant="outline"`. Left-aligned with the rows rather than centred: it is
    the continuation of the list, not a footer action. */
-const BTN_MORE =
-  'mt-[0.35rem] h-auto self-start px-[0.5rem] py-[0.18rem] text-[0.7rem] text-subdued hover:border-foreground/30'
+const BTN_MORE = 'mt-1 h-auto self-start px-2.5 py-1 text-[0.75rem] text-subdued'
 
 /* The registration list. Half-width board, so the name column gives before the
    bar does: the bar is the comparison and a 3rem one compares nothing, while a
    truncated name is still recognisable and has its full form on hover. */
-const APPS = 'mt-[0.5rem] flex list-none flex-col gap-[0.1rem]'
-const APP = '[&[open]>summary]:bg-raised'
+const APPS = 'm-0 mt-1 flex list-none flex-col gap-0.5 p-0'
+const APP = '[&[open]>summary]:bg-foreground/[0.05]'
 const APP_SUMMARY =
-  'grid cursor-pointer list-none grid-cols-[minmax(6rem,11rem)_minmax(3rem,1fr)_2.2rem_auto] items-center gap-[0.6rem] rounded-[7px] px-[0.45rem] py-[0.3rem] text-[0.78rem] hover:bg-raised [&::-webkit-details-marker]:hidden'
+  'grid cursor-pointer list-none grid-cols-[minmax(6rem,11rem)_minmax(3rem,1fr)_2.2rem_auto] items-center gap-2.5 rounded-lg px-2 py-1.5 text-[0.8rem] transition-colors hover:bg-foreground/[0.05] [&::-webkit-details-marker]:hidden'
 /* Every `em` after the name is one badge style: a state that changes what the
    row means ("any account", "proxy gate", "app login"). */
 const APP_NAME =
-  'flex min-w-0 items-center gap-[0.4rem] text-foreground [&>span:first-child]:truncate [&>em]:flex-none [&>em]:rounded-full [&>em]:border [&>em]:border-warning/40 [&>em]:px-[0.35rem] [&>em]:py-[0.02rem] [&>em]:text-[0.6rem] [&>em]:text-warning [&>em]:not-italic'
-const APP_WHEN = 'text-right text-[0.7rem] whitespace-nowrap tabular-nums text-muted-foreground'
-const APP_BODY = 'flex flex-col gap-[0.35rem] pt-[0.3rem] pr-[0.45rem] pb-[0.7rem] pl-[1.2rem]'
+  'flex min-w-0 items-center gap-1.5 text-foreground [&>span:first-child]:truncate [&>em]:flex-none [&>em]:rounded-full [&>em]:bg-warning/[0.13] [&>em]:px-2 [&>em]:py-px [&>em]:text-[0.7rem] [&>em]:leading-[1.15rem] [&>em]:font-[550] [&>em]:text-warning [&>em]:not-italic [&>em]:ring-1 [&>em]:ring-warning/25 [&>em]:ring-inset'
+const APP_WHEN = 'text-right text-[0.72rem] whitespace-nowrap tabular-nums text-muted-foreground'
+const APP_BODY = 'flex flex-col gap-2 pt-1 pr-2 pb-3 pl-5'
 
 /* The usage bar: the list is ordered by recency, so volume is drawn here. */
-const TRACK = 'h-[5px] overflow-hidden rounded-[3px] bg-lifted'
+const TRACK = 'h-1.5 overflow-hidden rounded-full bg-foreground/[0.07]'
 const FILL =
-  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none'
-export const COUNT = 'text-right text-[0.79rem] whitespace-nowrap tabular-nums text-foreground'
+  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none'
+export const COUNT = 'text-right text-[0.8rem] whitespace-nowrap tabular-nums text-foreground'
 
 /**
  * The registration list, five deep until asked.
@@ -153,7 +152,7 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
             </ul>
           )}
           {c.used > c.opens.length && (
-            <p className={FOOT}>
+            <p className={CAPTION}>
               The {num(c.opens.length)} most recent of {num(c.used)}. The rest are in Pocket ID.
             </p>
           )}

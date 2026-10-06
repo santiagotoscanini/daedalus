@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { SourceMeta } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
 import { Ago, When } from '../ago'
+import { ExplainToggle, useExplain } from '../explain'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Skeleton } from '../ui/skeleton'
 import { Chip } from '../viz'
@@ -21,7 +22,7 @@ import { Chip } from '../viz'
 export const MONO = 'font-mono text-[0.8rem] [overflow-wrap:anywhere]'
 
 /** The sentence under a section: what the rows above it mean, or what to do. */
-export const NOTE = 'm-0 text-[0.78rem] text-subdued'
+export const NOTE = 'explain m-0 max-w-[72ch] text-[0.8rem] leading-relaxed text-subdued'
 
 /** The quieter line under a value: when it was read, what it was, what it needs. */
 export const ASIDE = 'text-[0.72rem] text-muted-foreground'
@@ -45,7 +46,7 @@ export function Rows({ rows }: { rows: { k: string; v: ReactNode }[] }) {
           key={r.k}
           className={cn(
             'grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] items-baseline gap-x-6',
-            'border-t border-subtle py-[0.55rem] first:border-t-0 first:pt-0 last:pb-0',
+            'border-t border-hairline py-2.5 first:border-t-0 first:pt-0 last:pb-0',
             'max-[40rem]:grid-cols-1 max-[40rem]:gap-y-1',
           )}
         >
@@ -94,10 +95,11 @@ export function Section({
   rows?: { k: string; v: ReactNode }[]
   children?: ReactNode
 }) {
+  const explain = useExplain()
   return (
     <Card>
       <CardHeader>
-        <CardTitle className={icon === undefined ? undefined : 'flex items-center gap-2'}>
+        <CardTitle className="flex items-center gap-2">
           {typeof icon === 'string' ? (
             <img
               src={icon}
@@ -115,10 +117,15 @@ export function Section({
             </span>
           ) : null}
           {title}
+          <ExplainToggle
+            open={explain.open}
+            onToggle={explain.toggle}
+            className="-my-1 hidden group-has-[.explain]/card:inline-flex"
+          />
         </CardTitle>
         {description !== undefined && <CardDescription>{description}</CardDescription>}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className={cn('flex flex-col gap-4', explain.body)}>
         {rows !== undefined && <Rows rows={rows} />}
         {children}
       </CardContent>

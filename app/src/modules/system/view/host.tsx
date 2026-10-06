@@ -1,6 +1,16 @@
 import { LogBoard } from '../../../components/logs'
 import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../../../components/part'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
+import {
+  CAPTION,
+  EMPTY,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+} from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, duration, num, pct } from '../../../lib/format'
@@ -210,7 +220,7 @@ function RunningBoard({ f }: { f: HostFacts }) {
       />
       {d.containers.down.length > 0 && (
         // Named, not counted — "3 containers down" makes you go hunting.
-        <p className={cn(FOOT, 'text-danger')}>Not answering: {d.containers.down.join(', ')}</p>
+        <p className={cn(CAPTION, 'text-danger')}>Not answering: {d.containers.down.join(', ')}</p>
       )}
     </Board>
   )

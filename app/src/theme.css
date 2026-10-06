@@ -32,7 +32,7 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --background: oklch(1 0 0);
+  --background: oklch(0.995 0.001 270);
   --foreground: oklch(0.1448 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.1448 0 0);
@@ -54,8 +54,8 @@
   --destructive: oklch(0.5794 0.1776 23.72);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
+  --border: oklch(0.905 0.003 75);
+  --input: oklch(0.89 0.003 75);
   --ring: oklch(0.6881 0.1381 37.27);
 
   /* The status triad. `success`/`warning`/`danger` are not shadcn names —
@@ -81,7 +81,7 @@
   --chart-4: oklch(0.5794 0.1776 23.72);
   --chart-5: oklch(0.5 0 0);
 
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: oklch(0.972 0.002 270);
   --sidebar-foreground: oklch(0.1448 0 0);
   --sidebar-primary: oklch(0.6881 0.1381 37.27);
   --sidebar-primary-foreground: oklch(0.1448 0 0);
@@ -93,9 +93,9 @@
   --radius: 10px;
 
   /* The app's own five (see the header). */
-  --panel-2: oklch(0.968 0 0);
-  --raise: oklch(0.94 0 0);
-  --border-soft: oklch(0.93 0 0);
+  --panel-2: oklch(0.962 0.003 75);
+  --raise: oklch(0.935 0.003 75);
+  --border-soft: oklch(0.925 0.003 75);
   --text-muted: oklch(0.44 0 0);
   --brand-dim: oklch(0.5698 0.134 36.78);
 }
@@ -103,34 +103,32 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  /* Geist-style dark: the page and the cards share ONE surface and the
-     border does the separating — a card is drawn, not raised. Stepping
-     the surfaces instead (#08080a → #111113 → #17171a) with borders too
-     faint to see is the low-contrast wash that read as unfinished. So
-     `--card` equals `--background` deliberately; `--panel-2`/`--raise`
-     below remain for genuinely interactive layers (hover fills, menus,
-     toggles), never for a resting card. */
-  --background: oklch(0.1448 0 0);
-  --foreground: oklch(0.9461 0 0);
-  --card: oklch(0.1448 0 0);
-  --card-foreground: oklch(0.9461 0 0);
-  --popover: oklch(0.2002 0 0);
-  --popover-foreground: oklch(0.9461 0 0);
+  /* Dark grey, not black — the Linear / Notion ladder. Three steps, each a
+     little lighter: the canvas the rail sits on (`--sidebar`), the content
+     panel inset into it (`--background`), and the boards on the panel
+     (`--surface`, a veil derived below). A hint of cool hue keeps the greys
+     from reading as brown next to the warm accent. */
+  --background: oklch(0.2 0.004 270);
+  --foreground: oklch(0.94 0.002 270);
+  --card: oklch(0.23 0.004 270);
+  --card-foreground: oklch(0.94 0.002 270);
+  --popover: oklch(0.245 0.004 270);
+  --popover-foreground: oklch(0.94 0.002 270);
 
   --primary: oklch(0.6881 0.1381 37.27);
   --primary-foreground: oklch(0.1448 0 0);
 
-  --secondary: oklch(0.2002 0 0);
-  --secondary-foreground: oklch(0.9461 0 0);
-  --muted: oklch(0.2002 0 0);
-  --muted-foreground: oklch(0.709 0 0);
-  --accent: oklch(0.2393 0 0);
-  --accent-foreground: oklch(0.9461 0 0);
+  --secondary: oklch(0.25 0.004 270);
+  --secondary-foreground: oklch(0.94 0.002 270);
+  --muted: oklch(0.25 0.004 270);
+  --muted-foreground: oklch(0.68 0.006 270);
+  --accent: oklch(0.28 0.004 270);
+  --accent-foreground: oklch(0.94 0.002 270);
   --destructive: oklch(0.6294 0.1776 23.72);
   --destructive-foreground: oklch(0.1448 0 0);
 
-  --border: oklch(0.3012 0 0);
-  --input: oklch(0.3012 0 0);
+  --border: oklch(0.3 0.004 270);
+  --input: oklch(0.31 0.004 270);
   --ring: oklch(0.6881 0.1381 37.27);
 
   --success: oklch(0.6637 0.1114 158.88);
@@ -145,20 +143,71 @@
   --chart-4: oklch(0.6294 0.1776 23.72);
   --chart-5: oklch(0.709 0 0);
 
-  --sidebar: oklch(0.1448 0 0);
+  --sidebar: oklch(0.172 0.004 270);
   --sidebar-foreground: oklch(0.9461 0 0);
   --sidebar-primary: oklch(0.6881 0.1381 37.27);
   --sidebar-primary-foreground: oklch(0.1448 0 0);
-  --sidebar-accent: oklch(0.2393 0 0);
+  --sidebar-accent: oklch(0.24 0.004 270);
   --sidebar-accent-foreground: oklch(0.9461 0 0);
   --sidebar-border: oklch(0.3012 0 0);
   --sidebar-ring: oklch(0.6881 0.1381 37.27);
 
-  --panel-2: oklch(0.2002 0 0);
-  --raise: oklch(0.2393 0 0);
-  --border-soft: oklch(0.2478 0 0);
-  --text-muted: oklch(0.709 0 0);
+  --panel-2: oklch(0.25 0.004 270);
+  --raise: oklch(0.285 0.004 270);
+  --border-soft: oklch(0.275 0.004 270);
+  --text-muted: oklch(0.76 0.004 270);
   --brand-dim: oklch(0.5698 0.134 36.78);
+}
+
+/* ── The glass layer ──────────────────────────────────────────────────────
+   Derived, never stored: every value below is a mix of the themeable
+   tokens above, so a preset that moves the accent moves the glow with it
+   and none of these needs a preset entry.
+
+     --surface        a resting board: a veil over the canvas, not a fill
+     --surface-hover  the same veil, one step up, under a pointer
+     --hairline       a glass edge — the board's border, a divider
+     --hairline-hi    the lit top edge of a raised layer (inset shadow)
+     --chrome         rail, apply bar, menus: the layers that blur what
+                      scrolls beneath them
+     --glow-a/-b      the ambient light on the canvas (styles.css, body)
+     --board-shadow   a board's depth: a contact shadow and a soft drop
+     --float-shadow   a layer above the page: menus, the palette, the bar
+
+   Light needs its own mixes: on a light page a veil is mostly white and
+   the edge is a dark hairline, the exact inverse of dark. */
+:root,
+[data-theme="light"] {
+  --surface: color-mix(in oklch, var(--card) 78%, transparent);
+  --surface-hover: var(--card);
+  --hairline: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --hairline-hi: color-mix(in oklch, var(--card) 90%, transparent);
+  --chrome: color-mix(in oklch, var(--background) 72%, transparent);
+  --glow-a: color-mix(in oklch, var(--primary) 6%, transparent);
+  --glow-b: color-mix(in oklch, var(--info) 6%, transparent);
+  --board-shadow:
+    0 0 0 0.5px color-mix(in oklch, var(--foreground) 3%, transparent),
+    0 1px 2px color-mix(in oklch, var(--overlay) 4%, transparent),
+    0 8px 24px -14px color-mix(in oklch, var(--overlay) 14%, transparent);
+  --float-shadow:
+    0 1px 2px color-mix(in oklch, var(--overlay) 6%, transparent),
+    0 18px 50px -12px color-mix(in oklch, var(--overlay) 22%, transparent);
+}
+
+[data-theme="dark"] {
+  --surface: color-mix(in oklch, var(--foreground) 2.6%, transparent);
+  --surface-hover: color-mix(in oklch, var(--foreground) 4.5%, transparent);
+  --hairline: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --hairline-hi: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --chrome: color-mix(in oklch, var(--background) 78%, transparent);
+  --glow-a: color-mix(in oklch, var(--primary) 5%, transparent);
+  --glow-b: color-mix(in oklch, var(--info) 6%, transparent);
+  --board-shadow:
+    0 1px 2px color-mix(in oklch, var(--overlay) 30%, transparent),
+    0 10px 30px -16px color-mix(in oklch, var(--overlay) 60%, transparent);
+  --float-shadow:
+    0 1px 2px color-mix(in oklch, var(--overlay) 40%, transparent),
+    0 24px 60px -12px color-mix(in oklch, var(--overlay) 70%, transparent);
 }
 
 /* One definition, three consumers: the shell's first grid column, the
@@ -168,14 +217,14 @@
    remember to move it too. Not themeable, so it sits outside both
    blocks. */
 :root {
-  --sidebar-w: 232px;
+  --sidebar-w: 244px;
 }
 
 /* The rail collapsed to a column of icons. Desktop only — the media query
    is what keeps a phone from inheriting it, see below. */
 @media (width >= 52rem) {
   :root[data-nav="collapsed"] {
-    --sidebar-w: 64px;
+    --sidebar-w: 60px;
   }
 }
 
@@ -253,15 +302,23 @@
   --color-subtle: var(--border-soft);
   --color-subdued: var(--text-muted);
   --color-primary-dim: var(--brand-dim);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-hairline: var(--hairline);
+  --color-chrome: var(--chrome);
+
+  --shadow-board: var(--board-shadow);
+  --shadow-float: var(--float-shadow);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 6px);
 
   /* The two families the hand-written CSS already used. Restated as
      Tailwind tokens so `font-sans` / `font-mono` and the legacy `.mono`
      class cannot drift apart. */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }

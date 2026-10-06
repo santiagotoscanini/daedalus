@@ -3,7 +3,8 @@ import type { ComponentType } from 'react'
 
 import { cn } from '../../lib/cn'
 import { PRESETS, type Scheme, type ThemeChoice, type ThemePreset } from '../../lib/theme'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from '../tokens'
+import { NOTE, Section } from './shared'
 
 const SCHEME_OPTIONS: readonly {
   id: Scheme
@@ -14,6 +15,8 @@ const SCHEME_OPTIONS: readonly {
   { id: 'dark', label: 'Dark', icon: MoonIcon },
   { id: 'system', label: 'System', icon: MonitorIcon },
 ]
+
+const FOCUS = 'focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2'
 
 export function Appearance({
   value,
@@ -28,65 +31,54 @@ export function Appearance({
     // `aria-busy` rather than disabling the controls while a save is in
     // flight: the change has already been applied to the page, so a
     // second click is a new choice, not a duplicate submission.
-    <div className="flex flex-col gap-6" aria-busy={saving}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Colour scheme</CardTitle>
-          <CardDescription>
-            System follows the device this page is open on, resolved before the first paint.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3">
-            {SCHEME_OPTIONS.map((o) => {
-              const Icon = o.icon
-              const selected = value.scheme === o.id
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => onChange({ ...value, scheme: o.id })}
-                  className={cn(
-                    'flex min-w-28 cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5',
-                    'text-sm transition-colors',
-                    'focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2',
-                    selected
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground',
-                  )}
-                >
-                  <Icon className="size-4" />
-                  {o.label}
-                </button>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-5" aria-busy={saving}>
+      <Section title="Colour scheme">
+        {/* One of three: the segmented control every "one of these" uses. */}
+        <div className={cn(SEGMENT_TRACK, 'self-start')}>
+          {SCHEME_OPTIONS.map((o) => {
+            const Icon = o.icon
+            const selected = value.scheme === o.id
+            return (
+              <button
+                key={o.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => onChange({ ...value, scheme: o.id })}
+                className={cn(
+                  SEGMENT_ITEM,
+                  'min-w-24 justify-center',
+                  FOCUS,
+                  selected && SEGMENT_ITEM_ON,
+                )}
+              >
+                <Icon className="size-[15px]" />
+                {o.label}
+              </button>
+            )
+          })}
+        </div>
+        <p className={NOTE}>
+          System follows the device this page is open on, resolved before the first paint.
+        </p>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Palette</CardTitle>
-          <CardDescription>
-            A palette sets the accent and leaves the neutrals alone. It applies to this whole
-            control plane, including the pages written before any of this existed.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {PRESETS.map((p) => (
-              <PresetCard
-                key={p.id}
-                preset={p}
-                scheme={value.scheme}
-                selected={p.id === value.presetId}
-                onSelect={() => onChange({ ...value, presetId: p.id })}
-              />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <Section title="Palette">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {PRESETS.map((p) => (
+            <PresetCard
+              key={p.id}
+              preset={p}
+              scheme={value.scheme}
+              selected={p.id === value.presetId}
+              onSelect={() => onChange({ ...value, presetId: p.id })}
+            />
+          ))}
+        </div>
+        <p className={NOTE}>
+          A palette sets the accent and leaves the neutrals alone. It applies to this whole control
+          plane, including the pages written before any of this existed.
+        </p>
+      </Section>
     </div>
   )
 }
@@ -129,14 +121,15 @@ function PresetCard({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        'flex cursor-pointer flex-col items-start gap-3 rounded-lg border p-4 text-left',
-        'transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2',
-        selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/50',
+        'flex cursor-pointer flex-col items-start gap-3 rounded-xl border border-hairline bg-foreground/[0.025] p-4 text-left',
+        'shadow-[inset_0_1px_0_var(--hairline-hi)] transition-[background-color,box-shadow] duration-150',
+        FOCUS,
+        selected ? 'bg-foreground/[0.06] ring-2 ring-primary/60' : 'hover:bg-foreground/[0.05]',
       )}
     >
       <span className="flex w-full items-center gap-2">
-        <span className="font-medium text-sm">{preset.label}</span>
-        {selected && <CheckIcon className="ml-auto size-4 text-primary" />}
+        <span className="text-[0.875rem] [font-weight:560]">{preset.label}</span>
+        {selected && <CheckIcon aria-hidden="true" className="ml-auto size-4 text-primary" />}
       </span>
       <span className="flex gap-1.5">
         {swatches.map((c, i) => (
@@ -146,12 +139,12 @@ function PresetCard({
             // colour twice.
             // biome-ignore lint/suspicious/noArrayIndexKey: see above
             key={i}
-            className="size-5 rounded-full border border-border/60"
+            className="size-5 rounded-full shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--foreground)_14%,transparent)]"
             style={{ background: c }}
           />
         ))}
       </span>
-      <span className="text-muted-foreground text-xs leading-snug">{preset.note}</span>
+      <span className="text-[0.75rem] text-muted-foreground leading-snug">{preset.note}</span>
     </button>
   )
 }

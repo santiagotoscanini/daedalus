@@ -30,11 +30,11 @@ const CHANNEL_TONE: Record<string, Tone> = {
 }
 
 const OPTION = cn(
-  'flex w-full min-w-0 cursor-pointer items-center gap-[0.6rem] rounded-[8px] border px-[0.6rem] py-[0.4rem] text-left',
-  'border-subtle bg-raised hover:bg-lifted',
+  'flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors',
+  'border-hairline bg-foreground/[0.03] hover:bg-foreground/[0.05]',
 )
-const OPTION_ON = 'border-primary/60 bg-lifted'
-const CONFIRM = 'rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem]'
+const OPTION_ON = 'border-primary/60 bg-foreground/[0.075] hover:bg-foreground/[0.075]'
+const CONFIRM = 'rounded-xl border border-warning/30 bg-warning/[0.07] px-3.5 py-3'
 
 const PHASE: Record<string, string> = {
   validating: 'checking the request',
@@ -93,7 +93,7 @@ export function VersionBoard({
       }
     >
       {update.mojangAhead && latest !== null && (
-        <Alert variant="warning" className="mb-[0.6rem]">
+        <Alert variant="warning">
           <AlertTitle>
             Minecraft {latest} is out, and this server runs {version}. Players on {latest} cannot
             join.
@@ -120,7 +120,7 @@ export function VersionBoard({
       ) : (
         // One choice out of several: real radios, each option a label that
         // carries chips and a date a segmented control has no room for.
-        <fieldset className="m-0 flex min-w-0 flex-col gap-[0.3rem] border-0 p-0">
+        <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
           <legend className="sr-only">Version to move to</legend>
           {update.options.map((o, i) => (
             <label
@@ -143,8 +143,8 @@ export function VersionBoard({
                   setTyped('')
                 }}
               />
-              <span className={cn(MONO, 'text-[0.84rem] text-foreground')}>{o.version}</span>
-              <span className={cn(MONO, 'text-[0.76rem] text-subdued')}>build {o.build}</span>
+              <span className={cn(MONO, 'text-[0.875rem] text-foreground')}>{o.version}</span>
+              <span className={cn(MONO, 'text-[0.75rem] text-subdued')}>build {o.build}</span>
               <Chip tone={CHANNEL_TONE[o.channel] ?? 'muted'}>{o.channel.toLowerCase()}</Chip>
               {o.newGame && <Chip tone="info">new game</Chip>}
               {i === 0 && !o.preRelease && <Chip tone="ok">recommended</Chip>}
@@ -155,11 +155,11 @@ export function VersionBoard({
       )}
 
       {chosen !== null && (
-        <div className="mt-[0.6rem] flex flex-col gap-[0.5rem]">
+        <div className="flex flex-col gap-2">
           {needsConfirm && (
             <div className={CONFIRM}>
               {chosen.newGame && (
-                <p className="m-0 text-[0.78rem]">
+                <p className="m-0 text-[0.8rem]">
                   <strong>One way.</strong> {chosen.version} converts the world the first time it
                   starts, and {version} cannot open it afterwards. The world's dataset is
                   snapshotted first: if the server does not come back on {chosen.version}, the
@@ -168,7 +168,7 @@ export function VersionBoard({
                 </p>
               )}
               {chosen.preRelease && (
-                <p className="m-0 mt-[0.3rem] text-[0.78rem]">
+                <p className="m-0 mt-1.5 text-[0.8rem]">
                   <strong>
                     Paper marks build {chosen.build} {chosen.channel.toLowerCase()}.
                   </strong>{' '}
@@ -181,11 +181,11 @@ export function VersionBoard({
                 value={typed}
                 disabled={running}
                 onChange={setTyped}
-                className="mt-[0.45rem]"
+                className="mt-2.5"
               />
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-[0.6rem]">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Button
               type="button"
               size="sm"
@@ -233,26 +233,26 @@ function Progress({
   running: boolean
   refusal: string | null
 }) {
-  if (refusal !== null) return <p className={cn(NOTE, 'mt-[0.4rem] text-danger')}>{refusal}</p>
+  if (refusal !== null) return <p className={cn(NOTE, 'm-0 text-danger')}>{refusal}</p>
   if (s.id === null || s.target !== 'minecraft') return null
   const moved = s.moves.map((m) => `${m.field} ${m.from} → ${m.to}`).join(', ')
   if (running || s.state === 'running') {
     return (
-      <p className={cn(NOTE, 'mt-[0.4rem]')}>
+      <p className={cn(NOTE, 'm-0')}>
         {PHASE[s.phase] ?? s.phase}…{moved === '' ? '' : ` (${moved})`}
       </p>
     )
   }
   if (s.state === 'done' && s.phase === REBOOT_REQUIRED) {
     return (
-      <div className="mt-[0.4rem]">
+      <div>
         <RebootRequired note={s.error} />
       </div>
     )
   }
   if (s.state === 'done') {
     return (
-      <p className={cn(NOTE, 'mt-[0.4rem] text-success')}>
+      <p className={cn(NOTE, 'm-0 text-success')}>
         {s.phase === 'no-change'
           ? 'already there — nothing to move'
           : `updated${moved === '' ? '' : `: ${moved}`}${s.commit === null || s.commit === '' ? '' : ` (commit ${s.commit})`}.`}
@@ -267,7 +267,7 @@ function Progress({
   }
   if (s.state === 'failed') {
     return (
-      <Alert variant="destructive" className="mt-[0.5rem]">
+      <Alert variant="destructive">
         <AlertTitle>
           The update failed while {PHASE[s.phase] ?? s.phase}
           {s.rolledBack ? ', and was rolled back' : ''}.

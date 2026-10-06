@@ -7,6 +7,7 @@ import { Board, BoardGrid, Facts, Progress } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { bytes, daysAgo, inDays, num } from '../../../../lib/format'
 import {
+  CAPTION,
   EMPTY,
   FEED,
   FEED_EVENT,
@@ -30,8 +31,8 @@ import { WANTED_NEIGHBOURS } from './shared'
 /* What is coming: a title with its episode under it, and a date on the right.
    The date is brand-coloured because it is the reading; one already on disk
    goes grey, since there is nothing left to wait for. */
-const UPNEXT = `${LIST} gap-[0.3rem]`
-const UPNEXT_ROW = 'flex items-baseline justify-between gap-[0.7rem] text-[0.82rem]'
+const UPNEXT = `${LIST} gap-1.5`
+const UPNEXT_ROW = 'flex items-baseline justify-between gap-3 text-[0.8rem]'
 const UPNEXT_TITLE = 'min-w-0 truncate'
 const UPNEXT_SUB = 'block truncate text-[0.72rem] text-muted-foreground not-italic'
 const UPNEXT_WHEN = 'whitespace-nowrap text-[0.75rem]'
@@ -157,7 +158,7 @@ function TheLibraryBoard({ f }: { f: ArrFacts }) {
             }
             tone="info"
           />
-          <p className={FOOT}>
+          <p className={CAPTION}>
             {bytes(disk.freeBytes)} free of {bytes(disk.totalBytes)}
           </p>
         </div>

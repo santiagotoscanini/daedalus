@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 // scrolled up — then it stays where they left it until they scroll back down.
 
 const LOG_BOX =
-  'm-0 max-h-[36rem] overflow-auto overscroll-contain rounded-[9px] border border-subtle bg-background p-3 font-mono text-[0.74rem] leading-[1.5] whitespace-pre text-subdued'
+  'm-0 max-h-[36rem] overflow-auto overscroll-contain rounded-xl border border-hairline bg-foreground/[0.03] p-3 font-mono text-[0.75rem] leading-[1.5] whitespace-pre text-subdued'
 
 export function FollowLog({ text }: { text: string }) {
   const logRef = useRef<HTMLPreElement>(null)

@@ -29,18 +29,19 @@ import type { AppRecord } from './shared'
 // `driftOf` compares these rows against the nix manifest.
 
 const FIELD = INPUT_ROW
-const SMALL_BTN = 'h-auto px-[0.6rem] py-[0.2rem] text-[0.76rem] text-subdued'
-const LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-muted-foreground'
+const SMALL_BTN = 'h-auto px-2.5 py-1 text-[0.75rem] text-subdued'
+const LEGEND =
+  'explain mt-0 mr-0 mb-3 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground'
 // Three columns, not two: the name, the value, and the actions in a column
 // of their own so they line up down the page. Trailing the buttons after the
 // value put them at a different x in every row and wrapped them onto a second
 // line whenever a value was long — a Mapbox token is long — which made one
 // row taller than its neighbours for no reason a reader could use.
 const ROW =
-  'grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] items-baseline gap-x-[1.25rem] gap-y-[0.15rem] border-b border-b-subtle py-[0.6rem] last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)_auto]'
+  'grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] items-baseline gap-x-5 gap-y-0.5 border-hairline border-b py-2.5 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)_auto]'
 /** The note belongs under the value, not beside the key, and needs air above it. */
 const NOTE_CELL =
-  'col-start-2 col-end-4 mt-[0.35rem] mb-0 text-[0.76rem] leading-[1.45] text-muted-foreground max-[60rem]:col-start-1'
+  'col-start-2 col-end-4 mt-1.5 mb-0 text-[0.75rem] leading-[1.5] text-muted-foreground max-[60rem]:col-start-1'
 
 export function Variables({
   app,
@@ -91,11 +92,7 @@ export function Variables({
         icon="rows"
         span={12}
         aside={
-          saving ? (
-            <span className="text-[0.72rem] tracking-normal text-muted-foreground normal-case">
-              saving…
-            </span>
-          ) : null
+          saving ? <span className="text-[0.75rem] text-muted-foreground">saving…</span> : null
         }
       >
         <p className={LEGEND}>
@@ -107,13 +104,13 @@ export function Variables({
         </p>
 
         {error !== null && (
-          <Alert className="mb-[0.9rem] border-danger/35 bg-danger/7">
+          <Alert className="mb-4 border-danger/35 bg-danger/7">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
         {readOnly && (
-          <Alert className="mb-[0.9rem]">
+          <Alert className="mb-4">
             <AlertDescription>
               {app.name} is declared by hand in Nix, so its variables are read-only here.
             </AlertDescription>
@@ -206,7 +203,7 @@ export function Variables({
         </div>
 
         {!readOnly && (
-          <div className="mt-[0.9rem]">
+          <div className="mt-4">
             {form === '' ? (
               <VariableForm
                 fixedKey={null}
@@ -237,7 +234,7 @@ export function Variables({
           </div>
         )}
 
-        <p className="mt-[0.9rem] mr-0 mb-0 ml-0 text-[0.76rem] text-muted-foreground">
+        <p className="explain mt-4 mr-0 mb-0 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground">
           A change is saved here straight away and reaches the container at the next <b>Apply</b>,
           which writes <code>site/apps.json</code>, rebuilds and restarts it. Until then the Apps
           page shows this app as changed.
@@ -342,8 +339,8 @@ function VariableForm({
           setNote(e.target.value)
         }}
       />
-      {keyBad !== null && <span className="text-[0.76rem] text-danger">{keyBad}</span>}
-      {valueBad !== null && <span className="text-[0.76rem] text-danger">{valueBad}</span>}
+      {keyBad !== null && <span className="text-[0.75rem] text-danger">{keyBad}</span>}
+      {valueBad !== null && <span className="text-[0.75rem] text-danger">{valueBad}</span>}
     </form>
   )
 }

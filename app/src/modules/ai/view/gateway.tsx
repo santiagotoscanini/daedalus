@@ -1,4 +1,14 @@
-import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../../../components/tokens'
+import {
+  CAPTION,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+  SUB,
+} from '../../../components/tokens'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { GatewayData } from '../data/gateway'
@@ -46,13 +56,13 @@ export function GatewayView({ data }: { data: GatewayData }) {
               </span>
             }
           >
-            {routing.error !== null && <p className={FOOT}>{routing.error}</p>}
+            {routing.error !== null && <p className={CAPTION}>{routing.error}</p>}
             {ordered.map(([group, routes]) => (
               <div key={group}>
                 <p className={SUB}>
                   {group === 'config.yaml'
-                    ? 'from config.yaml, kept by hand'
-                    : `provided by ${group}`}
+                    ? 'From config.yaml, kept by hand'
+                    : `Provided by ${group}`}
                 </p>
                 <ul className={LIST}>
                   {routes.map((r) => (
@@ -60,9 +70,7 @@ export function GatewayView({ data }: { data: GatewayData }) {
                       <Chip tone={r.daedalus === null ? 'muted' : 'ok'}>{modeWord(r.mode)}</Chip>
                       <span className={ROW_MAIN}>
                         <b className="font-[550]">{r.alias}</b>
-                        <span className={`ml-[0.4rem] ${MONO} text-muted-foreground`}>
-                          {r.upstream}
-                        </span>
+                        <span className={`ml-1.5 ${MONO} text-muted-foreground`}>{r.upstream}</span>
                       </span>
                       <span className={ROW_SIDE}>{r.host ?? 'no api_base'}</span>
                     </li>
@@ -71,7 +79,7 @@ export function GatewayView({ data }: { data: GatewayData }) {
               </div>
             ))}
             {routing.routes.length === 0 && routing.error === null && (
-              <p className={FOOT}>The gateway publishes no model.</p>
+              <p className={CAPTION}>The gateway publishes no model.</p>
             )}
             <p className={FOOT}>
               A route written by daedalus carries the machine and provider it came from and follows

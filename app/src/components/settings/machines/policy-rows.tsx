@@ -8,6 +8,7 @@ import { NodeCommandButton } from '../../node-command'
 import { Input } from '../../ui/input'
 import { Picker } from '../../ui/picker'
 import { Switch } from '../../ui/switch'
+import { CONTROL_H } from '../form'
 import { ASIDE, Mono, Stack } from '../shared'
 import type { Row } from './policy'
 import { SantreeGrant } from './santree-grant'
@@ -102,6 +103,7 @@ export function policyClaude(ed: PolicyEditor, n: NodeRow): Row[] {
       v: (
         <Stack className="w-full max-w-[28rem]">
           <Input
+            className={CONTROL_H}
             value={ed.workdir}
             placeholder="the most recently used trusted project"
             maxLength={260}
@@ -181,6 +183,7 @@ export function policyHardware(ed: PolicyEditor, n: NodeRow, shape: MachineShape
         v: (
           <Stack className="w-full max-w-[28rem]">
             <Picker
+              className={CONTROL_H}
               value={n.policy.hardware?.finish ?? NONE}
               busy={ed.busy}
               failed={ed.failed}
@@ -208,6 +211,7 @@ export function policyHardware(ed: PolicyEditor, n: NodeRow, shape: MachineShape
     v: (
       <Stack className="w-full max-w-[28rem]">
         <Picker
+          className={CONTROL_H}
           value={n.policy.hardware?.[kind] ?? NONE}
           busy={ed.busy}
           failed={ed.failed}

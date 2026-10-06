@@ -1,7 +1,7 @@
 import { bytes, DASH } from '../../lib/format'
 import type { AppTabData } from '../../server/registry'
 import { Bytes } from '../controls'
-import { FOOT } from '../tokens'
+import { CAPTION, FOOT } from '../tokens'
 import { BarList, Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
 import { type AppRecord, LEDE, STRIP_FOOT } from './shared'
 
@@ -117,7 +117,7 @@ export function Database({
               { k: 'deleted', v: fmtRate(data.tuples.deleted) },
             ]}
           />
-          <p className={FOOT}>10-minute average, from the cluster’s own counters.</p>
+          <p className={CAPTION}>10-minute average, from the cluster’s own counters.</p>
         </Board>
 
         <Board title="Against the cluster" icon="rows" span={4}>

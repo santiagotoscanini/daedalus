@@ -1,5 +1,15 @@
 import { Ago } from '../../../components/ago'
-import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../../../components/tokens'
+import {
+  CAPTION,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+  SUB,
+} from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { ActionsData } from '../data'
@@ -110,7 +120,7 @@ function RepoBoard({ r }: { r: Workflows['repos'][number] }) {
       }
     >
       {r.workflows.length === 0 ? (
-        <p className={FOOT}>
+        <p className={CAPTION}>
           {r.access.files === 'app' || r.access.files === 'public'
             ? 'No workflow files.'
             : `Could not list the files: ${accessWord(r.access.files)}.`}
@@ -118,8 +128,8 @@ function RepoBoard({ r }: { r: Workflows['repos'][number] }) {
       ) : (
         <ul className={LIST}>
           {r.workflows.map((w) => (
-            <li key={w.id} className="border-subtle border-t py-[0.45rem] first:border-t-0">
-              <div className="flex min-w-0 items-center gap-[0.45rem] text-[0.77rem]">
+            <li key={w.id} className="border-hairline border-t py-2.5 first:border-t-0">
+              <div className="flex min-w-0 items-center gap-2 text-[0.8rem]">
                 {w.lastRun !== null ? (
                   <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />
                 ) : (
@@ -129,9 +139,9 @@ function RepoBoard({ r }: { r: Workflows['repos'][number] }) {
                 )}
                 <span className={ROW_MAIN}>
                   <Ext href={w.url}>
-                    <b className="font-[550]">{w.name}</b>
+                    <b className="[font-weight:560]">{w.name}</b>
                   </Ext>
-                  <span className={`ml-[0.4rem] ${MONO} text-muted-foreground`}>
+                  <span className={`ml-1.5 ${MONO} text-muted-foreground`}>
                     {w.path.replace(/^\.github\/workflows\//, '')}
                   </span>
                 </span>
@@ -154,9 +164,7 @@ function RepoBoard({ r }: { r: Workflows['repos'][number] }) {
                   )}
                 </span>
               </div>
-              <p
-                className={`${SUB} mt-[0.2rem] flex flex-wrap gap-x-[0.9rem] gap-y-[0.1rem] font-normal`}
-              >
+              <p className={`${SUB} mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-normal`}>
                 <span>
                   on {w.triggers.length === 0 ? 'unknown' : w.triggers.map(triggerWord).join(', ')}
                   {w.schedules.length > 0 && ` (${w.schedules.join('; ')})`}

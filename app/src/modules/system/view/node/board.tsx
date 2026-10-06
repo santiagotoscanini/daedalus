@@ -8,7 +8,7 @@ import { bytes, DASH, num, shortVendor } from '../../../../lib/format'
 import { partMatching } from '../../../../lib/hardware/catalog'
 import { gigabyteRevision } from '../../../../lib/hardware/gigabyte'
 import type { Tone } from '../../../../lib/tone'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Motherboard ──────────────────────────────────────────────────────── */
 
@@ -136,7 +136,7 @@ function FirmwareBoard({ f }: { f: BoardFacts }) {
           { k: 'newer', v: r.behind === null ? DASH : num(r.behind) },
         ]}
       />
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {r.make === 'msi' && r.error === null && r.releases.length > 0 && (
           <>
             Read from MSI&rsquo;s download host
@@ -233,7 +233,7 @@ function Panel({ f }: { f: BoardFacts }) {
         <ul className={LIST}>
           {shown.map((rel) => (
             <li key={rel.version} className={`${ROW} flex-wrap`}>
-              <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-[0.15rem]`}>
+              <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-1`}>
                 <span className="flex flex-wrap items-center gap-2">
                   <span className={MONO}>{rel.version}</span>
                   {rel.version === r.running && <Chip tone="ok">running</Chip>}
@@ -243,7 +243,7 @@ function Panel({ f }: { f: BoardFacts }) {
                 {rel.notes.length === 0 ? (
                   <span className={NOTE}>no note in the package</span>
                 ) : (
-                  <span className="flex flex-col gap-[0.1rem] text-[0.8rem] text-foreground leading-[1.45]">
+                  <span className="flex flex-col gap-0.5 text-[0.78rem] text-muted-foreground leading-[1.5]">
                     {rel.notes.map((n) => (
                       <span key={n}>{n}</span>
                     ))}

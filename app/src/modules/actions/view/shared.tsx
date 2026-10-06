@@ -17,7 +17,7 @@ export function RunChip({ status, conclusion }: { status: string; conclusion: st
   return (
     <Chip tone={tone}>
       {status === 'in_progress' && (
-        <span className="mr-[0.3rem] inline-block size-[0.4rem] animate-pulse rounded-full bg-current align-middle" />
+        <span className="mr-1 inline-block size-1.5 animate-pulse rounded-full bg-current align-middle" />
       )}
       {conclusionWord(status, conclusion)}
     </Chip>
@@ -123,7 +123,7 @@ export function GrantBoard({
       }
     >
       {publicRepos > 0 && (
-        <p className="m-0 mb-[0.5rem] text-[0.8rem] leading-[1.5]">
+        <p className="m-0 text-[0.8rem] leading-[1.55]">
           {String(publicRepos)} of the repositories are public, so their runs were read with no
           token at all — out of the sixty calls an hour GitHub allows this address
           {budget?.remaining !== null && budget?.remaining !== undefined
@@ -162,7 +162,7 @@ export function GrantBoard({
         </p>
       )}
       {other.length > 0 && (
-        <p className="m-0 mt-[0.5rem] text-[0.8rem] leading-[1.5] text-muted-foreground">
+        <p className="m-0 text-[0.8rem] leading-[1.55] text-muted-foreground">
           {other.map((u) => `${u.repo}: ${accessWord(u.access)}`).join(' · ')}
         </p>
       )}
@@ -177,10 +177,10 @@ export function SampleRows({ rows }: { rows: [string, string][] }) {
       {rows.map(([a, b]) => (
         <li
           key={a}
-          className="flex items-center gap-[0.45rem] border-subtle border-t py-[0.34rem] text-[0.77rem] first:border-t-0"
+          className="flex items-center gap-2 border-hairline border-t py-2 text-[0.8rem] first:border-t-0"
         >
           <span className="min-w-0 flex-auto truncate">{a}</span>
-          <span className="text-[0.68rem] text-muted-foreground tabular-nums">{b}</span>
+          <span className="text-[0.72rem] text-muted-foreground tabular-nums">{b}</span>
         </li>
       ))}
     </ul>

@@ -18,10 +18,10 @@ export function comparePinned(gap: VersionGap, note: string): CompareRow[] {
    The board vocabulary every category page uses lives in components/tokens.ts;
    it is re-exported here so a tab imports only its own page's shared file.
    Below is what is genuinely the AI pages'. */
-export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../../../components/tokens'
+export { AXIS, CAPTION, EMPTY, FOOT, LIVE, MONO, NOTE } from '../../../components/tokens'
 
 /** A ranking: `RankRow`s, stacked. */
-export const RANKS = 'm-0 flex list-none flex-col gap-[0.1rem] p-0'
+export const RANKS = 'm-0 flex list-none flex-col gap-0.5 p-0'
 
 /* A flat list of named things, each led by a chip saying what kind it is and
    trailed by whatever detail that kind has. Rows of a table, not a stack of
@@ -29,17 +29,17 @@ export const RANKS = 'm-0 flex list-none flex-col gap-[0.1rem] p-0'
    a fraction of the ink. */
 export const ITEMS = 'm-0 flex list-none flex-col p-0'
 export const ITEM =
-  'flex min-w-0 items-center gap-[0.45rem] px-[0.1rem] py-[0.34rem] text-[0.77rem] not-first:border-t not-first:border-subtle'
+  'flex min-w-0 items-center gap-2 px-0.5 py-2 text-[0.8rem] not-first:border-t not-first:border-hairline'
 /** The name takes the slack, so the detail is pushed right without a spacer. */
 export const ITEM_MAIN = 'min-w-0 flex-auto truncate text-foreground'
 /** Truncates too: a tool's own description of itself is a sentence, and one
     long row must not widen the panel. */
 export const ITEM_SIDE =
-  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
+  'min-w-0 max-w-[60%] flex-initial truncate text-[0.72rem] text-muted-foreground tabular-nums'
 export const ITEM_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
 
 /* The exception a panel's main list cannot hold: keys that never got an
    answer, the runs that failed. Warn rather than bad — it is something to look
    into, not something that is currently broken. */
 export const REJECTED =
-  'mx-0 mt-[0.5rem] mb-0 rounded-[7px] border border-warning/32 bg-warning/7 px-[0.55rem] py-[0.4rem] text-[0.72rem] leading-[1.45] text-subdued [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums'
+  'm-0 rounded-xl border border-warning/30 bg-warning/[0.07] px-3 py-2 text-[0.75rem] leading-[1.5] text-subdued [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums'

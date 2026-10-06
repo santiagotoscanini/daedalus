@@ -5,6 +5,7 @@ export const manifest = {
   label: 'Health',
   lede: 'One person’s record, and the services that feed what they eat and how they train.',
   order: 35,
+  section: 'Services',
   // Shaped to Record, which opens by default.
   boardSpans: [8, 4, 6, 6],
   // A tab per subject, in the order a body is read: the record that holds

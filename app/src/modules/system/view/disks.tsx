@@ -1,6 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { DISK_MODEL } from '../../../components/part'
 import {
+  CAPTION,
   EMPTY,
   FOOT,
   LIST,
@@ -116,7 +117,7 @@ function DiskBoard({
         )
       }
     >
-      <div className="flex items-center gap-[0.9rem] pb-2">
+      <div className="flex items-center gap-3.5 pb-1">
         {photo !== null && (
           <img
             className={cn('h-auto flex-none object-contain', PHOTO_W[photo.shape])}
@@ -126,7 +127,7 @@ function DiskBoard({
             height={photo.height}
           />
         )}
-        <div className="flex min-w-0 flex-col items-start gap-[0.22rem]">
+        <div className="flex min-w-0 flex-col items-start gap-1">
           {decoded === null ? (
             <strong className={DISK_MODEL}>{disk.model ?? '?'}</strong>
           ) : (
@@ -143,7 +144,7 @@ function DiskBoard({
               is what an RMA asks for, so it stays legible and out of the
               way. */}
           {disk.serial !== null && (
-            <span className={cn(MONO_FACE, 'text-[0.7rem] text-muted-foreground')}>
+            <span className={cn(MONO_FACE, 'text-[0.72rem] text-muted-foreground')}>
               {disk.serial}
             </span>
           )}
@@ -205,7 +206,7 @@ function DiskBoard({
       />
       {!nvme && (disk.crcErrors ?? 0) > 0 && (
         // The distinction that decides what you'd actually do about it.
-        <p className={cn(FOOT, 'text-warning')}>
+        <p className={cn(CAPTION, 'text-warning')}>
           A link CRC error is the <em>cable</em>, not the platter: a transfer that had to be retried
           between the controller and the drive. It never decrements, so this is a lifetime count. A
           stable one is nothing. A climbing one means reseating a SATA cable.
@@ -250,7 +251,7 @@ function DiskBoard({
       )}
 
       {failedTest !== undefined && (
-        <p className={cn(FOOT, 'text-warning')}>
+        <p className={cn(CAPTION, 'text-warning')}>
           The most recent <b>{failedTest.type ?? 'test'}</b> did not finish:{' '}
           {failedTest.status ?? 'unknown'}. An interrupted test is not a failing disk; a host reset
           or a power event ends one. It does mean that scheduled check verified nothing.

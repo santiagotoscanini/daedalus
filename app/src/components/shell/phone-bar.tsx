@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { SearchIcon } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { NavIcon } from '../nav-icon'
 import { BRAND, ICON_BUTTON } from './styles'
@@ -10,14 +11,14 @@ import type { Drawer } from './use-rail'
  * Translucent rather than solid: the page scrolling under it is the cue that
  * this bar is fixed and the content is not.
  */
-export function PhoneBar({ drawer }: { drawer: Drawer }) {
+export function PhoneBar({ drawer, onOpenPalette }: { drawer: Drawer; onOpenPalette: () => void }) {
   return (
     <header
       className={cn(
         'hidden max-rail:flex max-rail:items-center max-rail:gap-1.5',
-        'sticky top-0 z-40 border-b border-b-subtle px-3 py-[0.45rem]',
+        'sticky top-0 z-40 border-b border-b-hairline px-3 py-[0.45rem]',
         'pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]',
-        'bg-background/88 backdrop-blur-[10px]',
+        'bg-chrome backdrop-blur-2xl backdrop-saturate-150',
       )}
     >
       <button
@@ -33,8 +34,16 @@ export function PhoneBar({ drawer }: { drawer: Drawer }) {
       </button>
       <Link to="/apps" className={cn(BRAND, 'flex-none px-1.5')}>
         <img src="/icon.svg" alt="" width={26} height={26} className="flex-none" />
-        <span>daedalus</span>
+        <span>Daedalus</span>
       </Link>
+      <button
+        type="button"
+        className={cn(ICON_BUTTON, 'ml-auto')}
+        aria-label="Search and jump"
+        onClick={onOpenPalette}
+      >
+        <SearchIcon className="size-[19px]" strokeWidth={1.75} />
+      </button>
     </header>
   )
 }

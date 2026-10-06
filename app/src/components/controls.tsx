@@ -1,6 +1,8 @@
 import { cn } from '../lib/cn'
 import { bytes } from '../lib/format'
 import { type Tone, toneStyle } from '../lib/tone'
+import { SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from './tokens'
+import { Button } from './ui/button'
 import { Chip, Pulse } from './viz'
 
 export type AppState = 'running' | 'attention' | 'stopped' | 'unknown'
@@ -37,8 +39,8 @@ export function StateDot({
   return (
     <span
       className={cn(
-        'inline-block size-[0.56rem] flex-none rounded-full bg-(--tone)',
-        isVerdict(state) && 'shadow-[0_0_0_3px_color-mix(in_srgb,var(--tone)_15%,transparent)]',
+        'inline-block size-2 flex-none rounded-full bg-(--tone)',
+        isVerdict(state) && 'shadow-[0_0_0_2.5px_color-mix(in_oklch,var(--tone)_16%,transparent)]',
       )}
       style={toneStyle(STATE_TONE[state])}
       role="img"
@@ -74,7 +76,7 @@ export function AppIcon({
       <span
         // The three hsl() reads are the one place a colour is computed rather
         // than named: the hue is per-instance, so it cannot be a theme token.
-        className="grid flex-none place-items-center rounded-[5px] leading-none [font-weight:650] text-[0.72em] text-[hsl(var(--mono-hue)_55%_72%)] bg-[hsl(var(--mono-hue)_45%_12%)] shadow-[inset_0_0_0_1px_hsl(var(--mono-hue)_40%_22%)]"
+        className="grid flex-none place-items-center rounded-md leading-none [font-weight:650] text-[0.72em] text-[hsl(var(--mono-hue)_55%_72%)] bg-[hsl(var(--mono-hue)_45%_12%)] shadow-[inset_0_0_0_1px_hsl(var(--mono-hue)_40%_22%)]"
         style={{ width: size, height: size, ['--mono-hue' as string]: String(hue(name)) }}
         aria-hidden="true"
       >
@@ -86,7 +88,7 @@ export function AppIcon({
     // `contain` rather than `cover` so a non-square icon is shown whole instead
     // of cropped — these are logos, and a cropped logo is a different logo.
     <img
-      className="block flex-none rounded-[5px] object-contain"
+      className="block flex-none rounded-md object-contain"
       src={`/api/app-icon/${encodeURIComponent(name)}`}
       alt=""
       width={size}
@@ -118,10 +120,8 @@ export function StatePill({ state }: { state: AppState }) {
     <Chip
       tone={toned ? STATE_TONE[state] : 'muted'}
       className={cn(
-        'gap-[0.4rem] rounded-full py-[0.15rem] pr-[0.6rem] pl-[0.5rem] text-[0.74rem] font-medium',
-        toned
-          ? 'border-[color-mix(in_srgb,var(--tone)_35%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)]'
-          : 'border-border bg-transparent text-subdued',
+        'gap-1.5 py-0.5 pr-2.5 pl-2 text-[0.75rem]',
+        !toned && 'bg-transparent text-subdued ring-hairline',
       )}
     >
       <StateDot state={state} />
@@ -154,16 +154,16 @@ export function RefreshButton({
   onClick: () => void
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon"
       className={cn(
-        'inline-flex size-[38px] flex-none cursor-pointer items-center justify-center rounded-[9px] border-0 bg-transparent p-0 text-subdued',
-        'enabled:hover:bg-raised enabled:hover:text-foreground disabled:cursor-default',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-dim',
+        'size-9 flex-none p-0 disabled:cursor-default disabled:opacity-100',
         // Right-aligned and smaller inside a section heading, which is a
         // baseline-aligned flex row — hence the self-alignment, since a 30px
         // button has no useful baseline.
-        '[h2>&]:ml-auto [h2>&]:size-[30px] [h2>&]:self-center [h2>&]:text-[0.95rem]',
+        '[h2>&]:ml-auto [h2>&]:size-7.5 [h2>&]:self-center [h2>&]:text-[0.95rem]',
       )}
       title={label}
       aria-label={label}
@@ -184,7 +184,7 @@ export function RefreshButton({
       >
         ↻
       </span>
-    </button>
+    </Button>
   )
 }
 
@@ -231,7 +231,8 @@ export function Segmented<T extends string>({
         // `inline-flex` with no wrap is a single unbreakable box as wide as
         // its labels, so a control with five options — or three long ones —
         // would be wider than a phone and scroll the page sideways.
-        'inline-flex max-w-full flex-wrap overflow-hidden rounded-[9px] border bg-raised',
+        SEGMENT_TRACK,
+        'flex-wrap',
       )}
     >
       {options.map((o) => (
@@ -245,11 +246,10 @@ export function Segmented<T extends string>({
           aria-disabled={(disabled ?? o.disabled) === true ? true : undefined}
           title={o.reason}
           className={cn(
-            'inline-flex cursor-pointer items-center gap-[0.35rem] border-0 bg-transparent px-[0.85rem] py-[0.42rem] text-[0.83rem]',
-            o.value === value
-              ? 'bg-lifted text-foreground shadow-[inset_0_0_0_1px_var(--border)]'
-              : 'text-subdued enabled:hover:text-foreground',
-            (disabled ?? o.disabled) === true && 'cursor-not-allowed opacity-55',
+            SEGMENT_ITEM,
+            o.value === value && SEGMENT_ITEM_ON,
+            (disabled ?? o.disabled) === true &&
+              'cursor-not-allowed opacity-55 hover:bg-transparent hover:text-muted-foreground',
           )}
           onClick={() => {
             onChange(o.value)

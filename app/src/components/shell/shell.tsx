@@ -1,12 +1,14 @@
 import { Outlet, useRouterState } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import type { Account } from '../../core/settings/types'
+import { cn } from '../../lib/cn'
 import type { ModuleManifest } from '../../lib/modules/manifest'
 import type { ThemeChoice } from '../../lib/theme'
 import { ControllerBanner } from '../controller-banner'
 import { EngineOverrideBanner } from '../engine-override-banner'
 import { PendingApplyBar } from '../pending-apply-bar'
 import { useAppRailContext } from './app-rail'
+import { CommandPalette, usePaletteHotkey } from './command-palette'
 import { PhoneBar } from './phone-bar'
 import { PhoneDrawer } from './phone-drawer'
 import { Rail } from './rail'
@@ -46,20 +48,53 @@ export function Shell({ children, theme, account, modules, engineOverride }: She
   // back. Matched here (not in the route) because the rail is the shell's.
   const app = useAppRailContext()
   const badges = useRailBadges()
-  const rail = { modules, badges, app, path, account, theme, collapsed, onToggleCollapse: toggle }
+  const [palette, setPalette] = useState(false)
+  usePaletteHotkey(setPalette)
+  const onOpenPalette = () => setPalette(true)
+  const rail = {
+    modules,
+    badges,
+    app,
+    path,
+    account,
+    theme,
+    collapsed,
+    onToggleCollapse: toggle,
+    onOpenPalette,
+  }
 
   return (
     // Grid on a desktop, block on a phone. Block, not a one-column grid: as a
     // grid with `min-height: 100vh` a short page left spare height divided
     // between the rows, floating the phone bar down the middle of it.
     <div className="grid min-h-screen grid-cols-[var(--sidebar-w)_1fr] max-rail:block">
-      <PhoneBar drawer={drawer} />
+      <CommandPalette
+        open={palette}
+        onOpenChange={setPalette}
+        modules={modules}
+        theme={theme}
+        onToggleRail={toggle}
+      />
+      <PhoneBar drawer={drawer} onOpenPalette={onOpenPalette} />
       <PhoneDrawer drawer={drawer} {...rail} />
       <Rail {...rail} />
-      <main className="col-start-2 min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
-        <EngineOverrideBanner on={engineOverride} />
-        <ControllerBanner />
-        {children ?? <Outlet />}
+      <main
+        className={cn(
+          'col-start-2 min-w-0 bg-background px-[clamp(1rem,3.2vw,3rem)] pt-10 pb-28 max-rail:pt-6 max-rail:pb-32',
+          // The content is a panel inset into the canvas the rail sits on,
+          // one grey lighter: the rail reads as chrome, the page as the work.
+          'rail:my-2 rail:mr-2 rail:min-h-[calc(100vh-1rem)] rail:rounded-[14px] rail:border rail:border-hairline rail:shadow-board',
+          // A whisper of the accent at the panel's head — light, not paint.
+          '[background-image:radial-gradient(44rem_22rem_at_15%_-6rem,var(--glow-a),transparent_70%),radial-gradient(48rem_24rem_at_95%_-8rem,var(--glow-b),transparent_70%)] bg-no-repeat',
+        )}
+      >
+        {/* A measure for very wide windows: past it the boards would only
+            grow emptier, so the column stops and centres. */}
+        <div className="mx-auto w-full max-w-[112rem]">
+          <EngineOverrideBanner on={engineOverride} />
+          <ControllerBanner />
+          {children ?? <Outlet />}
+        </div>
         <PendingApplyBar />
       </main>
     </div>

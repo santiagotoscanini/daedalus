@@ -6,7 +6,7 @@ import { Board, BoardGrid, Chip, Measures, Pulse } from '../../../../components/
 import { cn } from '../../../../lib/cn'
 import { DASH, localDay, num, until } from '../../../../lib/format'
 import { useSite } from '../../../../lib/site-context'
-import { EMPTY, FOOT, LIVE, MAIN, MONO, NOTE, ROW, ROWS, SIDE } from '../shared'
+import { CAPTION, EMPTY, FOOT, LIVE, MAIN, MONO, NOTE, ROW, ROWS, SIDE } from '../shared'
 import type { Inbound } from './index'
 
 /**
@@ -113,7 +113,7 @@ function IsTheNameRightBoard({ f }: { f: DdnsFacts }) {
         ]}
       />
 
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {match ? (
           <>
             The name resolves to the address the tunnel reports traffic arriving from, so everything
@@ -128,6 +128,8 @@ function IsTheNameRightBoard({ f }: { f: DdnsFacts }) {
         ) : (
           <>One of the two could not be read, so this check is not currently making a claim. </>
         )}
+      </p>
+      <p className={FOOT}>
         Asked of <code>1.1.1.1</code> over HTTPS rather than this box’s resolver, deliberately:
         pi-hole short-circuits <code>*.{site.baseDomain}</code> to the LAN address, which is right
         and would make this check answer itself.
@@ -137,7 +139,7 @@ function IsTheNameRightBoard({ f }: { f: DdnsFacts }) {
           because the unit exits 0 either way. Warn rather than bad — it is
           something to look into, not something that is currently broken. */}
       {(d.lookupFailures.month ?? 0) > 0 && (
-        <p className="mt-[0.5rem] mb-0 rounded-[7px] border border-[color-mix(in_srgb,var(--warning)_32%,transparent)] bg-[color-mix(in_srgb,var(--warning)_7%,transparent)] px-[0.55rem] py-[0.4rem] text-[0.72rem] leading-[1.45] text-subdued [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums">
+        <p className="m-0 rounded-xl border border-warning/25 bg-warning/8 px-4 py-3 text-[0.8rem] leading-[1.5] text-muted-foreground [&_b]:text-warning [&_b]:tabular-nums [&_b]:[font-weight:600]">
           ddclient could not work out this house’s address <b>{num(d.lookupFailures.day)}</b> times
           in the last day, <b>{num(d.lookupFailures.week)}</b> in the week and{' '}
           <b>{num(d.lookupFailures.month)}</b> in the month. Its lookup against{' '}

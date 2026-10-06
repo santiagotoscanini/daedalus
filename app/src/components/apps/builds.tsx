@@ -47,7 +47,7 @@ export function requesterLabel(b: Pick<BuildSummary, 'requestedBy' | 'actor'>): 
 }
 
 const ROW =
-  'grid grid-cols-[6.2rem_4.6rem_minmax(0,1fr)_5.2rem_6.5rem] items-baseline gap-x-[0.8rem] border-t border-subtle px-[0.2rem] py-[0.45rem] text-[0.8rem] no-underline first:border-t-0 hover:bg-raised hover:no-underline max-[40rem]:grid-cols-[6.2rem_4.6rem_minmax(0,1fr)]'
+  'grid grid-cols-[6.2rem_4.6rem_minmax(0,1fr)_5.2rem_6.5rem] items-baseline gap-x-3 border-hairline border-t px-1 py-2 text-[0.8rem] no-underline first:border-t-0 hover:bg-foreground/[0.05] hover:no-underline max-[40rem]:grid-cols-[6.2rem_4.6rem_minmax(0,1fr)]'
 
 export function BuildsBoard({
   app,
@@ -121,10 +121,10 @@ export function BuildsBoard({
                       <span className="text-muted-foreground"> · candidate</span>
                     )}
                   </span>
-                  <span className="text-right font-mono text-[0.76rem] text-muted-foreground max-[40rem]:hidden">
+                  <span className="text-right font-mono text-[0.75rem] text-muted-foreground max-[40rem]:hidden">
                     {took === null || (isOpenBuild(b.state) && now === null) ? DASH : ms(took)}
                   </span>
-                  <span className="text-right text-[0.76rem] text-muted-foreground max-[40rem]:hidden">
+                  <span className="text-right text-[0.75rem] text-muted-foreground max-[40rem]:hidden">
                     {now === null ? DASH : since((now - Date.parse(b.createdAt)) / 1000)}
                   </span>
                 </Link>
@@ -169,7 +169,7 @@ export function BuildNowButton({
   }
 
   return (
-    <span className="inline-flex flex-wrap items-center justify-end gap-[0.6rem] text-[0.76rem]">
+    <span className="inline-flex flex-wrap items-center justify-end gap-2.5 text-[0.75rem]">
       {error !== null && <span className="max-w-[28rem] text-right text-danger">{error}</span>}
       <Button
         type="button"
@@ -196,9 +196,9 @@ type OverviewBuild = {
 export function DetectionLine({ app, build }: { app: string; build: OverviewBuild }) {
   const parts = detectionParts(build.summary.resolvedStrategy, build.detection)
   return (
-    <p className="m-0 flex flex-wrap items-baseline gap-x-[0.45rem] gap-y-1 text-[0.8rem] text-subdued">
+    <p className="m-0 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.8rem] text-subdued">
       {parts.map((p, i) => (
-        <span key={p.text} className="inline-flex items-baseline gap-[0.45rem]">
+        <span key={p.text} className="inline-flex items-baseline gap-2">
           {i > 0 && (
             <span aria-hidden="true" className="text-muted-foreground">
               ·
@@ -216,7 +216,7 @@ export function DetectionLine({ app, build }: { app: string; build: OverviewBuil
       <Link
         to="/apps/$name/builds/$id"
         params={{ name: app, id: build.summary.id }}
-        className="font-mono text-[0.76rem]"
+        className="font-mono text-[0.75rem]"
       >
         {sha7(build.summary.sha)}
       </Link>

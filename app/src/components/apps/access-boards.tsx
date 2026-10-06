@@ -8,7 +8,7 @@ import { num } from '../../lib/format'
 import { useScheme } from '../../lib/scheme'
 import { useSite } from '../../lib/site-context'
 import { type Tone, toneStyle } from '../../lib/tone'
-import { EMPTY, FOOT } from '../tokens'
+import { CAPTION, EMPTY, FOOT } from '../tokens'
 import { Button } from '../ui/button'
 import { Board } from '../viz'
 import type { AccessData } from './access'
@@ -129,30 +129,30 @@ export function RejectsBoard({
           </Button>
         }
       >
-        <div className="flex max-h-[26rem] flex-col gap-[0.15rem] overflow-y-auto text-[0.8rem]">
+        <div className="flex max-h-[26rem] flex-col gap-0.5 overflow-y-auto text-[0.8rem]">
           {access.recentRejects.map((r, i) => (
             // Phones: the four-column row has nowhere to go, so the
             // timestamp drops out and path + client share the width.
             <div
               key={`${r.ts}-${String(i)}`}
-              className="grid grid-cols-[8.5rem_3rem_minmax(0,1fr)_auto] items-center gap-[0.7rem] py-[0.18rem] max-[34rem]:grid-cols-[3rem_minmax(0,1fr)] max-[34rem]:gap-y-0"
+              className="grid grid-cols-[8.5rem_3rem_minmax(0,1fr)_auto] items-center gap-3 py-1 max-[34rem]:grid-cols-[3rem_minmax(0,1fr)] max-[34rem]:gap-y-0"
             >
               {/* Already formatted by the server — see RejectRow. */}
               <time
-                className="font-mono text-[0.74rem] text-muted-foreground max-[34rem]:hidden"
+                className="font-mono text-[0.75rem] text-muted-foreground max-[34rem]:hidden"
                 dateTime={r.ts}
               >
                 {r.at}
               </time>
               <StatusCode code={r.status} />
               <span
-                className="min-w-0 overflow-hidden font-mono text-[0.76rem] text-ellipsis whitespace-nowrap"
+                className="min-w-0 overflow-hidden font-mono text-[0.75rem] text-ellipsis whitespace-nowrap"
                 title={`${r.method} ${r.path}`}
               >
                 <span className="text-muted-foreground">{r.method}</span> {r.path}
               </span>
               <span
-                className="flex items-center gap-[0.35rem] whitespace-nowrap text-subdued max-[34rem]:col-start-2"
+                className="flex items-center gap-1.5 whitespace-nowrap text-subdued max-[34rem]:col-start-2"
                 title={r.agent}
               >
                 {r.flag && <span aria-hidden="true">{r.flag}</span>}
@@ -231,11 +231,11 @@ export function GeoPanel({ hostname, range }: { hostname: string; range: AccessW
         // Keyed on the scheme so a theme change remounts the frame rather than
         // mutating its src, which would add a Grafana entry to the history.
         key={scheme}
-        className="block h-96 w-full rounded-[8px] border-0 bg-raised [color-scheme:light] dark:[color-scheme:dark] max-[34rem]:h-60"
+        className="block h-96 w-full rounded-xl border border-hairline bg-foreground/[0.04] [color-scheme:light] dark:[color-scheme:dark] max-[34rem]:h-60"
         src={src}
         title={`Remote requests to ${hostname} by country`}
       />
-      <p className={FOOT}>
+      <p className={CAPTION}>
         Rendered by Grafana. A blank map means this browser has no Grafana session yet. Open it{' '}
         <a href={grafanaUrl} target="_blank" rel="noreferrer">
           once
@@ -255,10 +255,10 @@ function StatusCode({ code }: { code: string }) {
   return (
     <span
       className={cn(
-        'rounded-[5px] px-[0.35rem] py-[0.05rem] font-mono text-[0.72rem]',
+        'rounded-[5px] px-1.5 py-px font-mono text-[0.72rem]',
         tone === undefined
-          ? 'bg-lifted text-subdued'
-          : 'bg-[color-mix(in_srgb,var(--tone)_14%,transparent)] text-(--tone)',
+          ? 'bg-foreground/[0.06] text-subdued'
+          : 'bg-[color-mix(in_oklch,var(--tone)_14%,transparent)] text-(--tone)',
       )}
       style={tone === undefined ? undefined : toneStyle(tone)}
     >
@@ -284,27 +284,30 @@ function Bars({
   // bar is to compare the rows to each other.
   const top = Math.max(...rows.map((r) => r.count), 1)
   return (
-    <div className="flex flex-col gap-[0.4rem]" style={toneStyle(tone)}>
+    <div className="flex flex-col gap-2" style={toneStyle(tone)}>
       {rows.map((r) => (
         // The label column can shrink to nothing before the bar or the count
         // do — a truncated user-agent is readable, a 3px bar is not.
         <div
           key={r.key}
-          className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] items-center gap-[0.65rem] text-[0.84rem] max-[34rem]:grid-cols-[minmax(0,1fr)_3.5rem_auto]"
+          className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] items-center gap-3 text-[0.82rem] max-[34rem]:grid-cols-[minmax(0,1fr)_3.5rem_auto]"
         >
-          <span className="flex min-w-0 items-center gap-[0.4rem] overflow-hidden text-ellipsis whitespace-nowrap [&>code]:overflow-hidden [&>code]:text-ellipsis">
+          <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap [&>code]:overflow-hidden [&>code]:text-ellipsis">
             {r.label}
           </span>
-          <span className="h-[6px] overflow-hidden rounded-[3px] bg-lifted" aria-hidden="true">
+          <span
+            className="h-1.5 overflow-hidden rounded-full bg-foreground/[0.07]"
+            aria-hidden="true"
+          >
             <span
-              className="block h-full rounded-[3px] bg-(--tone)"
+              className="block h-full rounded-full bg-(--tone)"
               style={{ width: `${String(Math.max(2, (r.count / top) * 100))}%` }}
             />
           </span>
           <span className="text-[0.8rem] tabular-nums whitespace-nowrap text-subdued">
             {num(r.count)}
             {total > 0 && (
-              <small className="ml-[0.4rem] text-muted-foreground">
+              <small className="ml-1.5 text-muted-foreground">
                 {((r.count / total) * 100).toFixed(0)}%
               </small>
             )}

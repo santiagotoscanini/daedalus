@@ -7,6 +7,7 @@ import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../../../lib/format'
 import type { Tone } from '../../../../lib/tone'
 import {
+  CAPTION,
   EMPTY,
   FOOT,
   hours,
@@ -105,7 +106,7 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
             span={4}
             aside={<Chip tone={h.tone}>{h.label}</Chip>}
           >
-            <div className="flex min-w-0 flex-col items-start gap-[0.22rem] pb-2">
+            <div className="flex min-w-0 flex-col items-start gap-1 pb-1">
               <strong className={DISK_MODEL}>{drive.name || '?'}</strong>
               <span className="text-[0.72rem] text-subdued leading-[1.3]">
                 {drive.kind === null
@@ -122,7 +123,7 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
               {/* The one line here that is never read and always needed: it is
                   what an RMA asks for. Only the full document carries it. */}
               {drive.serial !== null && (
-                <span className={cn(MONO_FACE, 'text-[0.7rem] text-muted-foreground')}>
+                <span className={cn(MONO_FACE, 'text-[0.72rem] text-muted-foreground')}>
                   {drive.serial}
                 </span>
               )}
@@ -176,7 +177,7 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
           ) : (
             <VolumeRows volumes={loose} />
           )}
-          <p className={FOOT}>
+          <p className={t.drives.length === 0 ? CAPTION : FOOT}>
             {t.drives.length === 0
               ? 'What the OS mounts, without the drives behind them: the agent reads the physical drives every ten minutes and has reported none.'
               : 'Mounted volumes the agent could not place on a drive above — network shares, disk images, and anything the OS mounts without a physical device.'}

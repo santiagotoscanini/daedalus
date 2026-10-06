@@ -30,7 +30,7 @@ export function SetupLine({ name, setup }: { name: string; setup: SetupProgress 
   return (
     <Alert
       variant={setup.failed === null ? 'default' : 'destructive'}
-      className="mb-[1.35rem]"
+      className="mb-5"
       aria-live="polite"
     >
       <AlertDescription>
@@ -56,12 +56,10 @@ export function SetupLine({ name, setup }: { name: string; setup: SetupProgress 
             </span>
           ))}
         </p>
-        {setup.failed !== null && <p className="m-0 mt-[0.45rem]">{setup.failed.detail}</p>}
-        {setup.note !== null && (
-          <p className="m-0 mt-[0.45rem] text-muted-foreground">{setup.note}</p>
-        )}
+        {setup.failed !== null && <p className="m-0 mt-2">{setup.failed.detail}</p>}
+        {setup.note !== null && <p className="m-0 mt-2 text-muted-foreground">{setup.note}</p>}
         {(setup.failed !== null || setup.buildId !== null) && (
-          <div className="mt-[0.7rem] flex flex-wrap items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             {setup.failed !== null && (
               <Button
                 type="button"
@@ -85,7 +83,7 @@ export function SetupLine({ name, setup }: { name: string; setup: SetupProgress 
             )}
           </div>
         )}
-        {retry.error !== null && <p className="m-0 mt-[0.45rem]">{retry.error}</p>}
+        {retry.error !== null && <p className="m-0 mt-2">{retry.error}</p>}
       </AlertDescription>
     </Alert>
   )

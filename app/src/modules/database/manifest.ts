@@ -9,6 +9,7 @@ export const manifest = {
   // fixes, which the box can switch off — none of which a System tab, a
   // layer of the machine, has.
   order: 65,
+  section: 'Infrastructure',
   boardSpans: [8, 4, 12],
   // One tab, and no dot on it: nothing probes the cluster from outside —
   // the page reads postgres_exporter, which is the same claim made better.

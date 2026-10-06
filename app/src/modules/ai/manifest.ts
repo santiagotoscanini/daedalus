@@ -5,6 +5,7 @@ export const manifest = {
   label: 'AI',
   lede: 'The machines that provide models, the gateway that publishes them, and what calls it.',
   order: 10,
+  section: 'Services',
   // Shaped to Providers, the tab that opens by default: the chain across
   // the top, then the picked machine's Lemonade, its loaded models and catalog.
   boardSpans: [12, 12, 8, 4, 12],

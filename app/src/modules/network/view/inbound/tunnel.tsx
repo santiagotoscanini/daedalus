@@ -1,12 +1,13 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../../../components/service-head'
+import { Button } from '../../../../components/ui/button'
 import { Board, BoardGrid, Columns, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { ms, num, since } from '../../../../lib/format'
 import { stripBaseDomain } from '../../../../lib/site'
 import { useSite } from '../../../../lib/site-context'
-import { ACTION, AXIS, EMPTY, FOOT, LIVE, MAIN, MONO, NOTE, ROW, ROWS, SIDE } from '../shared'
+import { AXIS, CAPTION, EMPTY, FOOT, LIVE, MAIN, MONO, NOTE, ROW, ROWS, SIDE } from '../shared'
 import type { Inbound } from './index'
 
 /**
@@ -52,14 +53,11 @@ export function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           </>
         }
         actions={
-          <a
-            className={ACTION}
-            href="https://one.dash.cloudflare.com/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Cloudflare dashboard ↗
-          </a>
+          <Button asChild size="sm">
+            <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noreferrer">
+              Cloudflare dashboard ↗
+            </a>
+          </Button>
         }
       />
       <LinkRow
@@ -138,11 +136,13 @@ function HoldingTheTunnelBoard({ f }: { f: CfTunnelFacts }) {
         </p>
       )}
 
-      <p className={FOOT}>
+      <p className={CAPTION}>
         Four connections into{' '}
         {t.edges.length === 0
           ? 'the edge.'
-          : `${t.edges.map((e) => `${e.colo}×${String(e.count)}`).join(' · ')}.`}{' '}
+          : `${t.edges.map((e) => `${e.colo}×${String(e.count)}`).join(' · ')}.`}
+      </p>
+      <p className={FOOT}>
         Two datacentres, so losing one is a reconnect rather than an outage. The counts are small on
         purpose: almost everything here is reached over the LAN, and the tunnel only carries what is
         genuinely away from home. <b>Held for</b> is the oldest connection, not the newest, since

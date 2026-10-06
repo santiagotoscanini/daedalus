@@ -9,7 +9,7 @@ import { DASH, duration, num, rate, text } from '../../../../lib/format'
 import { linkWords } from '../../../../lib/node-link'
 import { PROVIDER_NAME, type ProviderKind } from '../../../../lib/providers/kinds'
 import type { HostFacts } from './host'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 import { AgentUpdate } from './updates'
 
 export function MachineBoard({ f }: { f: HostFacts }) {
@@ -44,7 +44,7 @@ export function MachineBoard({ f }: { f: HostFacts }) {
           </span>
         </div>
       </div>
-      <p className={FOOT}>
+      <p className={CAPTION}>
         The specification is on <b>Build</b>. Its address on the network is{' '}
         <span className={MONO}>{node.lanIp ?? DASH}</span>, hardware address{' '}
         <span className={MONO}>{text(node.mac)}</span>.
@@ -160,7 +160,7 @@ export function NetworkBoard({ f }: { f: HostFacts }) {
           ))}
         </ul>
       )}
-      <p className={FOOT}>
+      <p className={CAPTION}>
         Bytes per second since the previous sample, on the interfaces that are up. Since boot:{' '}
         {t.network.reduce((s, n) => s + (n.rx_bytes ?? 0), 0) > 0
           ? `${num(Math.round(t.network.reduce((s, n) => s + (n.rx_bytes ?? 0), 0) / 1e9))} GB in, ${num(Math.round(t.network.reduce((s, n) => s + (n.tx_bytes ?? 0), 0) / 1e9))} GB out`
@@ -210,7 +210,7 @@ export function ProvidersBoard({ f }: { f: HostFacts }) {
               <span className={ROW_MAIN}>
                 {providerName(p.kind)}
                 {p.version !== null && (
-                  <span className="ml-[0.4rem] text-muted-foreground">v{p.version}</span>
+                  <span className="ml-1.5 text-muted-foreground">v{p.version}</span>
                 )}
               </span>
               <span className={cn(ROW_SIDE, MONO)}>

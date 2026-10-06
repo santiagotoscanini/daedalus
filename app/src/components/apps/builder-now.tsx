@@ -51,7 +51,7 @@ export function NowBoard({ initial }: { initial: LiveBuild[] }) {
       icon="logs"
       span={12}
       aside={
-        <span className={cn(NOTE, 'inline-flex items-center gap-[0.35rem]')}>
+        <span className={cn(NOTE, 'inline-flex items-center gap-1.5')}>
           <Pulse on={running > 0} tone="info" />
           {running > 0
             ? `${String(running)} building, ${String(builds.length - running)} queued`
@@ -89,26 +89,26 @@ function NowRow({ b, now }: { b: LiveBuild; now: number | null }) {
   // its own; the clock on the right is the whole build since its hand-off.
   const took = now === null ? null : buildDurationMs(b, now)
   return (
-    <li className={cn(ROW, 'flex-wrap gap-y-[0.35rem] py-[0.5rem]')}>
+    <li className={cn(ROW, 'flex-wrap gap-y-1.5 py-2')}>
       <Link
         to="/apps/$name/builds/$id"
         params={{ name: b.app, id: b.id }}
-        className="inline-flex min-w-[11rem] items-baseline gap-[0.5rem] no-underline"
+        className="inline-flex min-w-[11rem] items-baseline gap-2 no-underline"
       >
         <span className="text-foreground">{b.app}</span>
-        <code className="text-[0.74rem] text-muted-foreground">{sha7(b.sha)}</code>
+        <code className="text-[0.75rem] text-muted-foreground">{sha7(b.sha)}</code>
       </Link>
       <BuildStateChip state={b.state} />
       <span className={ROW_SIDE}>
         {requesterLabel(b)}
         {b.publish === 'candidate' && ' · candidate'}
       </span>
-      <ol className="m-0 ml-auto flex list-none flex-wrap items-center gap-x-[0.8rem] gap-y-1 p-0">
+      <ol className="m-0 ml-auto flex list-none flex-wrap items-center gap-x-3 gap-y-1 p-0">
         {steps.map((s) => (
           <li
             key={s.phase}
             className={cn(
-              'inline-flex items-center gap-[0.3rem] text-[0.74rem]',
+              'inline-flex items-center gap-1 text-[0.75rem]',
               s.status === 'pending' ? 'text-muted-foreground' : 'text-subdued',
             )}
           >

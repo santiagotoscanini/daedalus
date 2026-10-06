@@ -7,9 +7,10 @@ import { cn } from '../../../lib/cn'
 import { runTaskNow } from '../../../server/registry'
 import { Until, When } from '../../ago'
 import { useRootAction } from '../../root-action'
-import { FOOT } from '../../tokens'
+import { CAPTION } from '../../tokens'
 import { Button } from '../../ui/button'
 import { Chip } from '../../viz'
+import { GLASS } from '../../viz/board'
 import { CHIP, GHOST_BTN } from '../shared'
 import type { TaskRow } from './types'
 
@@ -37,11 +38,11 @@ export function TaskCard({
   const [confirming, setConfirming] = useState(false)
 
   return (
-    <li className="rounded-lg border border-subtle bg-card px-[1.05rem] py-[0.85rem]">
-      <div className="flex flex-wrap items-center gap-x-[0.85rem] gap-y-[0.4rem]">
-        <code className="text-[0.95rem] font-semibold">{task.id}</code>
+    <li className={cn(GLASS, 'rounded-xl px-4 py-3.5')}>
+      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
+        <code className="text-[0.9rem] font-[560]">{task.id}</code>
         <Outcome task={task} />
-        <span className="ml-auto flex flex-wrap items-center gap-[0.45rem]">
+        <span className="ml-auto flex flex-wrap items-center gap-2">
           <RunNowButton app={app} task={task} running={running} />
           {!readOnly && (
             <>
@@ -79,20 +80,20 @@ export function TaskCard({
         </span>
       </div>
 
-      <p className="mt-[0.5rem] mr-0 mb-0 ml-0 flex flex-wrap items-baseline gap-x-[0.8rem] gap-y-[0.25rem] text-[0.85rem]">
+      <p className="mt-2 mr-0 mb-0 ml-0 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[0.85rem]">
         <span>{task.scheduleText}</span>
         {/* The raw string beside the sentence, always. The sentence is this
             app's reading of it; the string is what systemd was given. */}
-        <code className="text-[0.78rem] text-muted-foreground">{task.schedule}</code>
+        <code className="text-[0.75rem] text-muted-foreground">{task.schedule}</code>
       </p>
 
       {/* argv, joined for reading only — the quotes mark where one argument
           ends, since that is exactly what a shell string would lose. */}
-      <p className="mt-[0.45rem] mr-0 mb-0 ml-0 font-mono text-[0.8rem] text-subdued [overflow-wrap:anywhere]">
+      <p className="mt-2 mr-0 mb-0 ml-0 font-mono text-[0.8rem] text-subdued [overflow-wrap:anywhere]">
         {task.command.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}
       </p>
 
-      <div className="mt-[0.5rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-muted-foreground">
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] text-muted-foreground">
         <span>last run {task.lastRunAt === null ? 'never' : <When at={task.lastRunAt} />}</span>
         <span>
           next {task.nextRunAt === null ? 'not scheduled' : <Until at={task.nextRunAt} />}
@@ -102,7 +103,7 @@ export function TaskCard({
       </div>
 
       {task.lastRunAt === null && (
-        <p className={FOOT}>
+        <p className={CAPTION}>
           No run recorded. Either the timer has not fired since the last boot, or the Apply that
           generates this unit has not happened yet.
         </p>
@@ -162,7 +163,7 @@ function RunNowButton({ app, task, running }: { app: string; task: TaskRow; runn
   })
 
   return (
-    <span className="inline-flex items-center gap-[0.6rem] text-[0.76rem]">
+    <span className="inline-flex items-center gap-2.5 text-[0.75rem]">
       {answer !== null && answer.outcome !== 'done' && (
         <span className="text-danger" title={answer.detail || undefined}>
           {answer.outcome === 'refused' ? answer.detail : 'the run failed'}

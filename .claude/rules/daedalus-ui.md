@@ -76,6 +76,34 @@ checks). What a component looks like:
    (`BOARD`, `STAT_STRIP`, `APP_LIST`…) rather than approximating it,
    so nothing reflows when data lands.
 
+## The surface ladder (2026-10 restyle)
+
+Linear / Notion, not glow: dark mode is a GREY ladder, never near-black.
+
+- **Canvas** — `--sidebar`: the body and the rail, which sits flush on it
+  (no border, no card).
+- **Panel** — `--background`: the content column, inset into the canvas
+  (`shell.tsx`: rounded, hairline, `my-2 mr-2` on desktop).
+- **Surface** — `--surface` (`bg-surface`): a board or card, a veil over
+  the panel. Its full look is `GLASS` (`viz/board.tsx`) — a hand-rolled
+  bordered panel is a bug; use `Board`, `Card`/`Section` or `GLASS`.
+- Edges are `border-hairline`; a lit top edge is
+  `shadow-[inset_0_1px_0_var(--hairline-hi)]`. Floating layers (menus, the
+  palette, the apply dock) are `bg-popover/80 backdrop-blur-2xl` +
+  `--float-shadow`. These are DERIVED in `theme.css` from the themeable
+  tokens, so no preset needs them.
+- One-of-N controls (tabs, filters, pickers) are the segmented control:
+  `SEGMENT_TRACK` / `SEGMENT_ITEM` / `SEGMENT_ITEM_ON` (`tokens.ts`).
+- Restraint: colour is for state. No glows, gradients or accent bars as
+  ornament. Type: Geist / Geist Mono; page title 1.75rem/640, board title
+  0.875rem/560, captions 0.75–0.78rem muted, figures 1.6rem tabular.
+- **Explanations fold.** `FOOT` (and settings `NOTE`) carry the marker
+  class `explain`; a `Board` or settings `Section` hides every `.explain`
+  inside it until its ⓘ is pressed (`components/explain.tsx`, CSS `:has()`
+  decides whether the ⓘ is drawn). A caption that carries a live fact or a
+  state is `CAPTION`, which never folds.
+- Rail groups come from the manifest's `section`.
+
 ## Tone is a variable, not a class
 
 Six verdicts (`accent | ok | warn | bad | info | muted`), and every

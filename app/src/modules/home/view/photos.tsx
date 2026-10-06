@@ -1,7 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures, Progress, Ring } from '../../../components/viz'
 import { bytes, num, pct } from '../../../lib/format'
 import type { HomeData } from '../data'
@@ -59,7 +59,7 @@ export function PhotosView({ data: d }: { data: Photos }) {
               ]}
             />
           </div>
-          <p className={FOOT}>
+          <p className={CAPTION}>
             Video is{' '}
             {pct(
               d.usageBytes === null || d.usageBytes === 0
@@ -82,8 +82,8 @@ export function PhotosView({ data: d }: { data: Photos }) {
           />
           <Measures
             items={[
-              { k: 'used', v: bytes(d.disk.usedBytes) },
-              { k: 'free', v: bytes(d.disk.freeBytes) },
+              { k: 'Used', v: bytes(d.disk.usedBytes) },
+              { k: 'Free', v: bytes(d.disk.freeBytes) },
             ]}
           />
           <p className={FOOT}>
@@ -107,7 +107,7 @@ export function PhotosView({ data: d }: { data: Photos }) {
             ))}
           </ul>
           {d.users.length === 0 && <p className={EMPTY}>could not read the user list</p>}
-          <p className={FOOT}>
+          <p className={CAPTION}>
             Quotas are unset on every account, so the only ceiling is the dataset above.
           </p>
         </Board>

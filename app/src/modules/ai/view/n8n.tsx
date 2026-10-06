@@ -5,7 +5,7 @@ import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
 import { DASH, ms, num, pct, until } from '../../../lib/format'
 import type { N8nData } from '../data/n8n'
-import { AXIS, comparePinned, EMPTY, FOOT, LIVE, NOTE, RANKS, REJECTED } from './shared'
+import { AXIS, CAPTION, comparePinned, EMPTY, FOOT, LIVE, NOTE, RANKS, REJECTED } from './shared'
 
 // ── n8n ────────────────────────────────────────────────────────────────────
 
@@ -118,15 +118,15 @@ function RunsBoard({ f }: { f: N8nFacts }) {
         items={[
           { k: `${String(total.days)} days`, v: `${num(total.runs)} runs` },
           {
-            k: 'failed',
+            k: 'Failed',
             v:
               total.runs === 0
                 ? DASH
                 : `${num(total.failed)} · ${pct((total.failed / total.runs) * 100, 1)}`,
             tone: total.failed > 0 ? 'bad' : undefined,
           },
-          { k: 'typical run', v: ms(total.medianMs) },
-          { k: 'workflows seen', v: String(flows.length) },
+          { k: 'Typical run', v: ms(total.medianMs) },
+          { k: 'Workflows seen', v: String(flows.length) },
         ]}
       />
 
@@ -166,9 +166,12 @@ function RunsBoard({ f }: { f: N8nFacts }) {
         Counted from n8n’s own execution history, which it prunes on a schedule, so this window is
         what n8n still holds. An empty column early on may be forgetting rather than silence. A day
         that saw a failure is underlined in red; the stack trace is behind the Executions tab.
-        {data.partial &&
-          ' There were more executions than this fetched, so these are a lower bound.'}
       </p>
+      {data.partial && (
+        <p className={CAPTION}>
+          There were more executions than this fetched, so these are a lower bound.
+        </p>
+      )}
     </Board>
   )
 }
@@ -225,10 +228,15 @@ function WorkflowsBoard({ f }: { f: N8nFacts }) {
         the runs above it are the old version. That one is why &ldquo;I changed it and nothing
         happened&rdquo;. <b>off</b> is switched off and explains the silence rather than reporting
         it.
-        {data.archived > 0 &&
-          ` ${String(data.archived)} archived workflow${data.archived === 1 ? '' : 's'} are left out, because they cannot run.`}
-        {data.nameNote !== null && ` ${data.nameNote}`}
       </p>
+      {/* Counts and a data note: visible, unlike the legend above. */}
+      {(data.archived > 0 || data.nameNote !== null) && (
+        <p className={CAPTION}>
+          {data.archived > 0 &&
+            `${String(data.archived)} archived workflow${data.archived === 1 ? '' : 's'} are left out, because they cannot run.`}
+          {data.nameNote !== null && `${data.archived > 0 ? ' ' : ''}${data.nameNote}`}
+        </p>
+      )}
     </Board>
   )
 }

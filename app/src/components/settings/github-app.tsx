@@ -13,9 +13,10 @@ import { useNow } from '../poll'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Chip } from '../viz'
+import { NOTE_SHOWN } from './form'
 import { CreateApp, PendingApply } from './github-app-steps'
 import { PasteKey } from './github-paste-key'
-import { ASIDE, ExtLink, Mono, NOTE, Pending, Rows, Stack, Unset } from './shared'
+import { ASIDE, ExtLink, Mono, Pending, Rows, Stack, Unset } from './shared'
 
 // The GitHub half of Settings › Integrations: the box's own GitHub App from
 // creation through installation.
@@ -48,9 +49,9 @@ const APP_STATE: Record<GithubAppState, { tone: Tone; label: string }> = {
  */
 export function GithubApp({ app, notice, onDismissNotice }: GithubAppProps) {
   return (
-    <div className="flex flex-col gap-3 border-t border-subtle pt-4">
+    <div className="flex flex-col gap-3 border-hairline border-t pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="m-0 font-medium text-[0.9rem]">GitHub App</h3>
+        <h3 className="m-0 text-[0.875rem] [font-weight:560]">GitHub App</h3>
         {app === null ? (
           <Pending className="w-20" />
         ) : (
@@ -223,11 +224,11 @@ function AppFacts({ app, identity }: { app: GithubAppStatus; identity: SiteGithu
               </a>
             </Button>
           </div>
-          <p className={NOTE}>{installNote(inst)}</p>
+          <p className={NOTE_SHOWN}>{installNote(inst)}</p>
         </div>
       )}
       {app.state === 'installed-elsewhere' && inst?.account != null && (
-        <p className={NOTE}>
+        <p className={NOTE_SHOWN}>
           The installation the host found is on {inst.account.login}, but the box builds{' '}
           {identity.owner}’s repositories. Install the App on {identity.owner} as well.
         </p>

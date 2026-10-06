@@ -2,6 +2,7 @@ import { BarList, Board, BoardGrid, Facts, Measures, Progress } from '../../../.
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../../../lib/format'
 import {
+  CAPTION,
   EMPTY,
   FOOT,
   LIST,
@@ -154,7 +155,7 @@ function TheModulesBoard({ f }: { f: NodeMemoryFacts }) {
           </ul>
         </>
       )}
-      <p className={FOOT}>
+      <p className={!soldered && m.slots === null ? CAPTION : FOOT}>
         {soldered
           ? 'Unified memory on the package, which is why the GPU on Build has no VRAM of its own: it shares this. The amount was decided at purchase and cannot change.'
           : m.slots === null

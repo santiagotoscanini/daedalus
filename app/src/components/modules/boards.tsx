@@ -1,8 +1,10 @@
 import { type ComponentType, type LazyExoticComponent, lazy, type ReactNode, Suspense } from 'react'
+import { cn } from '../../lib/cn'
 import { nixModulesOf } from '../../lib/modules/manifest'
 import { moduleById } from '../../lib/modules/registry'
 import { ServiceSettingsButton } from '../service-settings'
-import { EMPTY, MONO } from '../tokens'
+import { MONO } from '../tokens'
+import { GLASS } from '../viz/board'
 
 // The browser half of the module registry: every module's `views` record,
 // keyed by the directory the glob found it in.
@@ -85,8 +87,13 @@ function OffPanel({ module, tab }: { module: string; tab: string }) {
   const spec = moduleById(module)?.tabs.find((t) => t.id === tab)
   const ids = spec === undefined ? [] : nixModulesOf(spec)
   return (
-    <div className={`${EMPTY} flex flex-wrap items-center justify-center gap-[0.6rem]`}>
-      <span>
+    <div
+      className={cn(
+        GLASS,
+        'flex flex-col items-center justify-center gap-4 px-6 py-10 text-center text-[0.875rem] text-muted-foreground [overflow-wrap:anywhere]',
+      )}
+    >
+      <p className="m-0 max-w-[60ch] leading-[1.6]">
         {ids.map((id, i) => (
           <span key={id}>
             {i > 0 && ', '}
@@ -95,7 +102,7 @@ function OffPanel({ module, tab }: { module: string; tab: string }) {
         ))}{' '}
         {ids.length === 1 ? 'is' : 'are'} switched off on this box: nothing runs, nothing answers,
         and the data stays where it is. Switch it on from the cog, then Apply.
-      </span>
+      </p>
       <ServiceSettingsButton ids={ids} />
     </div>
   )

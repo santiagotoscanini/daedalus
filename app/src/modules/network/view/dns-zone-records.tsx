@@ -3,7 +3,7 @@ import { cn } from '../../../lib/cn'
 import { DASH, since } from '../../../lib/format'
 import { RecordList } from './dns-records'
 import type { Zone } from './dns-zone'
-import { EMPTY, FOOT, MAIN, MONO, N, NOTE, ROW, SIDE } from './shared'
+import { CAPTION, EMPTY, FOOT, MAIN, MONO, N, NOTE, ROW, SIDE } from './shared'
 
 /** Each mail domain's posture, with the records it was read from. */
 export function MailRecords({ d }: { d: Zone }) {
@@ -33,18 +33,13 @@ export function MailRecords({ d }: { d: Zone }) {
             {/* Not the board's own heading style: that one is uppercased,
                     and a domain name and its mail exchangers are literal
                     strings that are wrong in capitals. */}
-            <h4 className={cn(MONO, 'm-0 text-[0.8rem] font-semibold text-foreground')}>
+            <h4 className={cn(MONO, 'm-0 text-[0.8rem] text-foreground [font-weight:560]')}>
               {m.domain}
             </h4>
             {/* The exchangers are the answer to "who receives this", so
                     they belong under the name — but they are three words of
                     context, not a heading. */}
-            <p
-              className={cn(
-                MONO,
-                'mx-0 mt-[0.1rem] mb-[0.45rem] text-[0.7rem] text-muted-foreground',
-              )}
-            >
+            <p className={cn(MONO, 'mx-0 mt-0.5 mb-2 text-[0.72rem] text-muted-foreground')}>
               {m.mx.join(' · ') || 'no MX'}
             </p>
             <Measures
@@ -135,7 +130,7 @@ export function RestOfZone({ d }: { d: Zone }) {
         open
       />
 
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {d.tally.total === null ? (
           'The zone could not be read.'
         ) : (
@@ -146,11 +141,15 @@ export function RestOfZone({ d }: { d: Zone }) {
                     before an interpolation into a space, so splitting this
                     left the sentence ending in " ." */}
             {`${String(d.tally.leftovers)} left over${d.tally.unclassified > 0 ? `, plus ${String(d.tally.unclassified)} unclassified` : ''}.`}{' '}
-            The count is Cloudflare’s and the groups are computed from it, so a record that stopped
-            matching its rule shows up above rather than going missing.
           </>
         )}
       </p>
+      {d.tally.total !== null && (
+        <p className={FOOT}>
+          The count is Cloudflare’s and the groups are computed from it, so a record that stopped
+          matching its rule shows up above rather than going missing.
+        </p>
+      )}
     </Board>
   )
 }

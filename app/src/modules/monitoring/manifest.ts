@@ -5,6 +5,7 @@ export const manifest = {
   label: 'Monitoring',
   lede: 'The watchers, and whether each would still tell you.',
   order: 70,
+  section: 'Infrastructure',
   // Shaped to Alerts, the tab that opens by default.
   boardSpans: [8, 4, 4, 8],
   // No tile directory: its tiles would be this tab row. A tab per watcher

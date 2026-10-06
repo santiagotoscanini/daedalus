@@ -20,7 +20,7 @@ import { countByState, type RosterEntry, sessionRows } from '../../../lib/claude
 import { num } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { ARM_MS } from '../../armed-confirm'
-import { EMPTY, FOOT, LIST, MONO, NOTE } from '../../tokens'
+import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE } from '../../tokens'
 import { useArmedKey } from '../../use-armed'
 import { useVerbRequest } from '../../verb-request'
 import { Board } from '../../viz'
@@ -142,7 +142,7 @@ export function RosterBoard({
       )}
 
       {rows.length > shown.length && (
-        <p className={FOOT}>
+        <p className={CAPTION}>
           {num(rows.length - shown.length)} older transcript
           {rows.length - shown.length === 1 ? '' : 's'} not listed, of{' '}
           {num(roster?.transcript_total ?? 0)} on disk.
@@ -161,7 +161,7 @@ export function RosterBoard({
       {node === null && <CycleSessionsControl rows={rows} holds={holds} boardBusy={running} />}
 
       {stale > 0 && (
-        <p className={FOOT}>
+        <p className={CAPTION}>
           {num(stale)} session {stale === 1 ? 'file' : 'files'} in{' '}
           <span className={MONO}>~/.claude/sessions</span> with no process behind{' '}
           {stale === 1 ? 'it' : 'them'} — left by a session that exited uncleanly. Not an error;
@@ -170,7 +170,7 @@ export function RosterBoard({
       )}
 
       {errors.length > 0 && (
-        <p className={FOOT}>The agent could not read everything: {errors.join('; ')}.</p>
+        <p className={CAPTION}>The agent could not read everything: {errors.join('; ')}.</p>
       )}
 
       {/* ONE paragraph, deliberately: the board says the rest by itself (the

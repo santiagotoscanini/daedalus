@@ -5,6 +5,7 @@ export const manifest = {
   label: 'Media',
   lede: 'Two libraries, and the chain that fills them.',
   order: 20,
+  section: 'Services',
   // Shaped to Jellyfin, the tab that opens by default.
   boardSpans: [8, 4, 4, 8],
   // No tile directory: every service has a tab page with room for the version

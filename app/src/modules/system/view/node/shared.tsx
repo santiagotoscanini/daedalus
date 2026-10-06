@@ -19,6 +19,7 @@ import type { Tone } from '../../../../lib/tone'
 // foot, as the box's pages do.
 
 export {
+  CAPTION,
   EMPTY,
   FOOT,
   LIST,

@@ -1,10 +1,11 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../../../components/service-head'
+import { Button } from '../../../../components/ui/button'
 import { Board, BoardGrid, Columns, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { bytes, num } from '../../../../lib/format'
-import { ACTION, AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../shared'
+import { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../shared'
 import type { Inbound } from './index'
 
 /**
@@ -50,9 +51,11 @@ export function WireguardView({ data }: { data: Inbound['wireguard'] }) {
         }
         actions={
           data.url === null ? undefined : (
-            <a className={ACTION} href={data.url} target="_blank" rel="noreferrer">
-              Open wg-easy ↗
-            </a>
+            <Button asChild size="sm">
+              <a href={data.url} target="_blank" rel="noreferrer">
+                Open wg-easy ↗
+              </a>
+            </Button>
           )
         }
       />
@@ -113,7 +116,7 @@ function PeersBoard({ f }: { f: WireguardFacts }) {
       {peers.length === 0 ? (
         <p className={EMPTY}>no peers configured</p>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-[0.1rem] p-0">
+        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
           {peers.map((p) => (
             // Fixed name and count tracks, not `auto`. Each row is its own
             // grid container, so a content-sized column is measured per
@@ -121,39 +124,39 @@ function PeersBoard({ f }: { f: WireguardFacts }) {
             // stop at a different one, which is the entire comparison this
             // list exists to make.
             <li
-              className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-raised"
+              className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-2.5 gap-y-0.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-foreground/[0.04]"
               key={p.name}
             >
-              <span className="flex min-w-0 items-baseline gap-[0.35rem] text-[0.79rem]">
+              <span className="flex min-w-0 items-baseline gap-1.5 text-[0.8rem]">
                 <span className="min-w-0 truncate" title={p.name}>
                   {p.name}
                 </span>
                 {/* Deliberately switched off is not a warning at all — it
                     explains the silence rather than reporting it. */}
                 {!p.enabled && (
-                  <em className="flex-none rounded-full border border-border px-[0.35rem] py-[0.02rem] text-[0.6rem] text-muted-foreground not-italic">
+                  <em className="flex-none rounded-full px-1.5 text-[0.68rem] leading-4 text-muted-foreground not-italic ring-1 ring-hairline ring-inset [font-weight:550]">
                     disabled
                   </em>
                 )}
                 {p.handshakeAgo === null && (
-                  <em className="flex-none rounded-full border border-[color-mix(in_srgb,var(--warning)_40%,transparent)] px-[0.35rem] py-[0.02rem] text-[0.6rem] text-warning not-italic">
+                  <em className="flex-none rounded-full bg-warning/10 px-1.5 text-[0.68rem] leading-4 text-warning not-italic ring-1 ring-warning/25 ring-inset [font-weight:550]">
                     never used
                   </em>
                 )}
               </span>
-              <span className="block h-[5px] overflow-hidden rounded-[3px] bg-lifted">
+              <span className="block h-1 overflow-hidden rounded-full bg-foreground/[0.08]">
                 <span
-                  className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none"
+                  className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none"
                   style={{ width: `${String(Math.max(1.5, ((p.rx + p.tx) / max) * 100))}%` }}
                 />
               </span>
-              <span className="text-right text-[0.79rem] whitespace-nowrap tabular-nums">
+              <span className="text-right text-[0.8rem] whitespace-nowrap tabular-nums">
                 {bytes(p.rx + p.tx)}
               </span>
               {/* Interpuncts are generated between the items rather than
                   typed, so a peer with no address does not trail a
                   separator into empty space. */}
-              <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
+              <span className="col-span-full flex min-w-0 flex-wrap gap-x-1.5 gap-y-0 text-[0.72rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-1.5 [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
                 {p.ipv4 !== null && <span className={cn(MONO, 'truncate')}>{p.ipv4}</span>}
                 {/* Named rather than arrowed. An arrow on a VPN row is
                     ambiguous by construction — the same byte is the

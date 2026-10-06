@@ -1,11 +1,12 @@
 import { LinkRow, ServiceHead } from '../../../components/service-head'
+import { Button } from '../../../components/ui/button'
 import type { Tone } from '../../../components/viz'
 import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, since, until } from '../../../lib/format'
 import type { NetworkData } from '../data'
 import { MailRecords, RecentlyChanged, RestOfZone } from './dns-zone-records'
-import { ACTION, EMPTY, FOOT, GROUP, MAIN, MONO, N, NOTE, ROW, ROWS, SIDE, SUB } from './shared'
+import { CAPTION, EMPTY, FOOT, GROUP, MAIN, MONO, N, NOTE, ROW, ROWS, SIDE, SUB } from './shared'
 
 // Network › DNS, the zone side: the base domain as the internet is told it —
 // the names pointing home, the registration, mail, the rest of the zone and
@@ -60,14 +61,15 @@ export function ZoneView({ d }: { d: Zone }) {
           </>
         }
         actions={
-          <a
-            className={ACTION}
-            href={`https://dash.cloudflare.com/?to=/:account/${d.domain}/dns`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open the zone ↗
-          </a>
+          <Button asChild size="sm">
+            <a
+              href={`https://dash.cloudflare.com/?to=/:account/${d.domain}/dns`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open the zone ↗
+            </a>
+          </Button>
         }
       />
       <LinkRow
@@ -123,7 +125,7 @@ function HomeNames({ d }: { d: Zone }) {
               hole in every row that has neither. */}
       <ul className={ROWS}>
         {d.names.map((n) => (
-          <li key={n.fqdn} className={cn(ROW, 'gap-[0.4rem]')}>
+          <li key={n.fqdn} className={cn(ROW, 'gap-2')}>
             <span className={cn(MAIN, MONO, 'min-w-[7rem] flex-none')}>{n.short}</span>
             <Chip tone={n.away === 'tunnel' ? 'info' : 'warn'}>
               {n.away === 'tunnel' ? 'tunnel' : 'this address'}
@@ -150,8 +152,8 @@ function HomeNames({ d }: { d: Zone }) {
       </p>
 
       {drift > 0 && (
-        <div className="mt-4 border-t border-subtle pt-[0.7rem]">
-          <h4 className={cn(SUB, 'flex items-center gap-[0.45rem]')}>
+        <div className="mt-1 border-hairline border-t pt-3">
+          <h4 className={cn(SUB, 'flex items-center gap-2')}>
             Not in step
             <Chip tone="warn">{drift}</Chip>
           </h4>
@@ -159,21 +161,21 @@ function HomeNames({ d }: { d: Zone }) {
                   row — so it keeps the foot's type size and gets air between
                   the lines instead. */}
           {d.drift.publishedWithoutLan.length > 0 && (
-            <p className={cn(FOOT, '[p+&]:mt-[0.45rem]')}>
+            <p className={cn(CAPTION, '[p+&]:mt-2')}>
               <b>Published, but pi-hole does not answer for it:</b>{' '}
               <span className={MONO}>{d.drift.publishedWithoutLan.join(', ')}</span>. Reachable at
               home only by going out to Cloudflare and back in.
             </p>
           )}
           {d.drift.lanWithoutRoute.length > 0 && (
-            <p className={cn(FOOT, '[p+&]:mt-[0.45rem]')}>
+            <p className={cn(CAPTION, '[p+&]:mt-2')}>
               <b>pi-hole points these here and traefik has no router for them:</b>{' '}
               <span className={MONO}>{d.drift.lanWithoutRoute.join(', ')}</span>. They resolve, then
               land on the default certificate and 404.
             </p>
           )}
           {d.drift.tunnelWithoutApp.length > 0 && (
-            <p className={cn(FOOT, '[p+&]:mt-[0.45rem]')}>
+            <p className={cn(CAPTION, '[p+&]:mt-2')}>
               <b>Tunnel records with nothing behind them:</b>{' '}
               <span className={MONO}>{d.drift.tunnelWithoutApp.join(', ')}</span>. The reconciler
               only sweeps records carrying its own comment, so these were made by hand and it will
@@ -245,7 +247,7 @@ function Registration({ d }: { d: Zone }) {
           { k: 'Records', v: d.cf.records === null ? DASH : num(d.cf.records) },
         ]}
       />
-      <details className={cn(GROUP, 'mt-[0.6rem]')}>
+      <details className={cn(GROUP, 'mt-1')}>
         <summary>Nameservers</summary>
         <ul className={ROWS}>
           {reg.nameservers.map((n) => (
@@ -255,7 +257,7 @@ function Registration({ d }: { d: Zone }) {
           ))}
         </ul>
       </details>
-      <p className={FOOT}>
+      <p className={reg.note === null ? FOOT : CAPTION}>
         {reg.note ??
           'The top half is the registry’s answer, not Cloudflare’s. The lock and the expiry live with the registrar, and nothing on this box can see them. DNSSEC is read the same way: what matters is whether the parent zone holds a DS record, because until it does, nothing validates the signatures.'}
       </p>

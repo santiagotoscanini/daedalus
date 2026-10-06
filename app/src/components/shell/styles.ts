@@ -24,18 +24,19 @@
  * page. The accent's job on this rail is the logo.
  */
 export const NAV_ITEM = [
-  'relative flex items-center gap-2.5 rounded-[7px] px-2.5 py-[0.45rem]',
-  'text-subdued text-sm whitespace-nowrap no-underline',
-  'transition-[background-color,color] duration-150',
-  'hover:bg-raised hover:text-foreground hover:no-underline',
+  // Dense, like every tool people live in: 30px rows, 13px labels, 16px icons.
+  'relative flex h-[30px] items-center gap-2.5 rounded-[7px] px-2',
+  'text-muted-foreground text-[0.8125rem] whitespace-nowrap no-underline',
+  'transition-[background-color,color] duration-100',
+  'hover:bg-foreground/[0.05] hover:text-foreground hover:no-underline',
   'focus-visible:outline-2 focus-visible:outline-primary-dim focus-visible:outline-offset-2',
   // A thumb, not a cursor.
-  'max-rail:px-2.5 max-rail:py-[0.68rem] max-rail:text-[0.97rem]',
+  'max-rail:h-11 max-rail:px-2.5 max-rail:text-[0.95rem]',
   'nav-collapsed:justify-center nav-collapsed:px-0',
   'nav-collapsed:after:pointer-events-none nav-collapsed:after:absolute',
   'nav-collapsed:after:top-1/2 nav-collapsed:after:left-[calc(100%+0.55rem)]',
   'nav-collapsed:after:z-40 nav-collapsed:after:-translate-y-1/2',
-  'nav-collapsed:after:rounded-[7px] nav-collapsed:after:border nav-collapsed:after:bg-lifted',
+  'nav-collapsed:after:rounded-[8px] nav-collapsed:after:border nav-collapsed:after:border-hairline nav-collapsed:after:bg-popover nav-collapsed:after:shadow-(--float-shadow)',
   'nav-collapsed:after:px-[0.55rem] nav-collapsed:after:py-1',
   'nav-collapsed:after:text-[0.78rem] nav-collapsed:after:leading-tight',
   'nav-collapsed:after:font-medium nav-collapsed:after:tracking-normal',
@@ -45,22 +46,32 @@ export const NAV_ITEM = [
   'nav-collapsed:hover:after:opacity-100 nav-collapsed:focus-visible:after:opacity-100',
   // The icon carries less weight than its label, so at rest it is drawn
   // back; hovering or selecting brings the whole row forward together.
-  '[&>svg]:shrink-0 [&>svg]:opacity-75 [&>svg]:transition-opacity hover:[&>svg]:opacity-100',
+  '[&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:transition-opacity hover:[&>svg]:opacity-100',
 ].join(' ')
 
-export const NAV_ITEM_ACTIVE = 'bg-raised font-[550] text-foreground [&>svg]:opacity-100'
+/* The lit row: a quiet fill and full ink. No accent — the selected row is
+   the one the eye passes every glance, and colour there is noise. */
+export const NAV_ITEM_ACTIVE =
+  'bg-foreground/[0.08] font-medium text-foreground [&>svg]:opacity-100'
 
 /** The label, which the collapsed rail hides in favour of the tooltip. */
 export const NAV_LABEL = 'min-w-0 overflow-hidden text-ellipsis nav-collapsed:hidden'
 
-export const NAV_DIVIDER = 'my-2 mx-[0.7rem] h-px bg-subtle nav-collapsed:mx-1.5'
+export const NAV_DIVIDER = 'my-2 mx-2 h-px bg-hairline nav-collapsed:mx-1'
 
-export const NAV_LIST = 'flex flex-col gap-[0.12rem]'
+/** A group's name above its rows. Collapsed, the group is a hairline instead. */
+export const NAV_SECTION = [
+  'mt-4 mb-1 px-2 text-[0.72rem] font-medium text-muted-foreground/75 tracking-[0.01em]',
+  'nav-collapsed:mx-1 nav-collapsed:my-2 nav-collapsed:h-px nav-collapsed:overflow-hidden',
+  'nav-collapsed:bg-hairline nav-collapsed:p-0 nav-collapsed:text-transparent',
+].join(' ')
 
-/** The wordmark. Letter-spaced capitals, which the collapsed rail centres. */
+export const NAV_LIST = 'flex flex-col gap-px'
+
+/** The wordmark, which the collapsed rail centres. */
 export const BRAND = [
-  'flex min-w-0 flex-1 items-center gap-[0.7rem] px-[0.55rem] py-1',
-  'font-semibold text-[0.76rem] text-foreground uppercase tracking-[0.14em]',
+  'flex h-8 min-w-0 flex-1 items-center gap-2.5 rounded-[7px] px-2',
+  'font-semibold text-[0.875rem] text-foreground tracking-[-0.015em]',
   'no-underline hover:no-underline',
   'focus-visible:outline-2 focus-visible:outline-primary-dim focus-visible:outline-offset-2',
   'nav-collapsed:justify-center nav-collapsed:px-0',
@@ -68,8 +79,8 @@ export const BRAND = [
 
 /** A square hit target holding one icon and nothing else. */
 export const ICON_BUTTON = [
-  'inline-flex size-[38px] flex-none cursor-pointer items-center justify-center',
-  'rounded-[9px] border-0 bg-transparent p-0 text-subdued',
-  'hover:bg-raised hover:text-foreground',
+  'inline-flex size-8 flex-none cursor-pointer items-center justify-center',
+  'rounded-[7px] border-0 bg-transparent p-0 text-muted-foreground',
+  'hover:bg-foreground/[0.06] hover:text-foreground',
   'focus-visible:outline-2 focus-visible:outline-primary-dim focus-visible:outline-offset-2',
 ].join(' ')

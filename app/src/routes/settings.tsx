@@ -225,7 +225,7 @@ function SettingsPage() {
         linkTo={(id) => ({ to: '/settings', search: { tab: id } })}
       />
 
-      <div className="flex flex-col gap-6 pb-24">
+      <div className="flex flex-col gap-5 pb-24">
         {/* One place for the bytes an Apply would write, whichever tab the
             edit was made on — the tabs show fields, this shows the file. */}
         <SiteDiff edit={edit} />

@@ -2,7 +2,7 @@
 
 import { LogBoard, type LogNeighbour } from '../../../../components/logs'
 import { HeadStrip, OS_MARK, WipBoard } from '../../../../components/machine-head'
-import { FOOT, MONO } from '../../../../components/tokens'
+import { CAPTION, FOOT, MONO } from '../../../../components/tokens'
 import { Button } from '../../../../components/ui/button'
 import { Board, BoardGrid, Measures } from '../../../../components/viz'
 import { num } from '../../../../lib/format'
@@ -23,8 +23,9 @@ const KIND_LINKS: Partial<Record<ProviderMachine['kind'], { label: string; href:
 
 /* Under the head, hanging past the artwork so it lines up with the name. */
 const ACTIONS =
-  'mt-[0.35rem] mr-0 mb-[1.1rem] ml-[3.4rem] flex flex-wrap items-center gap-x-4 gap-y-[0.5rem] max-[44rem]:ml-0'
-const DOC_LINK = 'text-[0.74rem] text-muted-foreground no-underline hover:text-primary'
+  'mt-0 mb-5 ml-[3.625rem] flex flex-wrap items-center gap-x-4 gap-y-2 max-[44rem]:ml-0'
+const DOC_LINK =
+  'text-[0.75rem] text-muted-foreground no-underline transition-colors hover:text-foreground hover:no-underline'
 
 /**
  * The provider's own window, and where its kind is documented.
@@ -93,10 +94,10 @@ export function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersDa
           <WipBoard title="GPU right now" span={12} waits="waits on the agent’s GPU live figures">
             <Measures
               items={[
-                { k: 'load', v: '41%' },
-                { k: 'memory', v: '13.2 of 24 GB' },
-                { k: 'die', v: '61 °C' },
-                { k: 'clock', v: '2,410 MHz' },
+                { k: 'Load', v: '41%' },
+                { k: 'Memory', v: '13.2 of 24 GB' },
+                { k: 'Die', v: '61 °C' },
+                { k: 'Clock', v: '2,410 MHz' },
               ]}
             />
           </WipBoard>
@@ -172,17 +173,19 @@ function OfferedBoard({ m }: { m: ProviderMachine }) {
     <Board title="Offered" icon="grid" span={4}>
       <Measures
         items={[
-          { k: 'in the catalog', v: num(m.models.length) },
-          { k: 'on disk', v: num(onDisk.length) },
+          { k: 'In the catalog', v: num(m.models.length) },
+          { k: 'On disk', v: num(onDisk.length) },
           {
-            k: 'offered to the gateway',
+            k: 'Offered to the gateway',
             v: num(m.offerableCount),
             tone: m.offerableCount > 0 ? 'ok' : 'muted',
           },
-          { k: 'routed now', v: num(routed) },
+          { k: 'Routed now', v: num(routed) },
         ]}
       />
-      <p className={FOOT}>
+      {/* Offered: how the sync works, so it folds. Not offered: the state and
+          its fix, which a glance needs. */}
+      <p className={m.offered ? FOOT : CAPTION}>
         {m.offered
           ? 'The gateway sync writes a route per offered model and removes it when the model leaves. Which models are offered, and under what name, is Settings › Machines.'
           : m.machine === 'box'

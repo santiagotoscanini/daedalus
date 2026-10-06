@@ -1,7 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { FOOT, NOTE } from '../../../components/tokens'
+import { CAPTION, FOOT, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { HealthData } from '../data'
@@ -93,7 +93,7 @@ export function PantryView({ data: d }: { data: Pantry }) {
             ]}
           />
           {listsEmpty && (
-            <p className={FOOT}>Both lists are empty. The stock half is what it is used for.</p>
+            <p className={CAPTION}>Both lists are empty. The stock half is what it is used for.</p>
           )}
         </Board>
 

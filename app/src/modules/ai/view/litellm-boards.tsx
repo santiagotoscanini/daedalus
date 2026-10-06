@@ -7,6 +7,7 @@ import type { LitellmData } from '../data/litellm'
 import type { LitellmFacts } from './litellm'
 import {
   AXIS,
+  CAPTION,
   EMPTY,
   FOOT,
   ITEM,
@@ -37,10 +38,10 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
     >
       <Measures
         items={[
-          { k: 'today', v: volume(data.today) },
+          { k: 'Today', v: volume(data.today) },
           { k: `${String(total.days)} days`, v: volume(total) },
           {
-            k: 'failed',
+            k: 'Failed',
             v:
               total.requests === 0
                 ? DASH
@@ -50,7 +51,7 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
           // The one latency figure on this page that is actually about the
           // gateway. Every other one is end-to-end and therefore mostly the
           // model server, and this is the number that says so.
-          { k: 'gateway adds', v: ms(data.overheadMs) },
+          { k: 'Gateway adds', v: ms(data.overheadMs) },
         ]}
       />
 
@@ -75,19 +76,30 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
         </p>
       )}
 
+      {/* The per-endpoint counts and the lower-bound warning are readings, so
+          they stay visible; only the paragraph about the ledger folds. */}
+      {data.endpoints.length > 0 && (
+        <p
+          className={cn(
+            CAPTION,
+            'flex flex-wrap gap-x-4 gap-y-0.5 [&_b]:font-semibold [&_b]:text-subdued [&_b]:tabular-nums',
+          )}
+        >
+          {data.endpoints.map((e) => (
+            <span key={e.label}>
+              {e.label} <b>{num(e.value)}</b>
+            </span>
+          ))}
+        </p>
+      )}
+      {data.partial && (
+        <p className={CAPTION}>
+          The window has more rows than one page, so these are a lower bound.
+        </p>
+      )}
       <p className={FOOT}>
-        {data.endpoints.length > 0 && (
-          <span className="mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-subdued [&_b]:tabular-nums">
-            {data.endpoints.map((e) => (
-              <span key={e.label}>
-                {e.label} <b>{num(e.value)}</b>
-              </span>
-            ))}
-          </span>
-        )}
         Counted from the gateway’s own ledger, which survives a restart. Its Prometheus counters do
         not. A day that saw a failure is underlined in red.
-        {data.partial && ' The window has more rows than one page, so these are a lower bound.'}
       </p>
     </Board>
   )

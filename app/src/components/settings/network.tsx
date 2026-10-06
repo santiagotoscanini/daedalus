@@ -8,7 +8,8 @@ import {
   leaseTimeError,
   upstreamsError,
 } from '../../lib/site-fields'
-import { Line, Section, SourceNote, Value } from './shared'
+import { NOTE_SHOWN } from './form'
+import { Line, NOTE, Section, SourceNote, Value } from './shared'
 import { SiteList, SiteSwitch, SiteText, SiteUnwritten } from './site-fields'
 
 /** Optional address: empty is null in the document, anything else is a quad. */
@@ -17,7 +18,7 @@ const gatewayError = (v: string) => (v.trim() === '' ? null : ipv4Error(v))
 export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteEdit }) {
   const n = settings.network
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <SiteUnwritten edit={edit} />
 
       <Section
@@ -73,12 +74,12 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
           },
         ]}
       >
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE_SHOWN}>
           The LAN address is the box's own. A wrong value strands it after the rebuild — the DNS
           server, this page and SSH all move with it — and the way back in is SSH by the new
           address. An empty interface or gateway leaves the choice to the kernel.
         </p>
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE}>
           The public hostname is split-horizon: Pi-hole answers it with the LAN address, the public
           record carries the WAN address. It stays DNS-only at Cloudflare — proxying it would break
           the router-forwarded games and mask the LAN override.
@@ -151,7 +152,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
           },
         ]}
       >
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE_SHOWN}>
           Turning the server off leaves every device on its current lease until it expires, then
           without an address unless something else hands them out. The lease is dnsmasq syntax: a
           number with an optional s/m/h/d/w unit, or <code>infinite</code>.
@@ -177,7 +178,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
           { k: 'Local records', v: <Value v={String(n.dns.lanHosts)} unit="hosts" /> },
         ]}
       >
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE_SHOWN}>
           One upstream per line, as an address with an optional <code>#port</code>. Every container
           on the box resolves through Pi-hole too, so an upstream that does not answer is a
           house-wide outage, not a slow lookup.

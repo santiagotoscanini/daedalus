@@ -59,7 +59,7 @@ export function RemovePanel({
             link to the GitHub repository. The next Apply removes the container, the traefik router,
             the pi-hole record, the gatus probe and the Cloudflare route.
           </p>
-          <p className="mb-0 text-[0.73rem] leading-[1.45] text-muted-foreground">
+          <p className="mb-0 text-[0.75rem] leading-[1.5] text-muted-foreground">
             <b>Not removed:</b>{' '}
             {[
               postgres && `the ${name} database and role on the shared cluster`,
@@ -74,16 +74,16 @@ export function RemovePanel({
             under the same name picks them back up.
           </p>
         </div>
-        <div className="flex flex-col items-stretch gap-[0.6rem]">
+        <div className="flex flex-col items-stretch gap-2.5">
           <TypedConfirm
             name={name}
             value={confirm}
             onChange={setConfirm}
-            className="flex-col items-stretch gap-[0.3rem]"
+            className="flex-col items-stretch gap-1"
             inputClassName="w-full"
           />
           {error !== null && (
-            <Alert variant="warning" className="mb-[1.35rem] text-foreground">
+            <Alert variant="warning" className="mb-5 text-foreground">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
@@ -131,8 +131,8 @@ export function TextField({
   return (
     // `has-[:disabled]:opacity-100`: a disabled row dims its INPUT, not its
     // label — the label is what says which field is locked.
-    <Field className="gap-[0.3rem] py-2 has-[:disabled]:opacity-100">
-      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-muted-foreground">
+    <Field className="gap-1 py-2 has-[:disabled]:opacity-100">
+      <FieldLabel htmlFor={id} className="text-[0.75rem] font-normal text-muted-foreground">
         {label}
       </FieldLabel>
       <Input
@@ -159,10 +159,10 @@ export function TextField({
         }}
       />
       {error !== null ? (
-        <FieldError className="text-[0.76rem] leading-[1.45]">{error}</FieldError>
+        <FieldError className="text-[0.75rem] leading-[1.5]">{error}</FieldError>
       ) : (
         hint !== undefined && (
-          <FieldDescription className="text-[0.76rem] leading-[1.45]">{hint}</FieldDescription>
+          <FieldDescription className="text-[0.75rem] leading-[1.5]">{hint}</FieldDescription>
         )
       )}
     </Field>

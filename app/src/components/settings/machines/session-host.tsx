@@ -8,7 +8,8 @@ import { useRootAction } from '../../root-action'
 import { Button } from '../../ui/button'
 import { useArmed } from '../../use-armed'
 import { Chip } from '../../viz'
-import { ARMED_PANEL, ASIDE, ERROR_NOTE, Line, Mono, NOTE } from '../shared'
+import { INSET, NOTE_SHOWN } from '../form'
+import { ASIDE, ERROR_NOTE, Line, Mono } from '../shared'
 
 // The session host on one line (host/session-host.ts): how it stands, which
 // build runs, the terminals it holds and the machines connected, and the
@@ -41,8 +42,8 @@ export function SessionHost({ line }: { line: SessionHostLine }) {
       {armed ? (
         <ArmedConfirm
           ms={ARM_MS}
-          className={ARMED_PANEL}
-          costClassName={NOTE}
+          className={INSET}
+          costClassName={NOTE_SHOWN}
           noteClassName={ASIDE}
           cost={(fresh ?? line).confirm}
           confirm="Restart now"

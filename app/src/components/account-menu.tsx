@@ -77,7 +77,7 @@ export function AccountMenu({ account, ...rest }: Props) {
 }
 
 // Radix lights a row through its own attribute; a plain link lights on hover.
-const NATIVE_ITEM = cn(MENU_ITEM, 'hover:bg-raised hover:text-foreground')
+const NATIVE_ITEM = cn(MENU_ITEM, 'hover:bg-foreground/[0.05] hover:text-foreground')
 
 function NativeMenu({
   active,
@@ -201,10 +201,10 @@ function Menu({
             <DropdownMenuLabel className="flex items-center gap-2.5 py-2">
               <Avatar account={account} size={34} />
               <span className="min-w-0">
-                <span className="block truncate font-[550] text-[0.86rem] text-foreground">
+                <span className="block truncate text-[0.84rem] text-foreground [font-weight:560]">
                   {account.name}
                 </span>
-                <span className="block truncate text-muted-foreground text-[0.74rem]">
+                <span className="block truncate text-[0.75rem] text-muted-foreground">
                   {account.email || account.username}
                 </span>
               </span>
@@ -229,7 +229,7 @@ function Menu({
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="pt-1 pb-0.5 text-muted-foreground text-[0.7rem] uppercase tracking-[0.08em]">
+        <DropdownMenuLabel className="pt-1.5 pb-0.5 text-[0.72rem] text-muted-foreground [font-weight:500]">
           Theme
         </DropdownMenuLabel>
         <DropdownMenuRadioGroup

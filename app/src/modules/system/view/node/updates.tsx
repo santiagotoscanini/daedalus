@@ -8,7 +8,18 @@ import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../../../lib/format'
 import { linkWords } from '../../../../lib/node-link'
 import type { Tone } from '../../../../lib/tone'
-import { EMPTY, FOOT, LIST, MONO, NOTE, NotReadable, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import {
+  CAPTION,
+  EMPTY,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  NotReadable,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+} from './shared'
 
 /* ── Updates ──────────────────────────────────────────────────────────── */
 
@@ -31,7 +42,7 @@ function severityTone(s: string | null): Tone {
  */
 export function AgentUpdate({ node }: { node: NodeSystemData['node'] }) {
   return (
-    <div className="mt-[0.7rem] flex flex-wrap items-center gap-2 border-subtle border-t pt-[0.75rem]">
+    <div className="flex flex-wrap items-center gap-2 border-hairline border-t pt-3">
       <NodeCommandButton
         id={node.id}
         command="check_update"
@@ -259,7 +270,7 @@ function Panel({ f }: { f: NodeUpdatesFacts }) {
           })}
         </ul>
       )}
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {u !== null && u.checked_at !== null && (
           <>
             Asked <Ago at={u.checked_at} />.{' '}

@@ -5,6 +5,7 @@ export const manifest = {
   label: 'Gaming',
   lede: 'The game servers: which build each one runs, and whether the people on the sofa can still join.',
   order: 40,
+  section: 'Services',
   boardSpans: [6, 6, 12],
   tabs: [
     { id: 'factorio', label: 'Factorio', probe: 'factorio-admin', nix: 'factorio' },

@@ -27,7 +27,7 @@ export function Developer({
 }) {
   const d = settings.developer
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <SiteUnwritten edit={edit} />
 
       <Section

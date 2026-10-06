@@ -4,7 +4,7 @@ import { Board, Chip, Facts, Measures } from '../../../../components/viz'
 import type { MacRelease } from '../../../../lib/dashboard/macos-releases'
 import { bytes, DASH, num } from '../../../../lib/format'
 import type { NodeMacosFacts } from './macos'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 export function ThisMacRunsBoard({ f }: { f: NodeMacosFacts }) {
   const { status, t, m, verdict, lastInstalled } = f
@@ -99,7 +99,7 @@ export function AppleShipsBoard({ f }: { f: NodeMacosFacts }) {
           },
         ]}
       />
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {m === null ? (
           <>
             Apple&rsquo;s list was not read for this page. Open the tab again from{' '}
@@ -227,7 +227,7 @@ export function Panel2({ f }: { f: NodeMacosFacts }) {
           ))}
         </ul>
       )}
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {u !== null && u.checked_at !== null && (
           <>
             Asked <Ago at={u.checked_at} />.{' '}
@@ -279,7 +279,7 @@ function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
   const more = r.notes.length - sections.length
   return (
     <li className={`${ROW} flex-wrap`}>
-      <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-[0.2rem] whitespace-normal`}>
+      <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-1 whitespace-normal`}>
         <span className="flex flex-wrap items-center gap-2">
           <span>
             macOS {r.name} <span className={MONO}>{r.version}</span>
@@ -300,10 +300,10 @@ function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
             {r.securityNote ?? 'Apple published no developer notes for this version'}
           </span>
         ) : (
-          <span className="flex flex-col gap-[0.1rem] text-[0.8rem] text-foreground leading-[1.45]">
+          <span className="flex flex-col gap-0.5 text-[0.78rem] text-muted-foreground leading-[1.5]">
             {sections.map((s) => (
               <span key={`${s.area}/${s.kind}`}>
-                <span className="text-subdued">
+                <span className="text-foreground">
                   {s.area}
                   {s.kind !== 'Notes' && ` · ${s.kind.toLowerCase()}`}:
                 </span>{' '}
@@ -321,7 +321,7 @@ function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
           </span>
         )}
       </span>
-      <span className={`${ROW_SIDE} flex flex-col items-end gap-[0.15rem]`}>
+      <span className={`${ROW_SIDE} flex flex-col items-end gap-0.5`}>
         {r.notesUrl !== null && (
           <a href={r.notesUrl} target="_blank" rel="noreferrer">
             release notes ↗

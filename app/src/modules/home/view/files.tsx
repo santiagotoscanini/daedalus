@@ -1,7 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { FOOT, NOTE } from '../../../components/tokens'
+import { CAPTION, FOOT, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { bytes, DASH, num, pct } from '../../../lib/format'
 import type { HomeData } from '../data'
@@ -43,14 +43,14 @@ export function FilesView({ data: d }: { data: Files }) {
         >
           <Measures
             items={[
-              { k: 'public links', v: num(d.shares.link) },
-              { k: 'without a password', v: num(d.shares.linkNoPassword) },
-              { k: 'to a user', v: num(d.shares.user) },
-              { k: 'to a group', v: num(d.shares.group) },
+              { k: 'Public links', v: num(d.shares.link) },
+              { k: 'Without a password', v: num(d.shares.linkNoPassword) },
+              { k: 'To a user', v: num(d.shares.user) },
+              { k: 'To a group', v: num(d.shares.group) },
             ]}
           />
           {/* The one fact on this page that is worth acting on. */}
-          <p className={openLinks > 0 ? FOOT_WARN : FOOT}>
+          <p className={openLinks > 0 ? FOOT_WARN : CAPTION}>
             {openLinks > 0 ? (
               <>
                 <b>{num(openLinks)}</b> of {num(d.shares.link)} public links carry no password, so
@@ -80,10 +80,10 @@ export function FilesView({ data: d }: { data: Files }) {
         <Board title="Who is using it" icon="◑" span={4}>
           <Measures
             items={[
-              { k: 'last 5 min', v: num(d.active.m5) },
-              { k: 'last hour', v: num(d.active.h1) },
-              { k: 'last day', v: num(d.active.d1) },
-              { k: 'last week', v: num(d.active.d7) },
+              { k: 'Last 5 min', v: num(d.active.m5) },
+              { k: 'Last hour', v: num(d.active.h1) },
+              { k: 'Last day', v: num(d.active.d1) },
+              { k: 'Last week', v: num(d.active.d7) },
             ]}
           />
           <p className={FOOT}>

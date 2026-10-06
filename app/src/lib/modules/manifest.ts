@@ -77,6 +77,12 @@ export type ModuleManifest = {
   boardSpans: readonly number[]
   /** Position in the rail. Modules sort by this, then by id. */
   order: number
+  /**
+   * The rail group this module is listed under — a heading the rail draws
+   * once, above the first module that names it. Groups appear in the order
+   * of their first module. Omitted means the rail's catch-all, "Modules".
+   */
+  section?: string
   tabs: readonly TabSpec[]
   /**
    * The page has a machine picker above its tabs: this box, then every

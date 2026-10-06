@@ -12,14 +12,14 @@ import type { Drawer } from './use-rail'
 // tw-animate-css's enter/exit utilities.
 
 const OVERLAY = cn(
-  'fixed inset-0 z-50 bg-overlay/55 rail:hidden',
+  'fixed inset-0 z-50 bg-overlay/50 backdrop-blur-[2px] rail:hidden',
   'data-[state=open]:animate-in data-[state=open]:fade-in-0',
   'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
 )
 
 const PANEL = cn(
   'fixed inset-y-0 left-0 z-[60] flex h-[100dvh] w-[min(17.5rem,82vw)] flex-col gap-[1.1rem]',
-  'overflow-y-auto border-r border-r-border bg-background outline-none rail:hidden',
+  'overflow-y-auto border-r border-r-hairline bg-sidebar shadow-(--float-shadow) outline-none rail:hidden',
   'px-[0.7rem] pt-3 pb-[1.4rem] pl-[max(0.7rem,env(safe-area-inset-left))]',
   'duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
   'data-[state=open]:animate-in data-[state=open]:slide-in-from-left',
@@ -38,6 +38,10 @@ export function PhoneDrawer({
           <Dialog.Title className="sr-only">Navigation</Dialog.Title>
           <RailBody
             {...body}
+            onOpenPalette={() => {
+              drawer.setOpen(false)
+              body.onOpenPalette()
+            }}
             close={
               <Dialog.Close asChild>
                 <button type="button" className={ICON_BUTTON} aria-label="Close navigation">

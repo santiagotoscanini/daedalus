@@ -32,21 +32,21 @@ function useResidency(m: ProviderMachine) {
 
 /* The model in the slot. Given real weight — it is the answer to the kind's
    question, and everything below it is an alternative. */
-const HERO = 'group/hero rounded-[9px] bg-raised px-[0.6rem] py-[0.5rem]'
+const HERO = 'group/hero rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2.5'
 const HERO_NAME = 'min-w-0 truncate text-[0.85rem] font-semibold text-foreground'
 
 /* One of the other models of this kind — one click from the slot. */
 const ALT =
-  'group/alt flex min-w-0 items-center gap-[0.6rem] rounded-[7px] px-[0.6rem] py-[0.22rem] hover:bg-raised max-[46rem]:flex-wrap'
+  'group/alt flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-1 transition-colors hover:bg-foreground/[0.05] max-[46rem]:flex-wrap'
 const ALT_NAME = 'min-w-0 truncate text-[0.8rem] text-subdued'
 const ALT_META =
-  'ml-auto flex items-baseline gap-x-[0.9rem] gap-y-0 whitespace-nowrap text-[0.7rem] text-muted-foreground tabular-nums max-[46rem]:ml-0'
+  'ml-auto flex items-baseline gap-x-3.5 gap-y-0 whitespace-nowrap text-[0.72rem] text-muted-foreground tabular-nums max-[46rem]:ml-0'
 
 /* The row's button: quiet until wanted. The row is information first and an
    action second, and a column of always-lit buttons would compete with the
    model that is actually running. */
 const QUIET_BTN =
-  'h-auto flex-none px-[0.5rem] py-[0.15rem] text-[0.68rem] text-subdued opacity-45 transition-opacity duration-[0.12s] focus-visible:opacity-100'
+  'h-auto flex-none px-2 py-0.5 text-[0.72rem] text-subdued opacity-45 transition-opacity duration-[0.12s] focus-visible:opacity-100'
 
 /** What the gateway calls this model, if it carries it at all. */
 export function GatewayName({ model }: { model: CatalogEntry }) {
@@ -74,11 +74,11 @@ export function ModelHero({ model, m }: { model: CatalogEntry; m: ProviderMachin
     f === null
       ? []
       : [
-          { k: 'throughput', v: `${(f.tps ?? 0).toFixed(1)} tok/s`, on: some(f.tps) },
-          { k: 'first token', v: `${num(f.ttftMs)} ms`, on: some(f.ttftMs) },
-          { k: 'requests', v: num(f.requests), on: some(f.requests) },
-          { k: 'tokens out', v: num(f.outputTokens), on: some(f.outputTokens) },
-          { k: 'tokens in', v: num(f.inputTokens), on: some(f.inputTokens) },
+          { k: 'Throughput', v: `${(f.tps ?? 0).toFixed(1)} tok/s`, on: some(f.tps) },
+          { k: 'First token', v: `${num(f.ttftMs)} ms`, on: some(f.ttftMs) },
+          { k: 'Requests', v: num(f.requests), on: some(f.requests) },
+          { k: 'Tokens out', v: num(f.outputTokens), on: some(f.outputTokens) },
+          { k: 'Tokens in', v: num(f.inputTokens), on: some(f.inputTokens) },
         ].filter((x) => x.on)
 
   return (
@@ -86,12 +86,12 @@ export function ModelHero({ model, m }: { model: CatalogEntry; m: ProviderMachin
       {/* Name and action on one line, attributes on the next: at this width
           they cannot share a line without the name being truncated to
           nothing, and the name is the part being identified. */}
-      <div className="flex min-w-0 items-center gap-[0.5rem]">
+      <div className="flex min-w-0 items-center gap-2">
         <Pulse on tone="accent" />
         <span className={HERO_NAME}>{model.id}</span>
         {m.manageable && <EvictButton model={model} m={m} />}
       </div>
-      <div className="mt-[0.35rem] flex flex-wrap items-center gap-[0.25rem]">
+      <div className="mt-2 flex flex-wrap items-center gap-1">
         {model.recipe !== null && <Chip tone="info">{model.recipe}</Chip>}
         {model.loaded?.device != null && <Chip tone="ok">{model.loaded.device}</Chip>}
         {model.loaded?.maxContext != null && (
@@ -101,12 +101,12 @@ export function ModelHero({ model, m }: { model: CatalogEntry; m: ProviderMachin
         {model.supportsTools && <Chip>tools</Chip>}
         {model.supportsVision && <Chip>vision</Chip>}
         {model.loaded?.pinned === true && <Chip tone="warn">pinned</Chip>}
-        <span className="ml-[0.2rem] text-[0.7rem] text-muted-foreground">
+        <span className="ml-1 text-[0.72rem] text-muted-foreground">
           <GatewayName model={model} />
         </span>
       </div>
       {stats.length > 0 && (
-        <div className="mt-[0.55rem]">
+        <div className="mt-3">
           <Measures items={stats} />
         </div>
       )}
@@ -153,7 +153,7 @@ export function ModelAlt({
         )}
       </span>
       {error !== null && (
-        <span className="text-[0.7rem] text-danger" title={error}>
+        <span className="text-[0.72rem] text-danger" title={error}>
           failed
         </span>
       )}
@@ -209,7 +209,7 @@ function EvictButton({ model, m }: { model: CatalogEntry; m: ProviderMachine }) 
       type="button"
       variant="outline"
       size="sm"
-      className={cn(QUIET_BTN, 'ml-auto py-[0.18rem] opacity-40 group-hover/hero:opacity-100')}
+      className={cn(QUIET_BTN, 'ml-auto opacity-40 group-hover/hero:opacity-100')}
       disabled={busy}
       title={`Unload ${model.id}, leaving this slot empty`}
       onClick={() => {

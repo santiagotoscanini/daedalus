@@ -32,7 +32,7 @@ import { useSite } from '../lib/site-context'
 import { GHOST_BTN } from './apps/shared'
 import { Segmented } from './controls'
 import { LogFrame } from './log-frame'
-import { FOOT } from './tokens'
+import { CAPTION, FOOT } from './tokens'
 import { Button } from './ui/button'
 import { Board } from './viz'
 
@@ -40,12 +40,11 @@ import { Board } from './viz'
    between them is enough separation, so the gap above is dropped between
    neighbours. The range bar inside only needs the breathing room the summary
    does not provide. */
-const SUBLOG =
-  'group mt-4 border-t border-subtle pt-[0.7rem] [&+&]:mt-0 [&>summary+div]:mt-[0.7rem]'
+const SUBLOG = 'group mt-2 border-hairline border-t pt-3 [&+&]:mt-0 [&>summary+div]:mt-3'
 const SUBLOG_SUMMARY = cn(
-  'flex cursor-pointer list-none items-center gap-[0.4rem] text-[0.74rem] text-muted-foreground',
-  'hover:text-primary [&::-webkit-details-marker]:hidden',
-  "before:text-[0.7rem] before:transition-transform before:duration-[0.12s] before:content-['▸']",
+  'flex cursor-pointer list-none items-center gap-1.5 text-[0.78rem] text-muted-foreground transition-colors',
+  'hover:text-foreground [&::-webkit-details-marker]:hidden',
+  "before:text-[0.72rem] before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
 )
 
@@ -285,8 +284,8 @@ export function GrafanaLogs({
   const scheme = useScheme()
 
   return (
-    <>
-      <div className="mb-[0.55rem] flex flex-wrap items-center justify-between gap-2">
+    <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
           value={from}
           onChange={setFrom}
@@ -311,14 +310,18 @@ export function GrafanaLogs({
         settle={SETTLE.get(from) ?? 1_200}
       />
       {foot ?? (
-        <p className={FOOT}>
-          Rendered by Grafana from <code>{value(source)}</code>, newest first. The default is seven
-          days because most services here are quiet between restarts, and a short window shows
-          nothing for a service that is perfectly healthy. If the frame shows a login screen, open
-          Grafana once in a tab: it needs a session it cannot obtain inside itself, because the IdP
-          refuses to be framed.
-        </p>
+        <>
+          <p className={CAPTION}>
+            Rendered by Grafana from <code>{value(source)}</code>, newest first.
+          </p>
+          <p className={FOOT}>
+            The default is seven days because most services here are quiet between restarts, and a
+            short window shows nothing for a service that is perfectly healthy. If the frame shows a
+            login screen, open Grafana once in a tab: it needs a session it cannot obtain inside
+            itself, because the IdP refuses to be framed.
+          </p>
+        </>
       )}
-    </>
+    </div>
   )
 }

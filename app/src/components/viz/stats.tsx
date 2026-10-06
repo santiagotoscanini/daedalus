@@ -3,19 +3,19 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { type Tone, toneStyle } from '../../lib/tone'
+import { GLASS } from './board'
 import { Spark } from './charts'
 
 /** `StatStrip`'s box. The 1px grid gap IS the divider — the container's border
     colour showing through — which a per-cell border-left cannot promise once
     cells wrap. */
-export const STAT_STRIP =
-  'mb-[0.8rem] grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-px overflow-hidden rounded-lg border border-subtle bg-subtle'
+export const STAT_STRIP = `${GLASS} mb-4 grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] overflow-hidden`
 
 /** One `Stat` cell. Every cell reserves the third row under the value, so a
     strip mixing cells that have a sparkline with cells that have a caption —
     or neither — keeps one baseline instead of stepping. */
 export const STAT =
-  'grid min-w-0 grid-rows-[auto_auto_1rem] content-start gap-[0.15rem] bg-card px-[0.9rem] pt-[0.7rem] pb-[0.75rem] [&>svg]:w-full'
+  'grid min-w-0 grid-rows-[auto_auto_1rem] content-start gap-1 px-5 pt-4 pb-4 shadow-[-1px_0_0_var(--hairline),0_-1px_0_var(--hairline)] [&>svg]:w-full'
 
 /**
  * The row of live readings at the top of a page — one bordered strip with
@@ -60,16 +60,16 @@ export function Stat({
 }) {
   return (
     <div className={STAT} title={title} style={tone === undefined ? undefined : toneStyle(tone)}>
-      <span className="truncate text-[0.73rem] font-medium text-subdued">{label}</span>
+      <span className="truncate text-[0.75rem] font-medium text-muted-foreground">{label}</span>
       <span
         className={cn(
-          'text-[1.3rem] leading-[1.15] tracking-[-0.015em] tabular-nums max-[34rem]:text-[1.15rem] [font-weight:550] [overflow-wrap:anywhere]',
+          'text-[1.6rem] leading-[1.1] tracking-[-0.03em] tabular-nums max-[34rem]:text-[1.3rem] [font-weight:560] [overflow-wrap:anywhere]',
           tone !== undefined && 'text-(--tone)',
         )}
       >
         {value}
         {unit !== undefined && (
-          <em className="ml-[0.3rem] text-[0.72rem] font-normal text-muted-foreground not-italic">
+          <em className="ml-1 text-[0.75rem] font-normal tracking-normal text-muted-foreground not-italic">
             {unit}
           </em>
         )}
@@ -77,7 +77,7 @@ export function Stat({
       {spark !== undefined && spark.length > 1 ? (
         <Spark values={spark} tone={tone ?? 'muted'} />
       ) : sub !== undefined ? (
-        <span className="truncate text-[0.7rem] leading-4 text-muted-foreground">{sub}</span>
+        <span className="truncate text-[0.72rem] leading-4 text-muted-foreground">{sub}</span>
       ) : null}
     </div>
   )
@@ -106,7 +106,7 @@ export function Progress({
 }) {
   return (
     <span
-      className="block w-full overflow-hidden rounded-full bg-lifted"
+      className="block w-full overflow-hidden rounded-full bg-foreground/[0.08]"
       style={toneStyle(tone, { height })}
     >
       <span
@@ -155,7 +155,7 @@ export function Chip({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-[5px] border border-[color-mix(in_srgb,var(--tone)_40%,transparent)] bg-lifted px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-(--tone) font-[550]',
+        'inline-flex items-center gap-1 rounded-full bg-[color-mix(in_oklch,var(--tone)_13%,transparent)] px-2 py-px text-[0.7rem] leading-[1.15rem] whitespace-nowrap text-(--tone) font-[550] ring-1 ring-[color-mix(in_oklch,var(--tone)_24%,transparent)] ring-inset',
         className,
       )}
       title={title}

@@ -7,7 +7,7 @@ import { CircleAlertIcon } from 'lucide-react'
 import { Ago } from '../../../../components/ago'
 import { FOOT, MONO, MONO_FACE } from '../../../../components/tokens'
 import { Alert, AlertDescription } from '../../../../components/ui/alert'
-import { Board, Chip, Measures, type Tone } from '../../../../components/viz'
+import { Board, Chip, Facts, type Tone } from '../../../../components/viz'
 import type { LifecyclePhase } from '../../../../host/controller/generated'
 import { cn } from '../../../../lib/cn'
 import { DASH } from '../../../../lib/format'
@@ -17,6 +17,7 @@ import {
   processText,
   unmanagedInstall,
 } from '../../../../lib/providers/lifecycle-text'
+import { toneStyle } from '../../../../lib/tone'
 import type { ProviderMachine } from '../../data/providers'
 import { LifecycleControls, underWay } from './lifecycle-controls'
 
@@ -69,24 +70,30 @@ export function LifecycleBoard({ m }: { m: ProviderMachine }) {
       span={12}
       aside={<Chip tone={chip.tone}>{chip.label}</Chip>}
     >
-      <Measures
-        items={[
+      <Facts
+        rows={[
           {
-            k: 'install',
-            v: install.text,
-            ...(install.tone === null ? {} : { tone: install.tone }),
+            k: 'Install',
+            v:
+              install.tone === null ? (
+                install.text
+              ) : (
+                <span className="text-(--tone)" style={toneStyle(install.tone)}>
+                  {install.text}
+                </span>
+              ),
           },
-          { k: 'version', v: m.version ?? DASH },
-          { k: 'installer', v: g?.install?.installer_version ?? DASH },
-          { k: 'starts on its own', v: g?.startup == null ? DASH : STARTUP[g.startup] },
-          { k: 'process', v: processText(facts) },
-          { k: 'pinned release', v: m.asked?.pin ?? 'none' },
+          { k: 'Version', v: m.version ?? DASH },
+          { k: 'Installer', v: g?.install?.installer_version ?? DASH },
+          { k: 'Starts on its own', v: g?.startup == null ? DASH : STARTUP[g.startup] },
+          { k: 'Process', v: processText(facts) },
+          { k: 'Pinned release', v: m.asked?.pin ?? 'none' },
         ]}
       />
       <Notices m={m} />
       <LifecycleControls m={m} />
       <LastInstall m={m} />
-      <p className={cn(FOOT, 'mt-[0.8rem]')}>
+      <p className={FOOT}>
         The machine’s agent does the work: it downloads the pinned release from Lemonade’s own
         GitHub releases, checks its size and SHA-256, installs it silently, waits for the server to
         report the new version and rolls back to the last good installer when it does not. Start and
@@ -122,7 +129,7 @@ function Notices({ m }: { m: ProviderMachine }) {
   }
   if (notes.length === 0) return null
   return (
-    <Alert variant="warning" className="mt-[0.8rem]">
+    <Alert variant="warning">
       <CircleAlertIcon />
       <AlertDescription>
         {notes.map((n) => (
@@ -137,9 +144,9 @@ function Notices({ m }: { m: ProviderMachine }) {
 
 /* The installer's log: a disclosure, like a release entry. */
 const LOG_SUMMARY =
-  "cursor-pointer list-none text-[0.72rem] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden before:mr-[0.35rem] before:content-['▸'] group-open:before:content-['▾']"
+  "cursor-pointer list-none text-[0.75rem] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden before:mr-1.5 before:content-['▸'] group-open:before:content-['▾']"
 const LOG =
-  'mt-[0.4rem] max-h-[18rem] overflow-auto rounded-[7px] bg-raised p-[0.6rem] text-[0.7rem] leading-[1.45] text-subdued whitespace-pre-wrap'
+  'mt-2 max-h-[18rem] overflow-auto rounded-xl border border-hairline bg-foreground/[0.03] p-3 text-[0.72rem] leading-[1.5] text-subdued whitespace-pre-wrap'
 
 /** The last install or update, as the agent's journal holds it. */
 function LastInstall({ m }: { m: ProviderMachine }) {
@@ -147,23 +154,21 @@ function LastInstall({ m }: { m: ProviderMachine }) {
   if (l == null) return null
   const p = PHASE[l.phase]
   return (
-    <section className="mt-[0.9rem] border-subtle border-t pt-[0.7rem]">
-      <div className="flex flex-wrap items-baseline gap-[0.5rem] text-[0.78rem]">
+    <section className="border-hairline border-t pt-3">
+      <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem]">
         <span className="text-muted-foreground">Last install</span>
         <span className={MONO}>
           {l.from_version === null ? '' : `${l.from_version} → `}
           {l.version}
         </span>
         <Chip tone={p.tone}>{p.label}</Chip>
-        <span className="text-[0.7rem] text-muted-foreground">
+        <span className="text-[0.75rem] text-muted-foreground">
           <Ago at={l.at} />
         </span>
       </div>
-      {l.message !== '' && (
-        <p className="m-0 mt-[0.3rem] text-[0.78rem] text-subdued">{l.message}</p>
-      )}
+      {l.message !== '' && <p className="m-0 mt-1 text-[0.8rem] text-subdued">{l.message}</p>}
       {l.vanished.length > 0 && (
-        <Alert variant="warning" className="mt-[0.5rem]">
+        <Alert variant="warning" className="mt-2">
           <CircleAlertIcon />
           <AlertDescription>
             <p className="m-0">
@@ -174,7 +179,7 @@ function LastInstall({ m }: { m: ProviderMachine }) {
         </Alert>
       )}
       {l.log_tail.length > 0 && (
-        <details className="group mt-[0.4rem]">
+        <details className="group mt-2">
           <summary className={LOG_SUMMARY}>Installer log, last {l.log_tail.length} lines</summary>
           <pre className={cn(MONO_FACE, LOG)}>{l.log_tail.join('\n')}</pre>
         </details>

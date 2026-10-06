@@ -5,6 +5,7 @@ import { installLines, pairLines } from '../../../lib/agent/install'
 import { cn } from '../../../lib/cn'
 import type { ControllerView } from '../../../lib/dashboard/machines'
 import { Button } from '../../ui/button'
+import { NOTE_SHOWN } from '../form'
 import { MONO, NOTE } from '../shared'
 
 // How a machine joins: one line per system, carrying this box's controller
@@ -40,6 +41,15 @@ function CopyLine({ command, label }: { command: string; label: string }) {
   }
   return (
     <div className="flex items-start gap-2">
+      <p
+        ref={line}
+        className={cn(
+          MONO,
+          'm-0 min-w-0 flex-1 select-all rounded-lg border border-hairline bg-foreground/[0.03] px-3 py-1.5 leading-[1.45]',
+        )}
+      >
+        {command}
+      </p>
       <Button
         size="sm"
         variant="outline"
@@ -49,9 +59,6 @@ function CopyLine({ command, label }: { command: string; label: string }) {
         {copied ? <CheckIcon /> : <CopyIcon />}
         {copied ? 'Copied' : 'Copy'}
       </Button>
-      <p ref={line} className={cn(MONO, 'm-0 select-all pt-1')}>
-        {command}
-      </p>
     </div>
   )
 }
@@ -65,34 +72,34 @@ export function Install({ controller }: { controller: ControllerView }) {
   return (
     <div className="flex flex-col gap-3">
       {installLines(pinned).map((l) => (
-        <div key={l.os} className="flex flex-col gap-1">
-          <p className={NOTE}>
+        <div key={l.os} className="flex flex-col gap-1.5">
+          <p className={NOTE_SHOWN}>
             {l.label}, from {l.where}:
           </p>
           <CopyLine command={l.command} label={`${l.label} install command`} />
           {l.os === 'macos' && (
-            <p className={NOTE}>
+            <p className={NOTE_SHOWN}>
               Then choose Log in… in its menu bar: you confirm it here, and it gets a tunnel of its
               own to the box.
             </p>
           )}
         </div>
       ))}
-      <p className={NOTE}>
+      <p className={pinned === null ? NOTE_SHOWN : NOTE}>
         {pinned === null
           ? `The controller did not say where it listens${controller.reachable ? '' : ` (${controller.error})`}, so there is no key to pin yet. A machine installed without one stays unpaired and connects to nothing until it is paired, once the controller answers here.`
           : 'The Windows and Linux lines name the controller and pin its key: the machine connects to it and to nothing else. It then appears above as waiting, with both fingerprints, until you approve it. Re-running the line on a machine that is already here replaces the binaries, keeps its key, and pins the controller.'}
       </p>
       {pinned !== null && (
         <>
-          <p className={NOTE}>
+          <p className={NOTE_SHOWN}>
             Installed from the website, without a key? It waits unpaired. Paste this key into “Pair
             with the box…” in its tray, or run the line for its system (a Mac logs in instead):
           </p>
           <CopyLine command={pinned.fingerprint} label="controller key" />
           {pair.map((l) => (
-            <div key={l.os} className="flex flex-col gap-1">
-              <p className={NOTE}>
+            <div key={l.os} className="flex flex-col gap-1.5">
+              <p className={NOTE_SHOWN}>
                 {l.label}, from {l.where}:
               </p>
               <CopyLine command={l.command} label={`${l.label} pair command`} />

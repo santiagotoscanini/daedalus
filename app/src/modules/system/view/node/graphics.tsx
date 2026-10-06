@@ -7,7 +7,7 @@ import type { App, Telemetry } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num, pct } from '../../../../lib/format'
 import { partMatching } from '../../../../lib/hardware/catalog'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Graphics ─────────────────────────────────────────────────────────── */
 
@@ -76,7 +76,7 @@ export function NodeGraphicsView({ d }: { d: NodeSystemData }) {
             { k: 'behind', v: '2' },
           ]}
         />
-        <p className={FOOT}>
+        <p className={CAPTION}>
           The vendor&rsquo;s current WHQL package, read from its download page daily. A driver two
           behind is a month of game-day fixes not applied.
         </p>

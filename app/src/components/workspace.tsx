@@ -24,7 +24,7 @@ export function CloneButton({ repo, cloned }: { repo: string; cloned: boolean })
   return (
     <span className="inline-flex items-center gap-2">
       {answer !== null && answer.outcome !== 'done' && (
-        <span className="text-danger text-xs" title={answer.detail || undefined}>
+        <span className="text-[0.75rem] text-danger" title={answer.detail || undefined}>
           {answer.outcome === 'refused' ? answer.detail : 'failed'}
         </span>
       )}

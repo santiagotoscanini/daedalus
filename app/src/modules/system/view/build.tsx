@@ -4,6 +4,7 @@ import {
   PART_DETAIL,
   PART_ID,
   PART_NAME,
+  PART_WIDE,
   PartHead,
   PartPhoto,
 } from '../../../components/part'
@@ -362,22 +363,9 @@ function PowerBoard({ f }: { f: BuildFacts }) {
 function TheCaseBoard() {
   return (
     <Board title="The case" icon="▣" span={12}>
-      {/* The full-width panel: the photo earns real size here and the specs
-          sit beside it rather than under it — at twelve columns a spec list
-          below a picture leaves half the row empty. The photo is sized from
-          the parent because `PartPhoto` carries the narrow-board width; the
-          container query is on the BOARD's width, not the viewport's, since
-          a span-12 board is full width on a phone and a third of the page on
-          a desktop. */}
-      <div
-        className={cn(
-          PART,
-          'items-start gap-[1.4rem]',
-          '[&>img]:w-[clamp(140px,26%,300px)]',
-          '@max-[30rem]/board:flex-col @max-[30rem]/board:items-center',
-          '@max-[30rem]/board:[&>img]:w-[clamp(140px,60%,260px)]',
-        )}
-      >
+      {/* The full-width panel (`PART_WIDE`): the photo earns real size here
+          and the specs sit beside it rather than under it. */}
+      <div className={PART_WIDE}>
         <PartPhoto part={PARTS.case} />
         <div className={PART_ID}>
           <strong className={PART_NAME}>{PARTS.case.name}</strong>

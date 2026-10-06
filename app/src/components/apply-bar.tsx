@@ -102,14 +102,19 @@ export function ApplyBar({
         // `left` is the sidebar's width, not a copy of it: the bar is fixed,
         // so it cannot inherit the grid column, and the collapsed rail moves
         // that variable rather than this rule.
-        'fixed right-0 bottom-0 left-(--sidebar-w) z-20',
+        // A dock floating over the page's foot, inset like the rail.
+        'fixed right-[clamp(0.75rem,2.5vw,2.5rem)] bottom-4 left-[calc(var(--sidebar-w)+clamp(0.75rem,2.5vw,2.5rem))] z-20',
+        'max-rail:right-3 max-rail:left-3',
         'flex items-center justify-between gap-6',
-        'px-[clamp(1rem,3.5vw,2.75rem)] py-3.5',
-        // Tinted rather than opaque: the bar sits over the end of a scrolling
+        'rounded-2xl px-5 py-3',
+        // Glass rather than opaque: the bar sits over the end of a scrolling
         // page, and content disappearing under a hard edge reads as the page
-        // having ended.
-        'border-t bg-card/92 backdrop-blur-md',
-        status.state === 'failed' ? 'border-t-danger' : 'border-t-primary-dim',
+        // having ended. The edge carries the state; a glow under it, the urgency.
+        'border bg-popover/75 backdrop-blur-2xl backdrop-saturate-150',
+        'shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow)]',
+        status.state === 'failed'
+          ? 'border-danger/50 shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow),0_0_40px_-12px_var(--danger)]'
+          : 'border-primary/35 shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow),0_0_40px_-14px_var(--primary)]',
       )}
     >
       <div className="min-w-0 text-[0.87rem]">

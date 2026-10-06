@@ -8,7 +8,6 @@ import {
   NOTE,
   ROW,
   ROW_MAIN,
-  ROW_N,
   ROW_SIDE,
   SUB,
 } from '../../../components/tokens'
@@ -16,7 +15,15 @@ import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../comp
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, duration, num, pct } from '../../../lib/format'
 import type { SystemData } from '../data'
-import { SYSTEM_SNAPSHOT } from './shared'
+import {
+  CELL_MAIN,
+  CELL_N,
+  CELL_SIDE,
+  SYSTEM_SNAPSHOT,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from './shared'
 
 /* ── Pools ────────────────────────────────────────────────────────────── */
 
@@ -115,15 +122,21 @@ export function PoolsView({ d }: { d: Pools }) {
           </span>
         }
       >
-        <ul className={LIST}>
+        <ul className={cn(TABLE, 'grid-cols-[minmax(0,1fr)_auto_auto_auto]')}>
+          <li className={TABLE_HEAD} aria-hidden="true">
+            <span>Dataset</span>
+            <span>Snapshots</span>
+            <span>In them</span>
+            <span className="text-right">Used</span>
+          </li>
           {d.datasets.map((ds) => (
-            <li key={ds.name} className={ROW}>
-              <span className={cn(ROW_MAIN, MONO)}>{ds.name}</span>
-              <span className={ROW_SIDE}>
+            <li key={ds.name} className={TABLE_ROW}>
+              <span className={cn(CELL_MAIN, MONO)}>{ds.name}</span>
+              <span className={CELL_SIDE}>
                 {ds.snapshots === 0 ? 'not snapshotted' : `${String(ds.snapshots)} snapshots`}
               </span>
-              <span className={ROW_SIDE}>{bytes(ds.snapshotBytes)} in them</span>
-              <span className={ROW_N}>{bytes(ds.usedBytes)}</span>
+              <span className={CELL_SIDE}>{bytes(ds.snapshotBytes)} in them</span>
+              <span className={CELL_N}>{bytes(ds.usedBytes)}</span>
             </li>
           ))}
         </ul>

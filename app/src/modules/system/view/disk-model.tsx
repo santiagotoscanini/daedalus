@@ -142,10 +142,8 @@ export function ModelDecode({ model, segments }: { model: string; segments: Segm
         </strong>
       }
     >
-      <span className="mb-[0.4rem] block font-mono text-[0.68rem] text-muted-foreground tracking-[0.04em]">
-        {model}
-      </span>
-      <span className="flex flex-col gap-[0.45rem]">
+      <span className="mb-2 block font-mono text-[0.72rem] text-muted-foreground">{model}</span>
+      <span className="flex flex-col gap-2">
         {segments.map((s, i) => (
           // The code, its name, then what it means — the code column sized to
           // the widest so the names line up and the list reads as a key.
@@ -153,9 +151,9 @@ export function ModelDecode({ model, segments }: { model: string; segments: Segm
             key={`${s.text}-${String(i)}`}
             className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-[0.05rem]"
           >
-            <code className={cn('font-mono text-[0.74rem]', SEG_INK[s.key])}>{s.text}</code>
-            <span className="text-[0.74rem] text-foreground">{s.label}</span>
-            <span className="col-start-2 text-[0.7rem] text-muted-foreground leading-[1.4]">
+            <code className={cn('font-mono text-[0.75rem]', SEG_INK[s.key])}>{s.text}</code>
+            <span className="text-[0.75rem] text-foreground">{s.label}</span>
+            <span className="col-start-2 text-[0.72rem] text-muted-foreground leading-[1.4]">
               {s.note}
             </span>
           </span>

@@ -11,7 +11,7 @@ import {
   RunningBoard,
   ServicesBoard,
 } from './host-boards'
-import { EMPTY, FOOT, MONO, NOTE, NotReadable } from './shared'
+import { CAPTION, EMPTY, FOOT, MONO, NOTE, NotReadable } from './shared'
 
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
@@ -233,7 +233,7 @@ function BatteryBoard({ f }: { f: HostFacts }) {
             },
           ]}
         />
-        <p className={FOOT}>
+        <p className={CAPTION}>
           {t.battery.condition !== null
             ? `Apple calls its condition “${t.battery.condition}”. `
             : ''}

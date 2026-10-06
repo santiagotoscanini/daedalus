@@ -12,7 +12,16 @@ import {
   REPO_ROW,
 } from './apps/repo-picker'
 import { SVC_HEAD, SVC_LOGO } from './service-head'
-import { BOARD, BOARD_BODY, BOARD_GRID, BOARD_HEAD, STAT, STAT_STRIP } from './viz'
+import {
+  BOARD,
+  BOARD_BODY,
+  BOARD_GRID,
+  BOARD_HEAD,
+  BOARD_TITLE,
+  GLASS,
+  STAT,
+  STAT_STRIP,
+} from './viz'
 
 // Placeholders for content that has not arrived yet.
 //
@@ -47,7 +56,7 @@ const SWEEP = 'animate-[sk-sweep_1.35s_ease-in-out_infinite] motion-reduce:anima
 
 // One grey block's own look, so `Bar` and the boxes that borrow it agree.
 const SK = cn(
-  'block rounded-[5px]',
+  'block rounded-md',
   'bg-[image:linear-gradient(90deg,var(--panel-2)_0%,var(--raise)_50%,var(--panel-2)_100%)] bg-[length:220%_100%]',
   SWEEP,
 )
@@ -83,10 +92,18 @@ export function ServiceHeadSkeleton() {
     // rhythm — the real thing gets that from an h2 and two paragraphs.
     <div className={SVC_HEAD}>
       <span className={cn(SK, SVC_LOGO)} />
-      <div className="flex min-w-0 flex-1 flex-col gap-2 pt-[0.15rem]">
-        <Bar w="22%" h={18} />
-        <Bar w="34%" h={11} />
-        <Bar w="72%" h={12} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {/* Slots at the real lines' heights: the name (1.125rem, tight),
+            the version line (a chip), the lede (0.84rem × 1.5). */}
+        <span className="flex h-[1.41rem] items-center">
+          <Bar w="22%" h={17} />
+        </span>
+        <span className="flex h-5 items-center">
+          <Bar w="30%" h={13} />
+        </span>
+        <span className="mt-0.5 flex h-[1.26rem] items-center">
+          <Bar w="64%" h={12} />
+        </span>
       </div>
     </div>
   )
@@ -105,9 +122,13 @@ export function BoardsSkeleton({ spans = [8, 4, 6, 6] }: { spans?: readonly numb
       {spans.map((span, i) => (
         <section key={i} className={BOARD} style={{ ['--span' as string]: String(span) }}>
           <header className={BOARD_HEAD}>
-            <Bar w="35%" h={11} />
+            {/* The title's own box, so the bar sits on the line the real
+                title will: same type size, same line height, same head. */}
+            <span className={cn(BOARD_TITLE, 'w-full')}>
+              <Bar w="35%" h={13} />
+            </span>
           </header>
-          <div className={cn(BOARD_BODY, 'gap-2')}>
+          <div className={cn(BOARD_BODY, 'gap-2.5')}>
             <Bar w="100%" h={64} />
             <Bar w="90%" h={12} />
             <Bar w="75%" h={12} />
@@ -125,9 +146,18 @@ export function StripSkeleton({ count = 6 }: { count?: number }) {
     <div className={STAT_STRIP}>
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className={STAT}>
-          <Bar w="55%" h={9} />
-          <Bar w="70%" h={20} />
-          <Bar w="85%" h={10} />
+          {/* Each bar in a slot the height of the line box it stands in for
+              (label 0.75rem × 1.5, value 1.6rem × 1.1, the fixed 1rem row),
+              so the strip is the real strip's height to the pixel. */}
+          <span className="flex h-[1.125rem] items-center">
+            <Bar w="55%" h={10} />
+          </span>
+          <span className="flex h-[1.76rem] items-center max-[34rem]:h-[1.43rem]">
+            <Bar w="62%" h={22} />
+          </span>
+          <span className="flex h-4 items-center">
+            <Bar w="80%" h={9} />
+          </span>
         </div>
       ))}
     </div>
@@ -140,10 +170,7 @@ export function RowsSkeleton({ count = 3, height = 58 }: { count?: number; heigh
     <ul className={APP_LIST}>
       {Array.from({ length: count }, (_, i) => (
         <li key={i}>
-          <div
-            className="flex items-center gap-4 rounded-lg border border-subtle bg-card px-4"
-            style={{ height }}
-          >
+          <div className={cn(GLASS, 'flex items-center gap-4 rounded-xl px-4')} style={{ height }}>
             <Bar w="0.6rem" h={10} />
             <Bar w="30%" h={14} />
             <Bar w="22%" h={11} />
@@ -206,8 +233,8 @@ export function BlockSkeleton({ h = 240 }: { h?: number }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-subtle',
-        'bg-[image:linear-gradient(90deg,var(--card)_0%,var(--panel-2)_50%,var(--card)_100%)] bg-[length:220%_100%]',
+        'rounded-2xl border border-hairline',
+        'bg-[image:linear-gradient(90deg,var(--surface)_0%,var(--surface-hover)_50%,var(--surface)_100%)] bg-[length:220%_100%]',
         SWEEP,
       )}
       style={{ height: h }}

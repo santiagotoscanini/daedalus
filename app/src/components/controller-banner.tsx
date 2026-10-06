@@ -21,6 +21,13 @@ import { Alert, AlertDescription } from './ui/alert'
 
 const POLL_MS = 10_000
 
+// A calm inline notice, not a loud bar: the tint and the hairline carry the
+// tone, the sentence stays in body ink so it reads as text.
+const CALM =
+  'mb-6 rounded-xl border-warning/25 bg-warning/8 px-4 py-3 text-foreground [&>svg]:text-warning'
+const CALM_BODY =
+  'text-[0.84rem] text-muted-foreground opacity-100 [&_strong]:text-foreground [&_strong]:[font-weight:560]'
+
 // A read that fails keeps the last answer: the banner is not the page's to break.
 const read = (set: (l: ControllerLink) => void) =>
   fetchControllerLinkFn().then(set, () => undefined)
@@ -37,9 +44,9 @@ export function ControllerBanner() {
     const skew = controllerSkew(link.version)
     if (skew === null) return null
     return (
-      <Alert variant="warning" className="mb-6">
+      <Alert variant="warning" className={CALM}>
         <UnplugIcon />
-        <AlertDescription>
+        <AlertDescription className={CALM_BODY}>
           <p className="m-0">
             <strong>Controller out of date</strong>: it runs agent {skew.runs}, and this app was
             built beside {skew.ships}. Applying the engine brings them together; until then, an
@@ -52,9 +59,9 @@ export function ControllerBanner() {
   if (link?.state !== 'down') return null
   const at = Date.parse(link.since)
   return (
-    <Alert variant="warning" className="mb-6">
+    <Alert variant="warning" className={CALM}>
       <UnplugIcon />
-      <AlertDescription>
+      <AlertDescription className={CALM_BODY}>
         <p className="m-0">
           <strong>Controller unreachable</strong>
           {now !== null && `, ${since((now - at) / 1000)}`}: {link.error}. Machine links, their

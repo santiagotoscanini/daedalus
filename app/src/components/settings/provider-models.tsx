@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { cn } from '../../lib/cn'
 import type { ProviderKind } from '../../lib/providers/kinds'
 import { MODE_WORD, MODEL_MODES, type ModelPolicy } from '../../lib/providers/policy'
 import { errorText } from '../../lib/redact'
@@ -18,6 +19,7 @@ import { Picker } from '../ui/picker'
 import { Switch } from '../ui/switch'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
+import { CONTROL_H } from './form'
 import { ASIDE, Mono, Stack } from './shared'
 
 // The models a provider serves, as the operator curates them for the
@@ -53,7 +55,7 @@ function ModelRow({
     onChange({ alias: a === '' || a === m.defaultAlias ? undefined : a })
   }
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_9rem_10rem] items-center gap-3 border-subtle border-t py-[0.45rem] text-[0.8rem] first:border-t-0 max-[48rem]:grid-cols-[auto_minmax(0,1fr)] max-[48rem]:gap-y-1">
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_9rem_10rem] items-center gap-3 border-hairline border-t py-2 text-[0.8rem] first:border-t-0 max-[48rem]:grid-cols-[auto_minmax(0,1fr)] max-[48rem]:gap-y-1">
       <Switch
         checked={offer}
         disabled={busy || !m.downloaded}
@@ -80,6 +82,7 @@ function ModelRow({
         busy={busy}
         failed={failed}
         disabled={busy}
+        className={cn(CONTROL_H, 'w-full')}
         aria-label={`Mode of ${m.id}`}
         onChange={(v) => onChange({ mode: v as ModelPolicy['mode'] })}
       />
@@ -88,7 +91,7 @@ function ModelRow({
         disabled={busy}
         aria-label={`Alias of ${m.id}`}
         placeholder={m.defaultAlias}
-        className="font-mono text-[0.78rem]"
+        className={cn(CONTROL_H, 'font-mono md:text-[0.78rem]')}
         onChange={(e) => setAlias(e.target.value)}
         onBlur={saveAlias}
         onKeyDown={(e) => {
@@ -167,9 +170,11 @@ export function ProviderModels({
       <span className={ASIDE}>
         {String(catalog.models.filter((m) => m.offer).length)} of {String(catalog.models.length)}{' '}
         offered
-        {catalog.version !== null && ` · Lemonade ${catalog.version}`}. The alias is the model's
-        name on the gateway; the mode is what the labels said unless changed here. Every change
-        reaches the gateway on the next sync.
+        {catalog.version !== null && ` · Lemonade ${catalog.version}`}
+      </span>
+      <span className={cn(ASIDE, 'explain')}>
+        The alias is the model's name on the gateway; the mode is what the labels said unless
+        changed here. Every change reaches the gateway on the next sync.
       </span>
     </Stack>
   )
@@ -272,7 +277,7 @@ export function BoxProvider() {
         <span className="inline-flex items-center gap-2 text-[0.82rem]">
           alias
           <Input
-            className="w-[10rem] font-mono text-[0.78rem]"
+            className={cn(CONTROL_H, 'w-40 font-mono md:text-[0.78rem]')}
             value={alias}
             placeholder="whisper"
             disabled={busy}
@@ -286,7 +291,7 @@ export function BoxProvider() {
         </span>
         <Chip tone="muted">speech to text</Chip>
       </span>
-      <span className={ASIDE}>
+      <span className={cn(ASIDE, 'explain')}>
         subgen's faster-whisper, the STT that makes Bazarr's subtitles, on port 9000 of this box.
         Offered, the gateway gets a transcription route to it beside the PC's whisper.
       </span>

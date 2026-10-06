@@ -1,21 +1,20 @@
 import { LogBoard } from '../../../components/logs'
 import { PartHead } from '../../../components/part'
-import {
-  EMPTY,
-  FOOT,
-  LIST,
-  MONO,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_N,
-  ROW_SIDE,
-} from '../../../components/tokens'
+import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, num, pct } from '../../../lib/format'
 import type { SystemData } from '../data'
-import { HOST_READERS, PARTS } from './shared'
+import {
+  CELL_MAIN,
+  CELL_N,
+  CELL_SIDE,
+  HOST_READERS,
+  PARTS,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from './shared'
 
 /* ── Memory ───────────────────────────────────────────────────────────── */
 
@@ -257,12 +256,17 @@ function CapsBoard({ f }: { f: MemoryFacts }) {
       {d.capped.length === 0 ? (
         <p className={EMPTY}>No container has a memory cap.</p>
       ) : (
-        <ul className={LIST}>
+        <ul className={cn(TABLE, 'grid-cols-[minmax(0,1fr)_auto_auto]')}>
+          <li className={TABLE_HEAD} aria-hidden="true">
+            <span>Container</span>
+            <span>In use</span>
+            <span className="text-right">Cap</span>
+          </li>
           {d.capped.map((c) => (
-            <li key={c.name} className={ROW}>
-              <span className={cn(ROW_MAIN, MONO)}>{c.name}</span>
-              <span className={ROW_SIDE}>{bytes(c.usageBytes)} in use</span>
-              <span className={ROW_N}>{bytes(c.limitBytes)}</span>
+            <li key={c.name} className={TABLE_ROW}>
+              <span className={cn(CELL_MAIN, MONO)}>{c.name}</span>
+              <span className={CELL_SIDE}>{bytes(c.usageBytes)} in use</span>
+              <span className={CELL_N}>{bytes(c.limitBytes)}</span>
             </li>
           ))}
         </ul>

@@ -95,16 +95,16 @@ function PlayingNowBoard({ f }: { f: JellyfinFacts }) {
       {d.playing.length === 0 ? (
         <p className={EMPTY}>Nobody is watching anything.</p>
       ) : (
-        <ul className={`${LIST} gap-[0.8rem]`}>
+        <ul className={`${LIST} gap-3`}>
           {d.playing.map((s, i) => (
-            <li key={`${s.user}-${String(i)}`} className="flex flex-col gap-[0.35rem]">
-              <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-[0.7rem]">
-                <span className="flex min-w-0 items-center gap-[0.45rem] truncate font-[550] [&_em]:font-normal [&_em]:text-subdued [&_em]:not-italic">
+            <li key={`${s.user}-${String(i)}`} className="flex flex-col gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2 truncate font-[550] [&_em]:font-normal [&_em]:text-subdued [&_em]:not-italic">
                   <Pulse on={!s.paused} tone="ok" />
                   {s.title}
                   {s.sub !== null && <em> — {s.sub}</em>}
                 </span>
-                <span className="flex flex-wrap gap-[0.3rem]">
+                <span className="flex flex-wrap gap-1.5">
                   <Chip tone="info">{s.user}</Chip>
                   {s.device !== null && <Chip>{s.device}</Chip>}
                   {/* Transcode vs DirectPlay is the difference between a
@@ -160,7 +160,7 @@ function LibraryBoard({ f }: { f: JellyfinFacts }) {
           />
         </div>
       </div>
-      <h4 className="mt-[0.35rem] mb-[-0.2rem] text-[0.73rem] font-[550] tracking-normal text-muted-foreground">
+      <h4 className="m-0 mt-2 -mb-0.5 text-[0.75rem] font-[550] text-muted-foreground">
         Growth, 30 days
       </h4>
       <Trend values={library.growth} tone="info" height={70} />
@@ -180,12 +180,9 @@ function WhoWatchesBoard({ f }: { f: JellyfinFacts }) {
       {d.people.length === 0 ? (
         <p className={EMPTY}>could not read the user list</p>
       ) : (
-        <ul className={`${LIST} gap-[0.25rem]`}>
+        <ul className={`${LIST} gap-1`}>
           {d.people.map((p) => (
-            <li
-              key={p.name}
-              className="flex items-baseline justify-between gap-[0.7rem] text-[0.82rem]"
-            >
+            <li key={p.name} className="flex items-baseline justify-between gap-3 text-[0.8rem]">
               <span>{p.name}</span>
               <span
                 className={cn(

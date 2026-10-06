@@ -7,7 +7,7 @@ import {
   SOURCE_NOTE,
   verdictOf,
 } from '../../../components/service-head'
-import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import { DASH, num, since, until } from '../../../lib/format'
 import type { MonitoringData } from '../data'
@@ -133,12 +133,14 @@ function ScheduledJobsBoard({ f }: { f: JobsFacts }) {
         healthchecks knows. The two are different guarantees: <b>mail on failure</b> means a run
         that fails tells you, and <b>pinging</b> means a run that stops happening at all tells you.
         Only the second catches a timer that was disabled, never fired, or whose service was
-        renamed. {num(d.emailOnly)} of the {num(d.jobs.length)} here are mail-only, deliberately:
-        for a job that runs on every rebuild, &ldquo;it did not run&rdquo; is not a fault. The
-        outcome column is the host&rsquo;s own timer table via the system snapshot: when the last
-        run happened, how it ended, and when the next is due. A dash is a job with no timer (boot
-        and rebuild oneshots), not a job that failed to schedule. {num(d.unwatchedTimers)} more
-        timers run on the box with no entry in this registry at all.
+        renamed. Mail-only is deliberate for a job that runs on every rebuild, where &ldquo;it did
+        not run&rdquo; is not a fault. The outcome column is the host&rsquo;s own timer table via
+        the system snapshot: when the last run happened, how it ended, and when the next is due. A
+        dash is a job with no timer (boot and rebuild oneshots), not a job that failed to schedule.
+      </p>
+      <p className={CAPTION}>
+        {num(d.emailOnly)} of the {num(d.jobs.length)} here are mail-only. {num(d.unwatchedTimers)}{' '}
+        more timers run on the box with no entry in this registry at all.
       </p>
     </Board>
   )

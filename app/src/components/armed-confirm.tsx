@@ -18,12 +18,11 @@ export const ARM_MS = 10_000
 /* The look of a control at a board's foot, armed or not: quiet at rest, and
    the cost — and the red — appear only once it is armed, which is the step
    where they can still change the answer. */
-export const RESTART =
-  'mt-[0.7rem] flex flex-col items-start gap-[0.55rem] border-subtle border-t pt-[0.75rem]'
-export const RESTART_ARMED = 'border-t-[color-mix(in_srgb,var(--danger)_40%,var(--border-soft))]'
-export const RESTART_COST = 'text-[0.78rem] text-subdued leading-[1.5]'
-export const RESTART_STATE = 'text-[0.78rem] leading-[1.5]'
-export const RESTART_NOTE = 'text-[0.7rem] text-muted-foreground leading-[1.5]'
+export const RESTART = 'mt-1 flex flex-col items-start gap-2.5 border-hairline border-t pt-3'
+export const RESTART_ARMED = 'border-t-[color-mix(in_oklch,var(--danger)_35%,transparent)]'
+export const RESTART_COST = 'm-0 text-[0.8rem] text-muted-foreground leading-[1.5]'
+export const RESTART_STATE = 'text-[0.8rem] leading-[1.5]'
+export const RESTART_NOTE = 'text-[0.72rem] text-muted-foreground leading-[1.5]'
 
 type Variant = NonNullable<Parameters<typeof buttonVariants>[0]>['variant']
 
@@ -98,7 +97,7 @@ export function TypedConfirm({
     <label
       htmlFor={id}
       className={cn(
-        'flex flex-wrap items-center gap-[0.5rem] text-[0.74rem] text-muted-foreground',
+        'flex flex-wrap items-center gap-2 text-[0.75rem] text-muted-foreground',
         className,
       )}
     >

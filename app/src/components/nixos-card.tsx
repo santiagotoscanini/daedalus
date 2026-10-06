@@ -6,7 +6,7 @@ import { builtOn, type Support } from '../lib/nixos'
 import { fetchNixosRelease } from '../server/updates'
 import { Ago } from './ago'
 import { ReleaseNotes, UpgradeChain } from './release-notes'
-import { FOOT, MONO, NOTE } from './tokens'
+import { CAPTION, MONO, NOTE } from './tokens'
 import { Skeleton } from './ui/skeleton'
 import { Board, Chip, Facts } from './viz'
 
@@ -111,7 +111,7 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
       />
 
       {release?.support?.state === 'ended' && next !== null && (
-        <p className={`${NOTE} mt-3`}>
+        <p className={CAPTION}>
           {facts.release} stopped receiving fixes on {release.support.eol}. Moving to {next} is a
           change to the flake's nixpkgs input and a rebuild; its backward incompatibilities, below,
           are what to read first.
@@ -119,13 +119,13 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
       )}
 
       {live.state === 'failed' && (
-        <p className={`${NOTE} mt-3`}>
+        <p className={CAPTION}>
           Could not ask where the release stands{live.reason !== '' && `: ${live.reason}`}.
         </p>
       )}
 
       {release !== null && (
-        <div className="mt-4">
+        <div className="flex flex-col gap-3">
           {release.notes.length === 0 ? (
             <p className={NOTE}>{release.note ?? 'no release notes could be read'}</p>
           ) : (
@@ -134,7 +134,7 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
               <ReleaseNotes releases={release.notes} running={facts.release} />
             </>
           )}
-          <p className={FOOT}>
+          <p className={CAPTION}>
             {release.note !== null && `${release.note}. `}
             From the NixOS manual's release notes in nixpkgs, first paragraphs only; open one for
             the full list. Asked <Ago at={release.checkedAt} />, at most hourly.
@@ -164,7 +164,7 @@ function Channel({ live }: { live: Live }) {
   const c = live.release.channel
   const ended = live.release.support?.state === 'ended'
   return (
-    <span className="inline-flex flex-col gap-[0.15rem]">
+    <span className="inline-flex flex-col gap-0.5">
       <span className="inline-flex flex-wrap items-center gap-2">
         <span className={MONO}>{c.branch}</span>
         {c.newer === null ? (
@@ -190,7 +190,7 @@ function Latest({ facts, live }: { facts: NixosFacts; live: Live }) {
   if (l.cycle === facts.release) return <Chip tone="ok">this release</Chip>
   const eol = live.release.latestSupport?.eol ?? null
   return (
-    <span className="inline-flex flex-col gap-[0.15rem]">
+    <span className="inline-flex flex-col gap-0.5">
       <span className={MONO}>
         {l.cycle}
         {l.codename !== '' && <span className={ASIDE}>{l.codename}</span>}

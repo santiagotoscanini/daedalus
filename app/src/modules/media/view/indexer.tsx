@@ -60,7 +60,7 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
           {d.indexers.length === 0 ? (
             <p className={EMPTY}>no indexer statistics</p>
           ) : (
-            <ul className={`${LIST} gap-[0.1rem]`}>
+            <ul className={`${LIST} gap-0.5`}>
               {d.indexers.map((i) => (
                 <RankRow
                   key={i.name}

@@ -16,6 +16,7 @@ import { cn } from '../../lib/cn'
 import type { Check, CheckState, Readiness } from '../../lib/readiness'
 import { type Tone, toneStyle } from '../../lib/tone'
 import { RefreshButton } from '../controls'
+import { GLASS } from '../viz/board'
 import { SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
 
 const MARK: Record<CheckState, string> = { ok: '✓', warn: '!', bad: '✗', unknown: '?' }
@@ -32,17 +33,17 @@ const STATE_TONE: Record<CheckState, Tone> = {
 
 /** The fold that replaces the verdict once there is nothing left to do. */
 const FOLD_SUMMARY = cn(
-  "flex cursor-pointer list-none items-center gap-[0.45rem] px-4 py-[0.6rem] text-[0.8rem] text-subdued before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[120ms] before:content-['▸']",
+  "flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[0.8rem] text-subdued before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[120ms] before:content-['▸']",
   '[&::-webkit-details-marker]:hidden',
-  'group-open:border-b group-open:border-b-subtle group-open:before:rotate-90',
-  'hover:bg-raised hover:text-foreground',
+  'group-open:border-hairline group-open:border-b group-open:before:rotate-90',
+  'hover:bg-foreground/[0.05] hover:text-foreground',
   // Inset: the summary is full-bleed inside a clipping panel, so an outward
   // offset would be cut off by the panel's own rounded edge.
   'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-dim',
 )
 
 /** One list of checks, hairline-separated. */
-const CHECKLIST = 'm-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-t-subtle'
+const CHECKLIST = 'm-0 list-none p-0 [&>li+li]:border-hairline [&>li+li]:border-t'
 
 export function ReadinessPanel({
   plan,
@@ -63,14 +64,14 @@ export function ReadinessPanel({
 
       {/* Step 3 asks one question and gets one answer, so it is drawn as one
           panel: the verdict, then whatever is still to be done about it. */}
-      <div className="mb-[1.2rem] overflow-hidden rounded-lg border border-subtle bg-card [&>*+*]:border-t [&>*+*]:border-t-subtle">
+      <div className={cn(GLASS, 'mb-5 overflow-hidden [&>*+*]:border-hairline [&>*+*]:border-t')}>
         {plan.ready ? (
           // The whole step, once there is nothing worth stopping over. It is
           // the answer now, not a fold under one, so it is drawn at the
           // panel's own weight — and it carries the verdict's own sentence,
           // so this file never says anything readiness.ts did not.
           <details className="group">
-            <summary className={cn(FOLD_SUMMARY, 'py-[0.85rem] text-[0.92rem] text-foreground')}>
+            <summary className={cn(FOLD_SUMMARY, 'py-3.5 text-[0.9rem] text-foreground')}>
               <span className="text-success" aria-hidden="true">
                 ✓
               </span>{' '}
@@ -86,13 +87,13 @@ export function ReadinessPanel({
           <>
             {/* The answer, with its own cause already absorbed into it. */}
             <div
-              className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-baseline gap-[0.6rem] border-l-[3px] border-l-(--tone) px-4 py-[0.9rem]"
+              className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-baseline gap-2.5 px-4 py-3.5"
               style={toneStyle(STATE_TONE[plan.verdict.state])}
             >
               <span className="font-bold text-(--tone)" aria-hidden="true">
                 {MARK[plan.verdict.state]}
               </span>
-              <span className="grid min-w-0 gap-[0.2rem]">
+              <span className="grid min-w-0 gap-1">
                 <span>{plan.verdict.headline}</span>
                 {/* The image reference the verdict is about, in the face it is
                     written in. */}
@@ -152,7 +153,7 @@ function Row({
 }) {
   return (
     <li
-      className="grid grid-cols-[1.6rem_minmax(0,1fr)_auto] items-baseline gap-x-[0.6rem] gap-y-[0.2rem] px-4 py-[0.7rem]"
+      className="grid grid-cols-[1.6rem_minmax(0,1fr)_auto] items-baseline gap-x-2.5 gap-y-1 px-4 py-3"
       style={toneStyle(STATE_TONE[check.state])}
     >
       <span
@@ -167,8 +168,8 @@ function Row({
       >
         {step === undefined ? MARK[check.state] : (NUMERALS[step - 1] ?? String(step))}
       </span>
-      <span className="grid min-w-0 gap-[0.15rem]">
-        <b>{check.label}</b>
+      <span className="grid min-w-0 gap-0.5">
+        <b className="font-[560]">{check.label}</b>
         <span className="text-[0.85rem] text-subdued">{check.detail}</span>
         {check.fix !== undefined && (
           <span className="text-[0.82rem] text-muted-foreground">{check.fix}</span>

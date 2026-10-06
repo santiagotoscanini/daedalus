@@ -8,13 +8,15 @@ import type { Part } from '../lib/hardware/catalog'
 /* The panels whose name or detail is read from the machine rather than the
    catalogue (Build's board, cpu and gpu, Host's case) compose these directly;
    the rest use `PartHead`. */
-export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
-export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-[0.25rem]'
-export const PART_NAME = 'text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere'
-export const PART_DETAIL = 'text-[0.73rem] text-subdued leading-[1.4]'
+export const PART = 'flex min-h-10 items-center gap-3.5 pb-1'
+export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-1'
+export const PART_NAME =
+  'text-[0.95rem] text-foreground tracking-[-0.01em] [font-weight:550] wrap-anywhere'
+export const PART_DETAIL = 'text-[0.75rem] text-muted-foreground leading-[1.45]'
 
 /** What SMART calls a drive — the string you would type into a shop. */
-export const DISK_MODEL = 'text-[0.94rem] text-foreground tracking-[-0.01em] wrap-anywhere'
+export const DISK_MODEL =
+  'text-[0.95rem] text-foreground tracking-[-0.01em] [font-weight:550] wrap-anywhere'
 
 /** A part's photo and name, for the panels that have artwork. */
 export function PartHead({ part }: { part: Part }) {
@@ -54,7 +56,7 @@ export function PartPhoto({ part }: { part: Part }) {
  */
 export const PART_WIDE = cn(
   PART,
-  'items-start gap-[1.4rem]',
+  'items-start gap-6',
   '[&>img]:w-[clamp(140px,26%,300px)]',
   '@max-[30rem]/board:flex-col @max-[30rem]/board:items-center',
   '@max-[30rem]/board:[&>img]:w-[clamp(140px,60%,260px)]',

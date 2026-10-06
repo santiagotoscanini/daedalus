@@ -4,7 +4,7 @@ import { BarList, Board, Columns, Facts, Measures, Progress, Pulse } from '../..
 import { cn } from '../../../lib/cn'
 import { compact, ms, num, since } from '../../../lib/format'
 import type { ProxyData } from './proxy'
-import { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from './shared'
+import { AXIS, CAPTION, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from './shared'
 
 function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
   if (code.startsWith('2')) return 'ok'
@@ -89,19 +89,24 @@ export function TrafficBoard({
       )}
 
       {traffic.byEntrypoint.length > 0 && (
-        <p className={FOOT}>
-          <span className={ENDPOINTS}>
-            {traffic.byEntrypoint.map((e) => (
-              <span key={e.label}>
-                {e.label === 'websecure' ? 'LAN' : e.label === 'cfweb' ? 'tunnel' : e.label}{' '}
-                <b>{compact(e.value)}</b>
-              </span>
-            ))}
-          </span>
-          Split by entrypoint over {d.windowDays} days. The gap is the shape of this box: almost
-          everything is asked from inside the house, and what the tunnel carries is the handful of
-          services deliberately published to the internet.
-        </p>
+        <>
+          <p className={CAPTION}>
+            <span className={ENDPOINTS}>
+              {traffic.byEntrypoint.map((e) => (
+                <span key={e.label}>
+                  {e.label === 'websecure' ? 'LAN' : e.label === 'cfweb' ? 'tunnel' : e.label}{' '}
+                  <b>{compact(e.value)}</b>
+                </span>
+              ))}
+            </span>
+            Split by entrypoint over {d.windowDays} days.
+          </p>
+          <p className={FOOT}>
+            The gap is the shape of this box: almost everything is asked from inside the house, and
+            what the tunnel carries is the handful of services deliberately published to the
+            internet.
+          </p>
+        </>
       )}
     </Board>
   )
@@ -110,14 +115,14 @@ export function TrafficBoard({
 export function CertificatesBoard({ d }: { d: ProxyData }) {
   return (
     <Board title="Certificates" icon="⌸" span={3} aside={<span className={NOTE}>the store</span>}>
-      <ul className="m-0 flex list-none flex-col gap-[0.35rem] p-0">
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {d.certs.map((c) => (
           <li
             key={c.cn}
-            className="grid min-w-0 grid-cols-[minmax(6rem,12rem)_1fr_auto] items-center gap-[0.7rem] text-[0.8rem]"
+            className="grid min-w-0 grid-cols-[minmax(6rem,12rem)_1fr_auto] items-center gap-3 text-[0.8rem]"
             title={c.sans.join(', ')}
           >
-            <span className={cn(MONO, 'truncate text-subdued')}>{c.cn}</span>
+            <span className={cn(MONO, 'truncate text-muted-foreground')}>{c.cn}</span>
             {/* 90 days is Let's Encrypt's full lifetime, so the bar reads
                 as how much of this certificate is left. */}
             <Progress
@@ -131,7 +136,7 @@ export function CertificatesBoard({ d }: { d: ProxyData }) {
       {d.certs.length === 0 && <p className={EMPTY}>no certificate in the store</p>}
 
       {/* The certificate ↔ route join — see `TraefikData.certs`. */}
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {d.certs.map((c) => (
           <span key={c.cn} className={ENDPOINTS}>
             <span>
@@ -215,12 +220,12 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
   const dropped = codes.filter((x) => x.label === '0').reduce((n, x) => n + x.value, 0)
 
   return (
-    <details className="mt-[0.5rem] [&>summary]:-mx-[0.35rem] [&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:flex-col [&>summary]:gap-[0.3rem] [&>summary]:rounded-[7px] [&>summary]:px-[0.35rem] [&>summary]:py-[0.25rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:hover:bg-raised [&[open]>summary]:bg-raised">
+    <details className="[&>summary]:-mx-2 [&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:flex-col [&>summary]:gap-1 [&>summary]:rounded-lg [&>summary]:px-2 [&>summary]:py-1.5 [&>summary]:transition-colors [&>summary::-webkit-details-marker]:hidden [&>summary]:hover:bg-foreground/[0.04] [&[open]>summary]:bg-foreground/[0.05]">
       <summary>
         <span className={cn(SUB, 'm-0 block')}>Response codes, 24h</span>
         {/* The digest wraps rather than scrolls: four short pairs, and at a
             quarter of the grid it lands on two lines, which is fine. */}
-        <span className="flex flex-wrap gap-x-[0.7rem] gap-y-[0.15rem] text-[0.72rem] text-muted-foreground tabular-nums [&_b]:font-semibold [&_b]:text-foreground">
+        <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.75rem] text-muted-foreground tabular-nums [&_b]:text-foreground [&_b]:[font-weight:560]">
           {classes
             .filter((x) => x.total > 0)
             .map((x) => (

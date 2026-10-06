@@ -1,10 +1,11 @@
 import { LogBoard } from '../../../components/logs'
 import { LinkRow, ServiceHead } from '../../../components/service-head'
+import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, since } from '../../../lib/format'
 import type { NetworkData } from '../data'
-import { ACTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
+import { CAPTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
 
 /** A device that has asked for a name today is a device that is switched on. */
 const ACTIVE = 24 * 3600
@@ -15,8 +16,7 @@ type Device = Dhcp['devices'][number]
    list: a full-width board holding a single column of 9rem-wide content is a
    page of nothing on the right, and these rows are read by scanning down the
    addresses. */
-const DEVICE_LIST =
-  'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] gap-x-[1.6rem] p-0'
+const DEVICE_LIST = 'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] gap-x-6 p-0'
 
 /* On a phone the MAC goes before anything else does. Not at half width — below
    78rem every board is already full width, so the row has MORE room there, not
@@ -24,7 +24,7 @@ const DEVICE_LIST =
    breakpoint, where the name and address are what gets scanned and the MAC is
    what gets looked up once. */
 const DEVICE_ROW =
-  'grid grid-cols-[1fr_6.6rem_9.4rem_4.6rem] items-center gap-2 border-t border-subtle py-[0.26rem] text-[0.74rem] text-muted-foreground max-[34rem]:grid-cols-[1fr_6.6rem_4.6rem]'
+  'grid grid-cols-[1fr_6.6rem_9.4rem_4.6rem] items-center gap-2 border-t border-hairline py-1.5 text-[0.78rem] text-muted-foreground max-[34rem]:grid-cols-[1fr_6.6rem_4.6rem]'
 
 /**
  * The LAN, in two sections that are one list.
@@ -94,14 +94,14 @@ function DeviceRow({ d }: { d: Device }) {
       </span>
       <span className={cn(MONO, 'tabular-nums', active && 'text-subdued')}>{d.ip}</span>
       <span
-        className={cn(MONO, 'text-[0.66rem] max-[34rem]:hidden')}
+        className={cn(MONO, 'text-[0.7rem] max-[34rem]:hidden')}
         title={
           d.knownForDays === null ? 'never seen' : `first seen ${num(d.knownForDays)} days ago`
         }
       >
         {d.mac}
       </span>
-      <span className="text-right text-[0.68rem]">
+      <span className="text-right text-[0.72rem]">
         {d.lastSeenAgo === null ? (
           <span
             className="text-warning"
@@ -159,9 +159,11 @@ export function DhcpView({ data }: { data: Dhcp }) {
         }
         actions={
           admin !== null && (
-            <a className={ACTION} href={`${admin}/settings-dhcp`} target="_blank" rel="noreferrer">
-              DHCP settings ↗
-            </a>
+            <Button asChild size="sm">
+              <a href={`${admin}/settings-dhcp`} target="_blank" rel="noreferrer">
+                DHCP settings ↗
+              </a>
+            </Button>
           )
         }
       />
@@ -307,11 +309,16 @@ function EverythingOnTheLANBoard({ f }: { f: DhcpFacts }) {
         so anything that ever asked for a name has a row here whether or not it took a lease. That
         is what makes this more than the leases above. The <b>fixed</b> ones are the reservations,
         and one of those with no matching device is kept and marked <b>never</b>: a declared address
-        for something that has not appeared is the only thing on this page worth acting on.
-        {unbound.length > 0 &&
-          ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state. A device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
-        <b>active</b> means it looked something up in the last day.
+        for something that has not appeared is the only thing on this page worth acting on.{' '}
+        <b>active</b> means it looked something up in the last day. A device presenting a private,
+        rotating Wi-Fi address never matches the MAC its reservation was written for.
       </p>
+      {unbound.length > 0 && (
+        <p className={CAPTION}>
+          {String(unbound.length)} of {String(dhcp.reservations.length)} reservations are marked{' '}
+          <b>never</b>: declared, and no device has appeared at them.
+        </p>
+      )}
     </Board>
   )
 }

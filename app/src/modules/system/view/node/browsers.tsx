@@ -6,7 +6,7 @@ import type { Browser } from '../../../../host/controller/generated'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { DASH, num } from '../../../../lib/format'
 import type { Tone } from '../../../../lib/tone'
-import { EMPTY, FOOT, MONO, NOTE } from './shared'
+import { CAPTION, EMPTY, FOOT, MONO, NOTE } from './shared'
 
 /* ── Chromium ─────────────────────────────────────────────────────────── */
 
@@ -216,7 +216,7 @@ function BrowserBoard({
           },
         ]}
       />
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {behind === true && stepsBehind !== null && stepsBehind > 0 && (
           <>
             {num(stepsBehind)} major {stepsBehind === 1 ? 'release' : 'releases'} behind the

@@ -18,7 +18,7 @@ import type { Tone } from '../../lib/tone'
 import type { BuildPageApp } from '../../server/builds'
 import { requesterLabel } from '../apps/builds'
 import { GuardedAwait } from '../error'
-import { EMPTY, FOOT } from '../tokens'
+import { CAPTION, EMPTY } from '../tokens'
 import { Board, Chip, Facts, Pulse } from '../viz'
 import { FollowLog } from './follow-log'
 
@@ -181,7 +181,7 @@ function tagsRow(build: BuildView): { k: string; v: ReactNode } {
     v: (
       <span className="inline-flex flex-wrap justify-end gap-1">
         {t.tags.map((tag) => (
-          <code key={tag} className="text-[0.76rem]" title={tag}>
+          <code key={tag} className="text-[0.75rem]" title={tag}>
             {tag.length > 20 ? `${tag.slice(0, tag.indexOf('-') + 8)}…` : tag}
           </code>
         ))}
@@ -224,7 +224,7 @@ export function PhasesBoard({ build, open }: { build: BuildView; open: boolean }
           <Step key={s.phase} step={s} />
         ))}
       </ol>
-      {open && build.phase !== '' && <p className={FOOT}>Now: {build.phase}</p>}
+      {open && build.phase !== '' && <p className={CAPTION}>Now: {build.phase}</p>}
     </Board>
   )
 }
@@ -248,7 +248,7 @@ const STEP_NOTE: Partial<Record<TimelineStep['status'], string>> = {
 
 function Step({ step }: { step: TimelineStep }) {
   return (
-    <li className="flex items-center gap-[0.6rem] border-t border-subtle py-[0.4rem] text-[0.84rem] first:border-t-0 first:pt-0">
+    <li className="flex items-center gap-2.5 border-hairline border-t py-1.5 text-[0.84rem] first:border-t-0 first:pt-0">
       <Pulse on={step.status === 'running'} tone={STEP_TONE[step.status]} />
       <span
         className={
@@ -289,7 +289,7 @@ export function Checks({ build }: { build: BuildView }) {
           return (
             <li
               key={c}
-              className="flex items-center gap-[0.6rem] border-t border-subtle py-[0.4rem] text-[0.84rem] first:border-t-0 first:pt-0"
+              className="flex items-center gap-2.5 border-hairline border-t py-1.5 text-[0.84rem] first:border-t-0 first:pt-0"
             >
               <span aria-hidden="true" className={failed ? 'text-danger' : 'text-success'}>
                 {failed ? '✕' : '✓'}
@@ -300,7 +300,7 @@ export function Checks({ build }: { build: BuildView }) {
           )
         })}
       </ol>
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {checks.failed === null
           ? `${String(names.length)} ran, none failed.`
           : `${checks.failed} failed, so nothing was built past it.`}
@@ -338,7 +338,7 @@ export function LogBoard({ build, open }: { build: BuildView; open: boolean }) {
             : 'The host has no log for this build.'}
         </p>
       )}
-      <p className={FOOT}>
+      <p className={CAPTION}>
         {build.log.truncated ? `The last 64 KB of ${bytes(build.log.sizeBytes)}. ` : ''}
         Credentials are redacted twice: by the host as it writes the log, and here as it is read.
       </p>

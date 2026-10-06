@@ -26,7 +26,7 @@ import { ROW_ACCENT, STATE_ACCENT, STATE_LABEL, STATE_TONE } from './tones'
    the right edge, and this board reads as part of that page only if it does
    the same. `shrink-0` because the truncating side slots to its left would
    otherwise give away the button's width before their own. */
-const ROW_BTN = 'ml-auto h-auto shrink-0 px-[0.55rem] py-[0.2rem] text-[0.7rem]'
+const ROW_BTN = 'ml-auto h-7 shrink-0 px-2.5 text-[0.75rem]'
 
 /* ── the enriched row ─────────────────────────────────────────────────────
 
@@ -38,15 +38,15 @@ const ROW_BTN = 'ml-auto h-auto shrink-0 px-[0.55rem] py-[0.2rem] text-[0.7rem]'
 /* The last prompt. One line, clipped, and in the muted ink the board uses for
    anything that is not a measurement, so it reads as context under the title
    rather than as a second title. */
-const PROMPT = 'mt-[0.22rem] truncate text-[0.72rem] leading-[1.45] text-subdued'
+const PROMPT = 'm-0 mt-1 truncate text-[0.75rem] leading-[1.45] text-muted-foreground'
 
 /* The metadata line. Wraps rather than scrolls — a row here is already a
    block, and a horizontal scrollbar inside one would be the third scroll axis
    on the page. The gap is wide enough that the groups read as groups without
    a separator glyph between them. */
 const META =
-  'mt-[0.2rem] flex min-w-0 flex-wrap items-center gap-x-[0.7rem] gap-y-[0.1rem] text-[0.68rem] text-muted-foreground tabular-nums'
-const META_ITEM = 'inline-flex min-w-0 max-w-full items-center gap-[0.28rem]'
+  'mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.72rem] text-muted-foreground tabular-nums'
+const META_ITEM = 'inline-flex min-w-0 max-w-full items-center gap-1'
 const META_ICON = 'shrink-0 opacity-65'
 
 /** The three groups that get a picture instead of a word. */
@@ -63,10 +63,10 @@ function FactIconFor({ name }: { name: FactIcon }) {
 
 /* What DOES belong under the row: the armed state. It carries a sentence
    about what the click costs, which is the one thing worth a second line. */
-const CTRL = 'mt-[0.3rem] flex flex-col items-start gap-[0.3rem]'
-const CTRL_COST = 'text-[0.72rem] text-subdued leading-[1.5]'
-const CTRL_NOTE = 'text-[0.68rem] text-muted-foreground leading-[1.5]'
-const CTRL_STATE = 'mt-[0.3rem] text-[0.72rem] leading-[1.5]'
+const CTRL = 'mt-2 flex flex-col items-start gap-1.5'
+const CTRL_COST = 'text-[0.78rem] text-foreground leading-[1.5]'
+const CTRL_NOTE = 'text-[0.72rem] text-muted-foreground leading-[1.5]'
+const CTRL_STATE = 'm-0 mt-1.5 text-[0.75rem] leading-[1.5]'
 
 type ActiveControl = Extract<RowControl, { session: string }>
 
@@ -111,7 +111,7 @@ export function RosterRow({
       title={row.id ?? undefined}
       style={toneStyle(STATE_TONE[row.state])}
     >
-      <div className="flex min-w-0 items-center gap-[0.45rem]">
+      <div className="flex min-w-0 items-center gap-2">
         <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
         <span className={ROW_MAIN}>{row.label}</span>
         <RowSideFacts row={row} control={control} />

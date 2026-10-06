@@ -27,7 +27,7 @@ export function CancelBuildButton({ app, id }: { app: string; id: string }) {
   }
 
   return (
-    <span className="inline-flex flex-wrap items-center justify-end gap-[0.6rem] text-[0.76rem]">
+    <span className="inline-flex flex-wrap items-center justify-end gap-2.5 text-[0.75rem]">
       {error !== null && <span className="max-w-[28rem] text-right text-danger">{error}</span>}
       {armed && <span className="text-subdued">Stop it where it is?</span>}
       <Button
@@ -57,7 +57,7 @@ export function RetryReportButton({ app, id }: { app: string; id: string }) {
   }
 
   return (
-    <span className="mt-2 inline-flex flex-wrap items-center gap-[0.6rem] text-[0.76rem]">
+    <span className="mt-2 inline-flex flex-wrap items-center gap-2.5 text-[0.75rem]">
       <Button
         type="button"
         variant="outline"

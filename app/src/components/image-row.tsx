@@ -39,8 +39,8 @@ const VERDICT: Record<UpdateVerdict, { label: string; tone: Tone }> = {
 
 /* A release entry's disclosure idiom, one level up (release-notes.tsx). */
 const SUMMARY = cn(
-  'flex min-w-0 cursor-pointer list-none items-baseline gap-[0.7rem] px-[0.7rem] py-[0.45rem]',
-  'hover:bg-lifted [&::-webkit-details-marker]:hidden',
+  'flex min-w-0 cursor-pointer list-none items-baseline gap-3 px-3 py-2',
+  'hover:bg-foreground/[0.05] [&::-webkit-details-marker]:hidden',
   "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
 )
@@ -60,7 +60,7 @@ export function ImageRow({
   return (
     <li>
       <details
-        className="group overflow-hidden rounded-[9px] border border-subtle bg-raised"
+        className="group overflow-hidden rounded-xl border border-hairline"
         onToggle={(e) => {
           // A failed read is not cached: closing and reopening asks again.
           if (!e.currentTarget.open || (notes !== null && notes.error === null) || !r.hasNotes)
@@ -76,8 +76,10 @@ export function ImageRow({
         }}
       >
         <summary className={SUMMARY}>
-          <span className="min-w-[11rem] text-[0.84rem] text-foreground">{r.container}</span>
-          <span className={cn(MONO_FACE, 'text-[0.76rem] text-subdued')}>
+          <span className="min-w-[11rem] text-[0.84rem] text-foreground [font-weight:500]">
+            {r.container}
+          </span>
+          <span className={cn(MONO_FACE, 'text-[0.78rem] text-muted-foreground')}>
             {r.running.version ?? (r.kind === 'container' ? r.tag : DASH)}
           </span>
           {/* For a moved CHANNEL pin both tags are the same string, so the
@@ -87,7 +89,7 @@ export function ImageRow({
           <span
             className={cn(
               MONO_FACE,
-              'text-[0.76rem] text-foreground',
+              'text-[0.78rem] text-foreground',
               "before:mr-[0.25em] before:text-muted-foreground before:content-['→']",
             )}
           >
@@ -95,7 +97,7 @@ export function ImageRow({
               ? (r.freshness?.remoteVersion ?? 'new digest')
               : (r.freshness?.newerTag ?? DASH)}
           </span>
-          <span className="ml-auto flex items-baseline gap-[0.4rem]">
+          <span className="ml-auto flex items-center gap-1.5">
             <Chip tone={v.tone}>{v.label}</Chip>
             {r.kind === 'container' && !r.updatable && <Chip tone="muted">pinned</Chip>}
             {/* On the closed row, because the whole point of a queue is to
@@ -104,7 +106,7 @@ export function ImageRow({
           </span>
         </summary>
 
-        <div className="flex flex-col gap-[0.7rem] border-subtle border-t px-3 pt-2 pb-[0.7rem]">
+        <div className="flex flex-col gap-3 border-hairline border-t px-3 pt-3 pb-3">
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />
           {/* A manual row draws the button only when its base is the
               configuration's to move; a container row always does, even to
@@ -131,7 +133,7 @@ export function ImageRow({
             // The exact ref this row would rewrite, last and quiet — it is
             // what a person copies into a shell to check something by hand,
             // and it is not part of the decision.
-            <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
+            <p className={cn(MONO_FACE, 'm-0 text-[0.72rem] text-muted-foreground')}>
               {`${r.image}@${r.digest.slice(0, 19)}…`}
             </p>
           )}
@@ -153,12 +155,12 @@ function ManualFacts({ r }: { r: ManualRow }) {
   const parts = Object.entries(r.parts)
   const { repo, path } = r.pinnedIn
   return (
-    <div className="flex flex-col gap-[0.45rem]">
+    <div className="flex flex-col gap-2">
       {parts.length > 0 && (
-        <div className="flex flex-wrap items-baseline gap-[0.4rem]">
+        <div className="flex flex-wrap items-center gap-1.5">
           {parts.map(([name, version]) => (
             <Chip key={name}>
-              {name} <span className={cn(MONO, 'ml-[0.3em]')}>{version}</span>
+              {name} <span className={cn(MONO, 'ml-1')}>{version}</span>
             </Chip>
           ))}
         </div>
@@ -180,7 +182,7 @@ function ManualFacts({ r }: { r: ManualRow }) {
         )}
       </p>
       {r.image !== null && r.digest !== null && (
-        <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
+        <p className={cn(MONO_FACE, 'm-0 text-[0.72rem] text-muted-foreground')}>
           {`${r.image}@${r.digest.slice(0, 19)}…`}
         </p>
       )}

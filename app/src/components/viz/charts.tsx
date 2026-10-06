@@ -39,7 +39,12 @@ export function Ring({
   return (
     <div className="relative aspect-square flex-none" style={toneStyle(tone, { width: size })}>
       <svg viewBox="0 0 108 108" className="block h-full w-full" aria-hidden="true">
-        <circle className="fill-none stroke-lifted [stroke-width:9]" cx="54" cy="54" r={r} />
+        <circle
+          className="fill-none stroke-foreground/[0.08] [stroke-width:9]"
+          cx="54"
+          cy="54"
+          r={r}
+        />
         {pct !== null && (
           <circle
             // ring-sweep runs once on mount so the page reads as its numbers
@@ -62,9 +67,7 @@ export function Ring({
           {value}
         </strong>
         {label !== undefined && (
-          <span className="text-[0.63rem] tracking-[0.06em] text-muted-foreground uppercase">
-            {label}
-          </span>
+          <span className="text-[0.7rem] text-muted-foreground">{label}</span>
         )}
       </div>
     </div>
@@ -98,21 +101,21 @@ export function BarList({
   const ceiling = max ?? Math.max(...items.map((i) => i.value), 0.0001)
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-[0.32rem] p-0">
+    <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
       {items.map((i, n) => (
         <li
           // Two rows can share a label — a machine running two claude.exe —
           // and the same label twice is still two rows.
           key={`${i.label}#${String(n)}`}
-          className="grid min-w-0 grid-cols-[minmax(4.5rem,8rem)_1fr_auto] items-center gap-[0.6rem]"
+          className="grid min-w-0 grid-cols-[minmax(4.5rem,8rem)_1fr_auto] items-center gap-2.5"
           style={toneStyle(i.tone ?? tone)}
         >
           <span className="truncate text-[0.78rem] text-subdued" title={i.label}>
             {i.label}
           </span>
-          <span className="block h-[7px] min-w-0 overflow-hidden rounded-[4px] bg-lifted">
+          <span className="block h-1.5 min-w-0 overflow-hidden rounded-full bg-foreground/[0.08]">
             <span
-              className="block h-full origin-left animate-[bar-grow_700ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[4px] bg-(--tone) motion-reduce:animate-none"
+              className="block h-full origin-left animate-[bar-grow_700ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-(--tone) motion-reduce:animate-none"
               style={{ width: `${String(Math.max(1.5, (i.value / ceiling) * 100))}%` }}
             />
           </span>
@@ -166,8 +169,8 @@ export function RankRow({
     // container, so a content-sized column is measured per row — the bars
     // would start at a different x on every line and stop at a different one,
     // which is the entire comparison this list exists to make.
-    <li className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-raised">
-      <span className="flex min-w-0 items-baseline gap-[0.35rem] text-[0.79rem]">
+    <li className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-2.5 gap-y-0.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-foreground/[0.04]">
+      <span className="flex min-w-0 items-baseline gap-1.5 text-[0.8rem]">
         <span
           // A name that cannot be read at face value — an internal credential,
           // or a hash — carries its explanation on a hover, and says so with
@@ -185,10 +188,10 @@ export function RankRow({
             // "deliberately switched off", which explains the silence rather
             // than reporting it.
             className={cn(
-              'flex-none rounded-full border px-[0.35rem] py-[0.02rem] text-[0.6rem] not-italic',
+              'flex-none rounded-full px-1.5 text-[0.68rem] leading-4 not-italic ring-1 ring-inset [font-weight:550]',
               b.tone === 'muted'
-                ? 'border-border text-muted-foreground'
-                : 'border-[color-mix(in_srgb,var(--warning)_40%,transparent)] text-warning',
+                ? 'text-muted-foreground ring-hairline'
+                : 'bg-warning/10 text-warning ring-warning/25',
             )}
             title={b.why ?? note ?? undefined}
           >
@@ -196,20 +199,20 @@ export function RankRow({
           </em>
         ))}
       </span>
-      <span className="block h-[5px] overflow-hidden rounded-[3px] bg-lifted">
+      <span className="block h-1 overflow-hidden rounded-full bg-foreground/[0.08]">
         <span
           // Same growth as every other bar on these pages — `bar-grow` scales
           // on X from the left, so the origin has to be set for it to read as
           // filling rather than as sliding in.
-          className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none"
+          className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none"
           style={{ width: `${String(Math.max(1.5, (value / max) * 100))}%` }}
         />
       </span>
-      <span className="text-right text-[0.79rem] whitespace-nowrap tabular-nums">{num(value)}</span>
+      <span className="text-right text-[0.8rem] whitespace-nowrap tabular-nums">{num(value)}</span>
       {/* Interpuncts are generated between the items rather than typed, so a
           caller with no tokens and no latency does not trail a separator into
           empty space. */}
-      <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
+      <span className="col-span-full flex min-w-0 flex-wrap gap-x-1.5 gap-y-0 text-[0.72rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-1.5 [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
         {meta}
       </span>
     </li>

@@ -8,6 +8,7 @@ import { groupZones } from '../../lib/timezones'
 import { saveSiteEditFn } from '../../server/site'
 import { Button } from '../ui/button'
 import { useAction } from '../use-action'
+import { NOTE_SHOWN } from './form'
 import { ASIDE, ExtLink, Line, NOTE, Pending, Section, SourceNote, Stack, Value } from './shared'
 import { type SelectGroupSpec, SiteSelect, SiteText, SiteUnwritten } from './site-fields'
 
@@ -42,7 +43,7 @@ export function General({
   }))
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <SiteUnwritten edit={edit} />
 
       <Section
@@ -69,17 +70,19 @@ export function General({
       >
         <p className={NOTE}>
           The domains are the Cloudflare zones the API token can see, and a zone's id is saved with
-          it. A zone appears here once that token covers it. Changing the domain renames every
-          hostname on the box and reissues its wildcard certificate — every published URL, tunnel
-          route and login redirect moves with it. It is allowed, and it is the most drastic edit on
-          this page.
+          it. A zone appears here once that token covers it.
+        </p>
+        <p className={NOTE_SHOWN}>
+          Changing the domain renames every hostname on the box and reissues its wildcard
+          certificate — every published URL, tunnel route and login redirect moves with it. It is
+          allowed, and it is the most drastic edit on this page.
         </p>
         <p className={NOTE}>
           The control plane's name is the part in front of the domain. Once a rename is applied, the
           old address keeps working beside the new one until you confirm from the new address, so a
           name that turns out not to work cannot lock you out of this page.
         </p>
-        <p className={NOTE}>
+        <p className={NOTE_SHOWN}>
           Every container is started with the timezone, so applying a new one restarts all of them.
         </p>
       </Section>

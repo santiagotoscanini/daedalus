@@ -2,6 +2,7 @@ import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit, SiteState } from '../../core/site'
 import type { RepoFacts } from '../../host/contract/domains/repo'
 import { Chip } from '../viz'
+import { NOTE_SHOWN } from './form'
 import { Commit, Mono, Section, SourceNote, Unset, Value } from './shared'
 import { SiteSection } from './site-dir'
 
@@ -35,7 +36,7 @@ export function Repository({
   const headRuns = running !== null && f.head !== null && f.head.rev === running
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <SiteSection dir={f.site} site={site} edit={edit} git={r.git} />
 
       <Section
@@ -78,13 +79,13 @@ export function Repository({
         ]}
       >
         {f.tree.untracked > 0 && (
-          <p className="m-0 text-[0.78rem] text-subdued">
+          <p className={NOTE_SHOWN}>
             An untracked file is invisible to a rebuild — the flake only sees what git tracks. Add
             it before building, or the build fails with "file not found".
           </p>
         )}
         {f.upstream !== null && f.upstream.ahead > 0 && (
-          <p className="m-0 text-[0.78rem] text-subdued">
+          <p className={NOTE_SHOWN}>
             Commits not yet pushed exist only on this disk, which is not snapshotted. Push.
           </p>
         )}
@@ -144,7 +145,7 @@ export function Repository({
         ]}
       >
         {running !== null && !headRuns && f.head !== null && (
-          <p className="m-0 text-[0.78rem] text-subdued">
+          <p className={NOTE_SHOWN}>
             The repository has moved past what is running. Nothing is wrong — a commit without a
             rebuild is normal — but the box does not yet do what HEAD says.
           </p>

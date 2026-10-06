@@ -45,7 +45,9 @@ export function ErrorPanel({ error, reset }: ErrorComponentProps) {
         The page hit an error it could not render past. Reload re-runs its loaders; if it lands back
         here, the message below is where to start.
       </PageHead>
-      <p className="my-3 font-mono text-danger text-sm break-words">{message(error)}</p>
+      <p className="my-4 rounded-xl border border-hairline bg-foreground/[0.03] px-4 py-3 font-mono text-[0.78rem] leading-[1.55] text-danger break-words">
+        {message(error)}
+      </p>
       <p>
         <Button type="button" onClick={retry}>
           Reload
@@ -85,11 +87,13 @@ function AwaitError({ error, reset }: ErrorComponentProps) {
   return (
     <Alert
       variant="destructive"
-      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"
+      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-xl border-destructive/25 px-4 py-3 text-[0.84rem] text-foreground"
     >
       <span>
         This section failed to load.{' '}
-        <span className="font-mono text-xs break-words">{message(error)}</span>
+        <span className="font-mono text-[0.75rem] text-muted-foreground break-words">
+          {message(error)}
+        </span>
       </span>
       <Button type="button" variant="outline" size="sm" onClick={retry}>
         Retry

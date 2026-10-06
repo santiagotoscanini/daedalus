@@ -1,13 +1,15 @@
 import { type ReactNode, useId, useState } from 'react'
 import type { TokenCheck } from '../../core/settings/types'
 import { tokenShapeError } from '../../lib/cloudflare-token'
+import { cn } from '../../lib/cn'
 import type { Result } from '../../lib/result'
 import { replaceCloudflareTokenFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
-import { ASIDE, Bad, ERROR_NOTE, Mono, NOTE, Pending, Stack, Unset } from './shared'
+import { INSET, NOTE_SHOWN } from './form'
+import { ASIDE, Bad, ERROR_NOTE, FIELD_LABEL, Mono, Pending, Stack, Unset } from './shared'
 
 // The Cloudflare half of Settings › Integrations: the cells that say what the
 // box is configured with and whether the token can still read it, and the one
@@ -150,7 +152,7 @@ export function TokenForm<V>({
         {error !== null ? (
           <span className={ERROR_NOTE}>{error}</span>
         ) : (
-          done !== null && <span className={NOTE}>{done}</span>
+          done !== null && <span className={NOTE_SHOWN}>{done}</span>
         )}
       </div>
     )
@@ -158,13 +160,13 @@ export function TokenForm<V>({
 
   return (
     <form
-      className="flex flex-col gap-2 rounded-[9px] border border-subtle p-3"
+      className={cn(INSET, 'gap-2')}
       onSubmit={(e) => {
         e.preventDefault()
         submit()
       }}
     >
-      <label htmlFor={id} className="font-medium text-[0.8rem]">
+      <label htmlFor={id} className={FIELD_LABEL}>
         {label}
       </label>
       <Input
@@ -177,15 +179,15 @@ export function TokenForm<V>({
           setToken(e.target.value)
         }}
         aria-invalid={local !== null}
-        className="h-9 font-mono md:text-[0.8rem]"
+        className="font-mono md:text-[0.8rem]"
       />
-      <p className={NOTE}>{children}</p>
+      <p className={NOTE_SHOWN}>{children}</p>
       {(local ?? error) !== null && (
         <p role="alert" className={ERROR_NOTE}>
           {local ?? error}
         </p>
       )}
-      <div className="flex gap-2">
+      <div className="mt-1 flex gap-2">
         <Button type="submit" size="sm" disabled={busy || token === '' || local !== null}>
           {busy ? 'Checking…' : 'Check and apply'}
         </Button>

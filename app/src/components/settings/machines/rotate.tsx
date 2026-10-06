@@ -11,7 +11,8 @@ import { Button } from '../../ui/button'
 import { Picker } from '../../ui/picker'
 import { useAction } from '../../use-action'
 import { useArmed } from '../../use-armed'
-import { ARMED_PANEL, ASIDE, ERROR_NOTE, Line, Mono, NOTE } from '../shared'
+import { CONTROL_H, INSET, NOTE_SHOWN } from '../form'
+import { ASIDE, ERROR_NOTE, Line, Mono } from '../shared'
 
 // The controller's key, handed on: `controller.rotate` through
 // server/nodes.ts. Armed first, because a machine too old to follow the
@@ -63,7 +64,7 @@ export function RotateKey({ rotating }: { rotating: boolean }) {
 
   if (rotating) {
     return (
-      <p className={NOTE}>
+      <p className={NOTE_SHOWN}>
         A rotation is under way; another can start once the old key has retired.
       </p>
     )
@@ -85,8 +86,8 @@ export function RotateKey({ rotating }: { rotating: boolean }) {
   return (
     <ArmedConfirm
       ms={ARM_MS}
-      className={ARMED_PANEL}
-      costClassName={NOTE}
+      className={INSET}
+      costClassName={NOTE_SHOWN}
       noteClassName={ASIDE}
       cost="The controller makes a new key now and serves both for the grace period. Every machine that connects in that time is handed the old key's signed statement, re-pins itself and reconnects under the new key — nothing to do on it. A machine that stays off the whole time is refused once the old key retires, until you re-run its install line there. The install lines below pin the new key from the moment you confirm."
       confirm="Rotate now"
@@ -103,7 +104,7 @@ export function RotateKey({ rotating }: { rotating: boolean }) {
           value={grace}
           onChange={(v) => setGrace(v as RotationGrace)}
           options={GRACE_OPTIONS}
-          className="w-32"
+          className={cn(CONTROL_H, 'w-32')}
         />
       </Line>
     </ArmedConfirm>

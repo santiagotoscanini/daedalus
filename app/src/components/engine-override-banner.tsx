@@ -11,12 +11,19 @@ import { Alert, AlertDescription } from './ui/alert'
 // tab, so it is drawn above every page rather than remembered on the one
 // where it was set; it disappears the moment the Apply that clears it lands.
 
+// A calm inline notice, not a loud bar: the tint and the hairline carry the
+// tone, the sentence stays in body ink so it reads as text.
+const CALM =
+  'mb-6 rounded-xl border-warning/25 bg-warning/8 px-4 py-3 text-foreground [&>svg]:text-warning'
+const CALM_BODY =
+  'text-[0.84rem] text-muted-foreground opacity-100 [&_strong]:text-foreground [&_strong]:[font-weight:560] [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-2'
+
 export function EngineOverrideBanner({ on }: { on: boolean }) {
   if (!on) return null
   return (
-    <Alert variant="warning" className="mb-6">
+    <Alert variant="warning" className={CALM}>
       <GitBranchIcon />
-      <AlertDescription>
+      <AlertDescription className={CALM_BODY}>
         <p className="m-0">
           <strong>Engine override.</strong> The running system is built from the engine clone, not
           from the pinned engine; applies are tested, not switched, and the next boot comes up on

@@ -16,28 +16,28 @@ import { cn } from '../../lib/cn'
  * red fill on a control plane reads as "already broken", not "careful".
  */
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[7px] border border-transparent text-[0.84rem] font-medium no-underline outline-none transition-colors duration-150 hover:no-underline disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-dim aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[9px] border border-transparent text-[0.82rem] font-medium tracking-[-0.005em] no-underline outline-none transition-[background-color,border-color,color,box-shadow,transform] duration-150 active:not-disabled:scale-[0.98] hover:no-underline disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-dim aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default:
-          'border-foreground bg-foreground text-background [font-weight:550] [&:hover:not(:disabled)]:border-foreground/85 [&:hover:not(:disabled)]:bg-foreground/85',
+          'border-foreground bg-foreground text-background [font-weight:560] shadow-[inset_0_1px_0_color-mix(in_oklch,var(--background)_22%,transparent),0_1px_2px_color-mix(in_oklch,var(--overlay)_22%,transparent),0_4px_14px_-6px_color-mix(in_oklch,var(--foreground)_35%,transparent)] [&:hover:not(:disabled)]:border-foreground/88 [&:hover:not(:disabled)]:bg-foreground/88',
         secondary:
-          'bg-secondary text-secondary-foreground [&:hover:not(:disabled)]:bg-secondary/80',
+          'bg-foreground/[0.07] text-foreground [&:hover:not(:disabled)]:bg-foreground/[0.11]',
         outline:
-          'border-(--border) bg-transparent text-foreground [&:hover:not(:disabled)]:bg-raised',
+          'border-hairline bg-surface text-foreground shadow-[inset_0_1px_0_var(--hairline-hi)] [&:hover:not(:disabled)]:border-foreground/15 [&:hover:not(:disabled)]:bg-surface-hover',
         ghost:
-          'bg-transparent text-subdued [&:hover:not(:disabled)]:bg-raised [&:hover:not(:disabled)]:text-foreground',
+          'bg-transparent text-subdued [&:hover:not(:disabled)]:bg-foreground/[0.06] [&:hover:not(:disabled)]:text-foreground',
         destructive:
-          'border-[color-mix(in_srgb,var(--danger)_50%,var(--border))] bg-transparent text-danger [&:hover:not(:disabled)]:bg-danger/12',
+          'border-[color-mix(in_srgb,var(--danger)_50%,var(--border))] bg-transparent text-danger [&:hover:not(:disabled)]:bg-danger/10',
         link: 'border-0 text-primary underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5',
-        default: 'h-9 px-4 py-2 has-[>svg]:px-3',
-        lg: 'h-10 rounded-md px-6 has-[>svg]:px-4',
-        icon: 'size-9',
-        'icon-sm': 'size-7 rounded-md',
+        sm: 'h-7.5 gap-1.5 rounded-[8px] px-3 text-[0.78rem] has-[>svg]:px-2.5',
+        default: 'h-8.5 px-3.5 py-1.5 has-[>svg]:px-3',
+        lg: 'h-10 rounded-[10px] px-5 has-[>svg]:px-4',
+        icon: 'size-8.5',
+        'icon-sm': 'size-7 rounded-[8px]',
       },
     },
     defaultVariants: {

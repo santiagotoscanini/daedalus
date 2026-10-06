@@ -28,8 +28,7 @@ import { Board } from '../viz'
        same nothing. */
 
 const FIELD = INPUT_ROW
-const SMALL_BTN =
-  'h-auto flex-none rounded-[6px] bg-raised px-[0.45rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-lifted dark:bg-raised'
+const SMALL_BTN = 'h-auto flex-none rounded-[7px] px-2 py-1 text-[0.72rem] leading-none'
 
 export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
   const router = useRouter()
@@ -56,13 +55,7 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
       title="Operator secrets"
       icon="⚿"
       span={12}
-      aside={
-        busy ? (
-          <span className="text-[0.72rem] tracking-normal text-muted-foreground normal-case">
-            working…
-          </span>
-        ) : null
-      }
+      aside={busy ? <span className="text-[0.75rem] text-muted-foreground">working…</span> : null}
     >
       <p className={ENV_LEGEND}>
         The encrypted file behind the <code>secrets</code> rows above:{' '}
@@ -73,14 +66,14 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
       </p>
 
       {answer !== null && answer.outcome !== 'done' && (
-        <Alert className="mb-[0.9rem] border-danger/35 bg-danger/7">
+        <Alert className="mb-4 border-danger/35 bg-danger/7">
           <AlertDescription>
             {answer.detail === '' ? `the write ${answer.outcome}` : answer.detail}
           </AlertDescription>
         </Alert>
       )}
       {answer !== null && answer.outcome === 'done' && answer.detail !== '' && (
-        <Alert className="mb-[0.9rem] border-info/35 bg-info/7 text-subdued">
+        <Alert className="mb-4 border-info/35 bg-info/7 text-subdued">
           <AlertDescription>{answer.detail}</AlertDescription>
         </Alert>
       )}
@@ -110,7 +103,7 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
                 />
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[0.76rem] text-muted-foreground">
+                  <span className="text-[0.75rem] text-muted-foreground">
                     {k.history === null ? (
                       'not in a commit yet'
                     ) : (
@@ -168,7 +161,7 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
         ))}
       </div>
 
-      <div className="mt-[0.9rem]">
+      <div className="mt-4">
         {form === '' ? (
           <SecretForm
             app={app}
@@ -197,7 +190,7 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
         )}
       </div>
 
-      <p className="mt-[0.9rem] mr-0 mb-0 ml-0 text-[0.76rem] text-muted-foreground">
+      <p className="explain mt-4 mr-0 mb-0 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground">
         A write commits the encrypted file straight away; the container picks the new value up on
         the next Apply, which is what rebuilds and restarts it.
       </p>
@@ -281,7 +274,7 @@ function SecretForm({
       >
         Cancel
       </Button>
-      {keyBad !== null && <span className="text-[0.76rem] text-danger">{keyBad}</span>}
+      {keyBad !== null && <span className="text-[0.75rem] text-danger">{keyBad}</span>}
     </form>
   )
 }
@@ -293,6 +286,9 @@ function SecretForm({
 export const ENV_TABLE = 'text-[0.85rem]'
 
 export const ENV_ROW =
-  'grid grid-cols-[minmax(0,20rem)_minmax(0,1fr)] items-baseline gap-x-[1.25rem] gap-y-[0.35rem] border-b border-b-subtle py-2 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)]'
+  'grid grid-cols-[minmax(0,20rem)_minmax(0,1fr)] items-baseline gap-x-5 gap-y-1.5 border-hairline border-b py-2.5 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)]'
 
-export const ENV_LEGEND = 'mt-0 mr-0 mb-[0.85rem] ml-0 text-[0.78rem] text-muted-foreground'
+/** The prose that opens an env board: what the rows are and where they come from.
+    Explanation, so it folds behind the board's ⓘ. */
+export const ENV_LEGEND =
+  'explain mt-0 mr-0 mb-3 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground'

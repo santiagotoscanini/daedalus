@@ -124,7 +124,7 @@ function OffboxSite() {
         )}
       </BoardGrid>
 
-      <div className="mt-[0.8rem]">
+      <div className="mt-3">
         <GuardedAwait
           resetKey={site.id}
           promise={detail}

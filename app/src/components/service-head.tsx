@@ -29,10 +29,10 @@ export type CompareRow = {
 
 /** The header's outer box, shared with `ServiceHeadSkeleton` so the space the
     placeholder reserves is the space the real header takes. */
-export const SVC_HEAD = 'mb-[1.1rem] flex items-start gap-[0.85rem] max-[44rem]:flex-wrap'
+export const SVC_HEAD = 'mb-6 flex items-start gap-4 max-[44rem]:flex-wrap'
 
 /** The artwork slot, shared with `ServiceHeadSkeleton` for the same reason. */
-export const SVC_LOGO = 'block size-11 flex-none object-contain'
+export const SVC_LOGO = 'block size-11 flex-none rounded-xl object-contain'
 
 export function ServiceHead({
   logo,
@@ -61,17 +61,19 @@ export function ServiceHead({
   return (
     <div className={SVC_HEAD}>
       <img className={SVC_LOGO} src={logo} alt="" width={44} height={44} />
-      <div className="min-w-0">
-        <h2 className="m-0 text-[1.15rem] font-semibold">{name}</h2>
+      <div className="flex min-w-0 flex-col gap-1">
+        <h2 className="m-0 text-[1.125rem] leading-tight tracking-[-0.015em] text-foreground [font-weight:600]">
+          {name}
+        </h2>
         {/* The version, attached to the name it is the version OF, with its
             verdict beside it — the three are one sentence, so they sit on one
             line rather than in separate cards a screen apart. */}
-        <p className="mt-[0.15rem] mb-0 flex flex-wrap items-baseline gap-2">
-          <span className="font-mono text-[1.05rem] font-semibold tracking-[-0.01em] text-foreground [overflow-wrap:anywhere]">
+        <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-mono text-[0.84rem] tabular-nums text-foreground [font-weight:500] [overflow-wrap:anywhere]">
             {version ?? DASH}
           </span>
           {versionNote !== undefined && (
-            <span className="text-[0.73rem] text-muted-foreground">{versionNote}</span>
+            <span className="text-[0.75rem] text-muted-foreground">{versionNote}</span>
           )}
           {verdict !== undefined && <VersionCompare verdict={verdict} rows={compare ?? []} />}
         </p>
@@ -79,12 +81,14 @@ export function ServiceHead({
             is one sentence on a line with a 44px logo and a button beside it,
             and the cap would fold it in half while a third of the header sat
             empty. The header is the measure. */}
-        <p className="mt-[0.3rem] mb-0 max-w-none text-[0.82rem] text-subdued">{lede}</p>
+        <p className="m-0 mt-0.5 max-w-none text-[0.84rem] leading-[1.5] text-muted-foreground">
+          {lede}
+        </p>
       </div>
       {/* The status chip and the one action on the page, kept together at the
           far end. */}
       {actions !== undefined && (
-        <div className="ml-auto flex flex-none items-center gap-[0.6rem] max-[44rem]:ml-0 max-[44rem]:w-full">
+        <div className="ml-auto flex flex-none items-center gap-2 self-center max-[44rem]:ml-0 max-[44rem]:w-full">
           {actions}
         </div>
       )}
@@ -114,18 +118,18 @@ function VersionCompare({
     <InfoHint
       // Position and size only — InfoHint owns the reveal and the card chrome.
       className="inline-flex cursor-default rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      cardClassName="top-[calc(100%+0.45rem)] left-0 flex w-max max-w-[19rem] flex-col gap-[0.4rem] px-[0.7rem] py-[0.6rem]"
+      cardClassName="top-[calc(100%+0.5rem)] left-0 flex w-max max-w-[19rem] flex-col gap-2.5 px-3 py-2.5"
       trigger={<Chip tone={verdict.tone}>{verdict.label}</Chip>}
     >
       {rows.map((r) => (
-        <span key={r.k} className="grid grid-cols-[1fr_auto] items-baseline gap-x-[0.7rem] gap-y-0">
-          <span className="text-[0.62rem] font-semibold tracking-[0.1em] text-muted-foreground uppercase">
-            {r.k}
-          </span>
-          <span className="font-mono text-[0.95rem] font-semibold text-foreground tabular-nums [overflow-wrap:anywhere]">
+        <span key={r.k} className="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-0.5">
+          <span className="text-[0.72rem] text-muted-foreground [font-weight:500]">{r.k}</span>
+          <span className="font-mono text-[0.84rem] text-foreground tabular-nums [font-weight:500] [overflow-wrap:anywhere]">
             {r.v ?? DASH}
           </span>
-          <span className="col-span-full text-[0.7rem] leading-[1.35] text-subdued">{r.note}</span>
+          <span className="col-span-full text-[0.72rem] leading-[1.4] text-muted-foreground">
+            {r.note}
+          </span>
         </span>
       ))}
     </InfoHint>
@@ -292,11 +296,11 @@ export function LinkRow({ links }: { links: { label: string; href: string }[] })
   return (
     // Indented past the logo so the row hangs under the header's text column
     // rather than under its artwork.
-    <p className="mt-[0.35rem] mr-0 mb-[1.1rem] ml-[3.4rem] flex flex-wrap gap-x-4 gap-y-0 text-[0.74rem] max-[44rem]:ml-0">
+    <p className="-mt-4 mr-0 mb-6 ml-15 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] max-[44rem]:ml-0">
       {links.map((l) => (
         <a
           key={l.href}
-          className="text-muted-foreground no-underline hover:text-primary"
+          className="text-muted-foreground no-underline transition-colors hover:text-foreground"
           href={l.href}
           target="_blank"
           rel="noreferrer"

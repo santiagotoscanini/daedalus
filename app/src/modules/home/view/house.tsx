@@ -1,7 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { FOOT, NOTE, SUB } from '../../../components/tokens'
+import { CAPTION, FOOT, NOTE, SUB } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Pulse } from '../../../components/viz'
 import { DASH, num } from '../../../lib/format'
 import type { HomeData } from '../data'
@@ -13,9 +13,9 @@ import type { HomeData } from '../data'
    "home" tints it, and a second border utility layered over a first would be
    decided by the stylesheet's order rather than by the string's. */
 const PERSON =
-  'flex items-center gap-[0.4rem] rounded-full border bg-raised px-[0.6rem] py-[0.3rem] text-[0.82rem] [&>em]:text-[0.72rem] [&>em]:not-italic [&>em]:text-muted-foreground'
+  'flex items-center gap-1.5 rounded-full border bg-foreground/[0.03] px-2.5 py-1 text-[0.8rem] [&>em]:text-[0.75rem] [&>em]:not-italic [&>em]:text-muted-foreground'
 const TEMP =
-  'flex max-w-[11rem] min-w-0 flex-col items-start rounded-[8px] bg-raised px-[0.6rem] py-[0.35rem] [&>strong]:text-[1.05rem] [&>strong]:font-semibold [&>strong]:tabular-nums [&>em]:max-w-full [&>em]:truncate [&>em]:text-[0.67rem] [&>em]:not-italic [&>em]:text-muted-foreground'
+  'flex max-w-[11rem] min-w-0 flex-col items-start gap-0.5 rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2 [&>strong]:text-[1.1rem] [&>strong]:tracking-tight [&>strong]:[font-weight:560] [&>strong]:tabular-nums [&>em]:max-w-full [&>em]:truncate [&>em]:text-[0.72rem] [&>em]:not-italic [&>em]:text-muted-foreground'
 
 type House = Extract<HomeData, { tab: 'house' }>
 
@@ -52,16 +52,16 @@ export function HouseView({ data: d }: { data: House }) {
                 {num(d.entities)} entities · {num(d.integrations)} integrations
               </span>
             ) : (
-              <span className="text-[0.73rem] text-danger">not answering</span>
+              <span className="text-[0.75rem] text-danger">not answering</span>
             )
           }
         >
           {d.people.length > 0 && (
-            <ul className="flex list-none flex-row flex-wrap gap-[0.4rem]">
+            <ul className="m-0 flex list-none flex-row flex-wrap gap-1.5 p-0">
               {d.people.map((p) => (
                 <li
                   key={p.name}
-                  className={`${PERSON} ${p.home ? 'border-success/35' : 'border-subtle'}`}
+                  className={`${PERSON} ${p.home ? 'border-success/35' : 'border-hairline'}`}
                 >
                   <Pulse on={p.home} tone="ok" />
                   <span>{p.name}</span>
@@ -73,17 +73,17 @@ export function HouseView({ data: d }: { data: House }) {
 
           <Measures
             items={[
-              { k: 'people home', v: d.reachable ? num(homeCount) : DASH },
-              { k: 'lights on', v: `${num(d.lightsOn)} / ${num(d.lightsTotal)}` },
-              { k: 'switches on', v: num(d.switchesOn) },
-              { k: 'automations on', v: `${num(d.automations.on)} / ${num(d.automations.total)}` },
+              { k: 'People home', v: d.reachable ? num(homeCount) : DASH },
+              { k: 'Lights on', v: `${num(d.lightsOn)} / ${num(d.lightsTotal)}` },
+              { k: 'Switches on', v: num(d.switchesOn) },
+              { k: 'Automations on', v: `${num(d.automations.on)} / ${num(d.automations.total)}` },
             ]}
           />
 
           {d.temperatures.length > 0 && (
             <>
               <h4 className={SUB}>Temperature</h4>
-              <div className="flex flex-wrap gap-[0.5rem]">
+              <div className="flex flex-wrap gap-2">
                 {d.temperatures.map((t) => (
                   <span key={t.label} className={TEMP}>
                     <strong>{t.value.toFixed(1)}°</strong>
@@ -101,11 +101,14 @@ export function HouseView({ data: d }: { data: House }) {
         <Board title="Not answering" icon="warn" span={4}>
           {/* Split by domain rather than counted — see `unavailableBy`. */}
           <BarList items={d.unavailableBy} tone="warn" empty="every entity is reporting" />
-          <p className={FOOT}>
+          <p className={CAPTION}>
             {num(d.unavailable)} of {num(d.entities)} entities are <b>unavailable</b> or{' '}
-            <b>unknown</b>. Most of that is the Tuya lights, which have been off the network since
-            they lost their pairing and need re-pairing from the app. That number will not fall on
-            its own. A domain appearing here that did not before is the thing to notice.
+            <b>unknown</b>.
+          </p>
+          <p className={FOOT}>
+            Most of that is the Tuya lights, which have been off the network since they lost their
+            pairing and need re-pairing from the app. That number will not fall on its own. A domain
+            appearing here that did not before is the thing to notice.
           </p>
         </Board>
 

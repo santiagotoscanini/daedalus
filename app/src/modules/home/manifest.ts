@@ -5,6 +5,7 @@ export const manifest = {
   label: 'Home',
   lede: 'What the house shares, and what one person keeps here.',
   order: 30,
+  section: 'Services',
   // Shaped to the House tab, which opens by default.
   boardSpans: [8, 4, 4, 8],
   // A tab per service, not a tile directory: a tile had no room for the

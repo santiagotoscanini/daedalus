@@ -9,7 +9,18 @@ import { Ago } from '../ago'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { ServiceHead } from '../service-head'
-import { EMPTY, FOOT, LIST, MONO, MONO_FACE, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../tokens'
+import {
+  CAPTION,
+  EMPTY,
+  FOOT,
+  LIST,
+  MONO,
+  MONO_FACE,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+} from '../tokens'
 import { Board, BoardGrid, Chip, Stat, StatStrip } from '../viz'
 import { NARROW_HIDE } from './shared'
 import { issueSummary, shotterVerdict } from './verdicts'
@@ -17,12 +28,12 @@ import { issueSummary, shotterVerdict } from './verdicts'
 /* The strip holds one run's viewport slices — consecutive crops of a single
    long page — so they lay out as a film row: fixed height, natural width, side
    scroll. Each image is also the link to its full-size self. */
-const SHOT_STRIP = 'mt-[0.6rem] mb-[0.2rem] flex gap-2 overflow-x-auto'
-const SHOT_IMG = 'block h-[150px] w-auto rounded-[6px] border border-(--border) bg-raised'
+const SHOT_STRIP = 'flex gap-2 overflow-x-auto pb-1'
+const SHOT_IMG = 'block h-[150px] w-auto rounded-lg border border-hairline bg-foreground/[0.03]'
 /* An excerpt, not the artifact: it scrolls rather than grows, and keeps the
    runner's own line breaks. */
 const SHOT_LOG =
-  'mt-2 max-h-36 overflow-auto rounded-[6px] border border-subtle bg-raised px-[0.6rem] py-2 text-[0.72rem] leading-[1.5] whitespace-pre-wrap text-subdued'
+  'm-0 max-h-36 overflow-auto rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2 font-mono text-[0.72rem] leading-[1.5] whitespace-pre-wrap text-muted-foreground'
 
 const shotUrl = (run: string, file: string) => `/api/shot-run/${run}/${file}`
 
@@ -129,14 +140,17 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           span={12}
           aside={<span className={NOTE}>microsoft/playwright</span>}
           foot={
-            <p className={FOOT}>
-              The one dependency under <span className={MONO}>shot</span> — Chromium arrives inside
-              Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a paired edit
-              in <span className={MONO}>stacks/shotter/shotter.nix</span>:{' '}
-              <span className={MONO}>playwrightVersion</span> and{' '}
-              <span className={MONO}>playwrightDigest</span> together (Playwright refuses browsers
-              from a different revision), then a rebuild rebuilds the image. {verdict.note}
-            </p>
+            <>
+              <p className={FOOT}>
+                The one dependency under <span className={MONO}>shot</span> — Chromium arrives
+                inside Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a
+                paired edit in <span className={MONO}>stacks/shotter/shotter.nix</span>:{' '}
+                <span className={MONO}>playwrightVersion</span> and{' '}
+                <span className={MONO}>playwrightDigest</span> together (Playwright refuses browsers
+                from a different revision), then a rebuild rebuilds the image.
+              </p>
+              {verdict.note !== '' && <p className={CAPTION}>{verdict.note}</p>}
+            </>
           }
         />
 

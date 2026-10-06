@@ -11,34 +11,34 @@ import { cn } from '../../../lib/cn'
 
    The board vocabulary every category page uses lives in components/tokens.ts;
    it is re-exported here so a tab imports only its own page's shared file. */
-export { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
+export { CAPTION, EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
 
 /** A bare vertical list — no marker, no padding, no default margins. */
 export const LIST = 'm-0 flex list-none flex-col p-0'
 
 /* A download in flight, shared by qBittorrent, NZBGet and Shelfmark — the same
    object every time: a name, a line of figures, a bar. */
-export const TRANSFERS = `${LIST} gap-[0.6rem]`
-export const TRANSFER_ROW = 'flex flex-col gap-[0.25rem]'
-export const TRANSFER_HEAD = 'flex min-w-0 items-baseline justify-between gap-[0.8rem]'
-export const TRANSFER_NAME = 'min-w-0 truncate text-[0.82rem]'
+export const TRANSFERS = `${LIST} gap-3`
+export const TRANSFER_ROW = 'flex flex-col gap-1'
+export const TRANSFER_HEAD = 'flex min-w-0 items-baseline justify-between gap-3'
+export const TRANSFER_NAME = 'min-w-0 truncate text-[0.8rem]'
 export const TRANSFER_META =
-  'flex items-center gap-[0.3rem] whitespace-nowrap text-[0.72rem] text-muted-foreground tabular-nums'
+  'flex items-center gap-1.5 whitespace-nowrap text-[0.75rem] text-muted-foreground tabular-nums'
 
 /* An activity feed. Event, then subject, then when — the event is a fixed
    column because the vocabulary is small and repeated, so a reader scanning for
    one of them is scanning a single column. Below 34rem the three stack. */
-export const FEED = `${LIST} gap-[0.12rem] text-[0.8rem]`
+export const FEED = `${LIST} text-[0.8rem]`
 export const FEED_ROW =
-  'grid grid-cols-[8rem_minmax(0,1fr)_5.5rem] items-baseline gap-[0.7rem] py-[0.16rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-[0.15rem]'
-export const FEED_EVENT = 'text-[0.72rem] uppercase tracking-[0.04em] text-muted-foreground'
+  'grid grid-cols-[8rem_minmax(0,1fr)_5.5rem] items-baseline gap-3 border-hairline border-t py-2 first:border-t-0 max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-0.5'
+export const FEED_EVENT = 'text-[0.75rem] text-muted-foreground first-letter:uppercase'
 export const FEED_TITLE = 'truncate'
 export const FEED_WHEN = 'text-right text-[0.75rem] text-muted-foreground max-[34rem]:text-left'
 
 /* A wrapping row of two-word verdicts rather than a list: there are a handful,
    and the only thing being compared is whether any of them is not "Good". */
-export const PROVS = 'm-0 flex list-none flex-wrap gap-x-[0.9rem] gap-y-[0.5rem] p-0'
-export const PROV = 'flex items-center gap-[0.4rem] text-[0.8rem]'
+export const PROVS = 'm-0 flex list-none flex-wrap gap-x-4 gap-y-2 p-0'
+export const PROV = 'flex items-center gap-1.5 text-[0.8rem]'
 
 /**
  * A tri-state health as a dot tone.
@@ -65,7 +65,7 @@ export function ServiceBar<T extends string>({
     // The switch is always on the right, whether or not anything sits to its
     // left — `ml-auto` on the last child does both cases, where `justify-between`
     // would park a lone child at the start.
-    <div className="mt-[1.75rem] mb-[1.5rem] flex flex-wrap items-center gap-4 border-b border-border pb-[0.9rem] [&>*:last-child]:ml-auto">
+    <div className="mt-6 mb-5 flex flex-wrap items-center gap-4 [&>*:last-child]:ml-auto">
       <Segmented value={value} onChange={onChange} options={options} label="Service" />
     </div>
   )
@@ -95,12 +95,10 @@ export function HealthChecks({
     return <p className={EMPTY}>No warnings. Every check this service runs is passing.</p>
 
   return (
-    <ul className={`${LIST} gap-[0.3rem]`}>
+    <ul className={`${LIST} gap-1.5`}>
       {checks.map((c) => (
         <li key={`${c.source}-${c.message}`} className={cn(CHECK_ROW, CHECK_TINT[c.level])}>
-          <span className="text-[0.72rem] uppercase tracking-[0.04em] text-muted-foreground">
-            {c.source}
-          </span>
+          <span className="text-[0.75rem] text-muted-foreground">{c.source}</span>
           <span className="min-w-0 text-foreground [&_a]:whitespace-nowrap [&_a]:text-muted-foreground">
             {c.message}
             {c.url !== null && (
@@ -120,13 +118,13 @@ export function HealthChecks({
    for (which subsystem), the message is the part you read once you have found
    it. Below 34rem the two stack. */
 export const CHECK_ROW =
-  'grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-[0.7rem] rounded-[7px] bg-raised px-[0.55rem] py-[0.4rem] text-[0.8rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-[0.15rem]'
+  'grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-3 rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2 text-[0.8rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-0.5'
 
 /* Two levels, two literal strings — the fill is a different share of the panel
    for each, so this is a table of two rather than a tone. */
 const CHECK_TINT: Record<'warn' | 'bad', string> = {
-  warn: 'bg-[color-mix(in_srgb,var(--warning)_10%,var(--panel-2))]',
-  bad: 'bg-[color-mix(in_srgb,var(--danger)_12%,var(--panel-2))]',
+  warn: 'border-warning/25 bg-warning/[0.07]',
+  bad: 'border-danger/25 bg-danger/[0.08]',
 }
 
 /**

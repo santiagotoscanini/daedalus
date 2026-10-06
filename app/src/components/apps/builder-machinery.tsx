@@ -83,7 +83,7 @@ export function MachineryBoard({ m }: { m: Machinery }) {
               {
                 k: 'Scratch dataset',
                 v: (
-                  <span className="inline-flex items-center gap-[0.5rem]">
+                  <span className="inline-flex items-center gap-2">
                     <span className={MONO}>{f.storage.dataset || DASH}</span>
                     {yes(f.storage.mounted, 'mounted', 'NOT mounted')}
                   </span>
@@ -92,7 +92,7 @@ export function MachineryBoard({ m }: { m: Machinery }) {
               {
                 k: 'Used',
                 v: (
-                  <span className="inline-flex items-center gap-[0.6rem] tabular-nums">
+                  <span className="inline-flex items-center gap-2.5 tabular-nums">
                     {quota !== null && used !== null && (
                       <span className="w-[6rem]">
                         <Progress
@@ -161,7 +161,7 @@ export function GithubBoard({ g }: { g: Github }) {
               inst === null ? (
                 <Chip>unknown</Chip>
               ) : (
-                <span className="inline-flex items-center gap-[0.5rem]">
+                <span className="inline-flex items-center gap-2">
                   {inst.account !== null && <span>{inst.account.login}</span>}
                   <Chip tone={inst.state === 'ok' && !inst.stale ? 'ok' : 'warn'}>
                     {inst.stale ? `${inst.state}, stale` : inst.state}
@@ -225,7 +225,7 @@ export function GithubBoard({ g }: { g: Github }) {
                 params={{ name: b.app, id: b.id }}
                 className={cn(ROW_MAIN, 'no-underline')}
               >
-                {b.app} <code className="text-[0.74rem] text-muted-foreground">{sha7(b.sha)}</code>
+                {b.app} <code className="text-[0.75rem] text-muted-foreground">{sha7(b.sha)}</code>
               </Link>
               <BuildStateChip state={b.state} />
               {b.checkRunId !== null && (

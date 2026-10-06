@@ -1,4 +1,13 @@
-import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
+import {
+  CAPTION,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+} from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Progress, Pulse, Stat, StatStrip } from '../../../components/viz'
 import { num, since } from '../../../lib/format'
 import { LINK_UNKNOWN } from '../../../lib/node-link'
@@ -81,12 +90,12 @@ function MachinesThatCouldTakeAJobBoard({ f }: { f: RunnersFacts }) {
     >
       <ul className={LIST}>
         {d.machines.map((m) => (
-          <li key={m.id} className="border-subtle border-t py-[0.45rem] first:border-t-0">
-            <div className="flex min-w-0 items-center gap-[0.45rem] text-[0.77rem]">
+          <li key={m.id} className="border-hairline border-t py-2.5 first:border-t-0">
+            <div className="flex min-w-0 items-center gap-2 text-[0.8rem]">
               <Pulse on={m.online === true} tone={m.online === true ? 'ok' : 'muted'} />
               <span className={ROW_MAIN}>
-                <b className="font-[550]">{m.name}</b>
-                <span className="ml-[0.4rem] text-muted-foreground">
+                <b className="[font-weight:560]">{m.name}</b>
+                <span className="ml-1.5 text-muted-foreground">
                   {osWord(m.os)} · {m.arch}
                   {m.agentVersion !== null && ` · agent ${m.agentVersion}`}
                 </span>
@@ -101,15 +110,12 @@ function MachinesThatCouldTakeAJobBoard({ f }: { f: RunnersFacts }) {
                       : `last heard ${since(m.lastSeenAgo)}`}
               </span>
             </div>
-            <p className="m-0 mt-[0.25rem] flex flex-wrap items-center gap-[0.3rem] text-[0.72rem] text-muted-foreground">
+            <p className="m-0 mt-1.5 flex flex-wrap items-center gap-1.5 text-[0.75rem] text-muted-foreground">
               <span>would answer to</span>
               {m.labels.map((l) => (
-                <span
-                  key={l}
-                  className={`${MONO} rounded border border-subtle px-[0.3rem] py-[0.05rem]`}
-                >
+                <Chip key={l} className={MONO}>
                   {l}
-                </span>
+                </Chip>
               ))}
               <span className="ml-auto tabular-nums">
                 {m.demand === 0
@@ -144,7 +150,7 @@ function RegisteredWithGitHubBoard({ f }: { f: RunnersFacts }) {
     >
       {d.canListRunners ? (
         registered.length === 0 ? (
-          <p className={FOOT}>No self-hosted runner is registered on any watched repository.</p>
+          <p className={CAPTION}>No self-hosted runner is registered on any watched repository.</p>
         ) : (
           <ul className={LIST}>
             {registered.map((r) => (
@@ -169,7 +175,7 @@ function RegisteredWithGitHubBoard({ f }: { f: RunnersFacts }) {
           installed only on the repositories that opt in.
         </p>
       )}
-      <p className={`${FOOT} mt-[0.4rem]`}>
+      <p className={CAPTION}>
         {d.canListRunners
           ? d.registered
               .slice(0, 4)
@@ -210,23 +216,23 @@ function RunnersNowBoard() {
       span={6}
       waits="drawn once a runner exists: what each one is doing, and its load"
     >
-      <ul className="m-0 flex list-none flex-col gap-[0.5rem] p-0">
+      <ul className="m-0 flex list-none flex-col gap-3 p-0">
         {[
           ['box-linux · 1', 'plutus · CI · test', 73, 41],
           ['box-linux · 2', 'idle', 2, 6],
           ['mac-arm64', 'daedalus · Agent · check (macos)', 88, 62],
         ].map(([name, job, cpu, mem]) => (
-          <li key={String(name)} className="text-[0.77rem]">
-            <div className="flex items-center gap-[0.45rem]">
+          <li key={String(name)} className="text-[0.8rem]">
+            <div className="flex items-center gap-2">
               <span className={ROW_MAIN}>
-                <b className="font-[550]">{name}</b>
-                <span className="ml-[0.4rem] text-muted-foreground">{job}</span>
+                <b className="[font-weight:560]">{name}</b>
+                <span className="ml-1.5 text-muted-foreground">{job}</span>
               </span>
               <span className={ROW_SIDE}>
                 cpu {String(cpu)}% · mem {String(mem)}%
               </span>
             </div>
-            <div className="mt-[0.2rem] grid grid-cols-2 gap-[0.4rem]">
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
               <Progress pct={Number(cpu)} height={4} active={Number(cpu) > 10} />
               <Progress pct={Number(mem)} height={4} tone="info" />
             </div>
@@ -277,27 +283,27 @@ function ThisMonthHereInsteadOfHostedBoard() {
 function HowARunnerHereWouldWorkBoard() {
   return (
     <Board title="How a runner here would work" icon="logs" span={12}>
-      <ul className="m-0 grid list-none gap-x-[1.2rem] gap-y-[0.35rem] p-0 text-[0.78rem] leading-[1.5] sm:grid-cols-2">
+      <ul className="m-0 grid list-none gap-x-6 gap-y-3 p-0 text-[0.8rem] leading-[1.55] text-muted-foreground sm:grid-cols-2 [&_b]:text-foreground">
         <li>
-          <b className="font-[550]">Per job, then gone.</b> A{' '}
+          <b className="[font-weight:560]">Per job, then gone.</b> A{' '}
           <span className={MONO}>workflow_job</span> arrives queued with a matching label; the box
           mints a just-in-time runner config, starts one rootless container with a dedicated uid and
           the builder's egress fence, and it takes exactly that job and exits. No idle runner, no
           long-lived registration, nothing shared between jobs.
         </li>
         <li>
-          <b className="font-[550]">On the other machines, through the agent.</b> The PC and the Mac
-          run a runner as a declared service the agent supervises, the way it runs Claude's remote
-          control today, with the same per-job lifetime. macOS jobs are the ones worth moving: ten
-          billed minutes for every wall minute.
+          <b className="[font-weight:560]">On the other machines, through the agent.</b> The PC and
+          the Mac run a runner as a declared service the agent supervises, the way it runs Claude's
+          remote control today, with the same per-job lifetime. macOS jobs are the ones worth
+          moving: ten billed minutes for every wall minute.
         </li>
         <li>
-          <b className="font-[550]">Runners run CI, never fleet images.</b> An image reaches the
-          registry through daedalus's own build path and nothing else; a runner that could push one
-          would be a second deploy path with none of the checks.
+          <b className="[font-weight:560]">Runners run CI, never fleet images.</b> An image reaches
+          the registry through daedalus's own build path and nothing else; a runner that could push
+          one would be a second deploy path with none of the checks.
         </li>
         <li>
-          <b className="font-[550]">A second, narrow App.</b> Registering a runner needs{' '}
+          <b className="[font-weight:560]">A second, narrow App.</b> Registering a runner needs{' '}
           <span className={MONO}>administration: write</span> on the repository, so it gets its own
           App, installed only on the repositories that opt in, sealed in the same vault as the build
           App's key.

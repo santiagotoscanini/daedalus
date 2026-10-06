@@ -38,7 +38,8 @@ export function HeadStrip({
   line: ReactNode
 }) {
   return (
-    <div className="mb-[1.1rem] flex items-start gap-[0.85rem] max-[44rem]:flex-wrap">
+    // The bottom margin matches HeadStripSkeleton's, so the tabs do not move on load.
+    <div className="mb-[1.1rem] flex items-center gap-3.5 max-[44rem]:flex-wrap">
       {mark !== undefined && (
         <img
           src={mark.src}
@@ -48,13 +49,17 @@ export function HeadStrip({
           className={cn('block size-11 flex-none object-contain', mark.invert && 'dark:invert')}
         />
       )}
-      <div className="min-w-0 flex-auto">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="m-0 text-[1.25rem] tracking-[-0.01em]">{name}</h2>
+      <div className="flex min-w-0 flex-auto flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <h2 className="m-0 text-[1.15rem] text-foreground leading-tight tracking-[-0.015em] [font-weight:600]">
+            {name}
+          </h2>
           {chip !== undefined && <Chip tone={chip.tone}>{chip.label}</Chip>}
           {aside !== undefined && <span className={NOTE}>{aside}</span>}
         </div>
-        <p className={`${NOTE} mt-1`}>{line}</p>
+        <p className="m-0 text-[0.8rem] text-muted-foreground leading-snug [overflow-wrap:anywhere]">
+          {line}
+        </p>
       </div>
     </div>
   )
@@ -90,7 +95,7 @@ export function WipBoard({
           {children}
         </div>
         <div className="absolute inset-0 flex items-center justify-center p-3">
-          <span className="rounded-md border border-subtle bg-card px-3 py-1.5 text-center text-[0.76rem] text-subdued leading-[1.4] shadow-sm">
+          <span className="rounded-xl border border-hairline bg-popover px-3 py-1.5 text-center text-[0.75rem] text-muted-foreground leading-[1.4] shadow-[inset_0_1px_0_var(--hairline-hi)]">
             {waits}
           </span>
         </div>

@@ -9,7 +9,7 @@ export type Downloaders = Extract<MediaData, { tab: 'downloaders' }>
 export function TunnelBoard({ vpn, span }: { vpn: Downloaders['vpn']; span: 4 | 6 }) {
   return (
     <Board title="The tunnel" icon="⛨" span={span}>
-      <div className="flex items-center gap-[0.5rem] text-[0.95rem]">
+      <div className="flex items-center gap-2 text-[0.95rem]">
         <Pulse on={vpn.up === true} tone={vpn.up === true ? 'ok' : 'bad'} />
         <strong>{vpn.up === null ? 'unknown' : vpn.up ? 'connected' : 'down'}</strong>
       </div>

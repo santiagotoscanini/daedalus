@@ -54,12 +54,10 @@ export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           {recyclarr.synced.length === 0 ? (
             <p className={EMPTY}>no sync recorded in the window</p>
           ) : (
-            <ul className={`${LIST} gap-[0.3rem]`}>
+            <ul className={`${LIST} gap-1.5`}>
               {recyclarr.synced.map((s) => (
                 <li key={s.instance} className={CHECK_ROW}>
-                  <span className="text-[0.72rem] uppercase tracking-[0.04em] text-muted-foreground">
-                    {s.instance}
-                  </span>
+                  <span className="text-[0.75rem] text-muted-foreground">{s.instance}</span>
                   <span className="min-w-0 text-foreground">
                     {s.updated === 0 ? (
                       'nothing changed'

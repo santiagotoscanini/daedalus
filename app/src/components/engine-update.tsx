@@ -117,11 +117,11 @@ export function EngineCard({ e }: { e: EngineFacts }) {
         ]}
       />
 
-      <div className="mt-3">
+      <div>
         {running || startedHere ? (
           <Run status={status} />
         ) : (
-          <div className="flex flex-col items-start gap-[0.55rem]">
+          <div className="flex flex-col items-start gap-2.5">
             {e.override && (
               <p className={NOTE}>
                 Refused while the engine override is on: the running system is built from the engine
@@ -139,7 +139,7 @@ export function EngineCard({ e }: { e: EngineFacts }) {
                 push them first — the update only fast-forwards, and will refuse a clone it cannot.
               </p>
             )}
-            {refusal !== null && <p className="text-danger">{refusal}</p>}
+            {refusal !== null && <p className="m-0 text-[0.8rem] text-danger">{refusal}</p>}
             <Button
               type="button"
               size="sm"
@@ -175,7 +175,7 @@ function Run({ status }: { status: EngineUpdateStatus }) {
   const at = PHASES.indexOf(status.phase as (typeof PHASES)[number])
   const revs =
     status.from !== '' ? (
-      <span className={cn(MONO_FACE, 'text-[0.76rem] text-muted-foreground')}>
+      <span className={cn(MONO_FACE, 'text-[0.75rem] text-muted-foreground')}>
         {short(status.from)}
         {status.to !== '' && status.to !== status.from && ` → ${short(status.to)}`}
       </span>
@@ -188,7 +188,7 @@ function Run({ status }: { status: EngineUpdateStatus }) {
         {status.commit === null || status.commit === ''
           ? 'Nothing was committed.'
           : 'The lock commit was reverted and the system rebuilt onto the previous engine.'}
-        <pre className="mt-[0.4rem] max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
+        <pre className="mt-1.5 mb-0 max-h-28 overflow-auto whitespace-pre-wrap text-[0.75rem] text-danger">
           {status.error}
         </pre>
       </div>
@@ -206,7 +206,7 @@ function Run({ status }: { status: EngineUpdateStatus }) {
 
   if (status.state === 'done') {
     return (
-      <div className="flex flex-wrap items-center gap-[0.6rem]">
+      <div className="flex flex-wrap items-center gap-2.5">
         <Chip tone="ok">{status.phase === 'no-change' ? 'already current' : 'updated'}</Chip>
         {revs}
         {status.commit !== null && status.commit !== '' && (
@@ -220,20 +220,20 @@ function Run({ status }: { status: EngineUpdateStatus }) {
 
   return (
     <div>
-      <ol className="inline-flex flex-wrap gap-[0.85rem] text-[0.78rem] text-muted-foreground">
+      <ol className="m-0 inline-flex list-none flex-wrap gap-x-3.5 gap-y-1 p-0 text-[0.78rem] text-muted-foreground">
         {PHASES.map((p, i) => (
           <li
             key={p}
             className={cn(
-              p === status.phase && 'font-semibold text-primary',
-              i < at && 'text-subdued line-through',
+              p === status.phase && 'text-foreground [font-weight:600]',
+              i < at && 'text-muted-foreground/70 line-through',
             )}
           >
             {p}
           </li>
         ))}
         {at === -1 && status.phase !== '' && (
-          <li className="font-semibold text-primary">{status.phase}</li>
+          <li className="text-foreground [font-weight:600]">{status.phase}</li>
         )}
       </ol>
       {revs !== null && <div className="mt-2">{revs}</div>}

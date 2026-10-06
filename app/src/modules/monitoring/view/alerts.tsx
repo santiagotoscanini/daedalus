@@ -1,7 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { DASH, num, since } from '../../../lib/format'
 import type { MonitoringData } from '../data'
@@ -139,15 +139,17 @@ function DeliberatelySilentBoard() {
     <Board title="Deliberately silent" icon="🔇" span={8}>
       {/* Not a fault, and the page has to say so — a muted alert path and an
         alert path that was never built look identical from here. */}
-      <p className={FOOT}>
+      <p className={CAPTION}>
         Every Home Assistant alert path on this box is <b>switched off on purpose</b>, indefinitely.
+        Nothing above will ever mention Home Assistant while that holds, and a quiet board is not
+        evidence that it is well.
+      </p>
+      <p className={FOOT}>
         The one that used to fire was the television being turned off, so{' '}
         <span className={MONO}>media_player</span> and <span className={MONO}>remote</span> are
         excluded. The 25 Tuya lights sitting unavailable in the floor are genuinely not healthy,
         which is why the entity-count rule could not be re-armed with a higher threshold. Grep{' '}
         <span className={MONO}>HA-MUTED</span> in the configuration checkout to find every switch.
-        Nothing above will ever mention Home Assistant while that holds, and a quiet board is not
-        evidence that it is well.
       </p>
     </Board>
   )

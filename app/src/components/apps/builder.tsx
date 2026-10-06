@@ -137,10 +137,10 @@ function FailuresBoard({ h }: { h: History }) {
               <Link
                 to="/apps/$name/builds/$id"
                 params={{ name: f.app, id: f.id }}
-                className="inline-flex min-w-[10rem] items-baseline gap-[0.5rem] no-underline"
+                className="inline-flex min-w-[10rem] items-baseline gap-2 no-underline"
               >
                 <span className="text-foreground">{f.app}</span>
-                <code className="text-[0.74rem] text-muted-foreground">{sha7(f.sha)}</code>
+                <code className="text-[0.75rem] text-muted-foreground">{sha7(f.sha)}</code>
               </Link>
               <Chip tone="bad">{f.phase}</Chip>
               <span className={cn(ROW_MAIN, 'text-subdued')} title={f.error ?? undefined}>
@@ -166,7 +166,7 @@ function ToolchainBoard({ d }: { d: Builder }) {
       {d.toolchain.rows.length === 0 ? (
         <p className={EMPTY}>The build tools’ pins are not published.</p>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-[0.3rem] p-0">
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {d.toolchain.rows.map((r) => (
             <ImageRow key={r.container} r={r} status={d.toolchain.status} />
           ))}

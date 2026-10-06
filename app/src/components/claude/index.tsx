@@ -21,7 +21,7 @@ import { LogBoard } from '../logs'
 import { useNow } from '../poll'
 import { Changelog } from '../release-notes'
 import { ServiceHead } from '../service-head'
-import { EMPTY, FOOT, MONO, NOTE } from '../tokens'
+import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../tokens'
 import { Button } from '../ui/button'
 import { BoardGrid, Chip, Stat, StatStrip } from '../viz'
 import { ConnectionBoard } from './connection-board'
@@ -225,17 +225,20 @@ function ClaudeReleases({ gap, note }: { gap: VersionGap; note: string }) {
       span={6}
       aside={<span className={NOTE}>anthropics/claude-code</span>}
       foot={
-        <p className={FOOT}>
-          The store binary cannot update itself — it is sealed with{' '}
-          <span className={MONO}>DISABLE_UPDATES</span>, because{' '}
-          <span className={MONO}>claude update</span> would leave it alone and build a second,
-          native install nothing reverts. <b>Update Claude Code</b> above is the supported move: it
-          pins the release manifest in the engine, signature-checked, and rebuilds onto it. The
-          weekly <span className={MONO}>flake-autoupgrade.timer</span> gets there on its own
-          whenever nixpkgs does. A rebuild restarts the controller, not the server: the server is a
-          user unit of its own, so a switch never ends a session — and so it keeps running the old
-          binary until a reboot or the restart above. {note}
-        </p>
+        <>
+          <p className={FOOT}>
+            The store binary cannot update itself — it is sealed with{' '}
+            <span className={MONO}>DISABLE_UPDATES</span>, because{' '}
+            <span className={MONO}>claude update</span> would leave it alone and build a second,
+            native install nothing reverts. <b>Update Claude Code</b> above is the supported move:
+            it pins the release manifest in the engine, signature-checked, and rebuilds onto it. The
+            weekly <span className={MONO}>flake-autoupgrade.timer</span> gets there on its own
+            whenever nixpkgs does. A rebuild restarts the controller, not the server: the server is
+            a user unit of its own, so a switch never ends a session — and so it keeps running the
+            old binary until a reboot or the restart above.
+          </p>
+          {note !== '' && <p className={CAPTION}>{note}</p>}
+        </>
       }
     />
   )

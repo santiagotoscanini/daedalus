@@ -13,6 +13,7 @@ import { Switch } from '../ui/switch'
 import { Textarea } from '../ui/textarea'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
+import { CONTROL_H } from './form'
 import { ASIDE, Mono } from './shared'
 
 // The editable rows of the settings tabs — the fields nix sources from
@@ -32,6 +33,8 @@ import { ASIDE, Mono } from './shared'
 // groups the control with its error the way the form rows elsewhere do.
 
 const INPUT = cn(INPUT_MONO, 'w-[15rem] max-w-full')
+/** A one-line box or a picker: the same width and the one row height. */
+const BOX = cn(INPUT, CONTROL_H)
 
 const AFFIX = 'font-mono text-[0.8rem] text-muted-foreground'
 
@@ -153,7 +156,7 @@ function TextInner({
         id={id}
         type="text"
         aria-label={label}
-        className={cn(INPUT, className)}
+        className={cn(BOX, className)}
         value={draft}
         disabled={edit.committed === null}
         aria-invalid={error !== null}
@@ -288,7 +291,7 @@ export function SiteSelect({ edit, field, label, groups, patchFor, disabled }: S
         value={current}
         options={groups}
         aria-label={label}
-        className={INPUT}
+        className={BOX}
         mono
         busy={saving}
         failed={refused !== null}

@@ -6,7 +6,7 @@ import { railpackSpoke } from '../../lib/build-detect'
 import { type BuildView, frameworkName, isOpenBuild } from '../../lib/build-display'
 import { cacheHitRatio } from '../../lib/build-facts'
 import { bytes, DASH, pct } from '../../lib/format'
-import { EMPTY, FOOT } from '../tokens'
+import { CAPTION, EMPTY } from '../tokens'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { BarList, Chip, Facts } from '../viz'
 import { docsUrl, LOG_TONE } from './boards'
@@ -74,7 +74,7 @@ export function Detection({ build }: { build: BuildView }) {
         // Never "no warnings": this build was judged by nobody. Every row from
         // before the engine learned to compute them reads this way, and so
         // does one whose detection is not Railpack's at all.
-        <p className={FOOT}>
+        <p className={CAPTION}>
           No warnings were computed for this build — it predates the checks, so this is not a clean
           bill of health.
         </p>
@@ -92,7 +92,7 @@ export function Detection({ build }: { build: BuildView }) {
           </AlertDescription>
         </Alert>
       ) : (
-        <p className={FOOT}>Checked; no warnings.</p>
+        <p className={CAPTION}>Checked; no warnings.</p>
       )}
     </>
   )
@@ -114,7 +114,7 @@ export function Tools({ build }: { build: BuildView }) {
       {packages.map((p) => (
         <li
           key={p.name}
-          className="grid grid-cols-[7rem_1fr] items-baseline gap-x-3 gap-y-[0.1rem] border-t border-subtle py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
+          className="grid grid-cols-[7rem_1fr] items-baseline gap-x-3 gap-y-0.5 border-hairline border-t py-2 text-[0.84rem] first:border-t-0 first:pt-0"
         >
           <code className="truncate" title={p.name}>
             {p.name}
@@ -198,7 +198,7 @@ export function ImageBoard({ build }: { build: BuildView }) {
         />
       )}
       {layers.length > 0 && (
-        <p className={FOOT}>
+        <p className={CAPTION}>
           Compressed sizes from the manifest — these plus the config are the pull size above.
         </p>
       )}
@@ -228,7 +228,7 @@ export function RailpackSaid({ build }: { build: BuildView }) {
       {spoken.map((l) => (
         <li
           key={`${l.level}:${l.message}`}
-          className="flex flex-wrap items-baseline gap-x-[0.6rem] gap-y-[0.15rem] border-t border-subtle py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
+          className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-hairline border-t py-2 text-[0.84rem] first:border-t-0 first:pt-0"
         >
           <Chip tone={LOG_TONE[l.level.toLowerCase()] ?? 'muted'}>{l.level.toLowerCase()}</Chip>
           <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{l.message}</span>

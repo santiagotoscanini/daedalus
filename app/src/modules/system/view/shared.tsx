@@ -79,3 +79,22 @@ export const PARTS = {
   psu: chosen(BOX_PARTS.psu),
   memory: chosen(BOX_PARTS.memory),
 }
+
+/* ── tables ───────────────────────────────────────────────────────────── */
+
+/* A list with columns that have to line up (a dataset's snapshots beside its
+   size, a replication pair's lag): a grid whose rows are subgrids, so every
+   cell of a column shares one width, under a quiet header row. The caller
+   names the columns (`grid-cols-[…]`). A list of one name and one reading is
+   the plain `LIST`/`ROW` from components/tokens.ts instead. */
+export const TABLE = 'm-0 grid list-none gap-x-4 p-0'
+export const TABLE_HEAD =
+  'col-span-full grid grid-cols-subgrid items-center px-0.5 pb-1.5 text-[0.72rem] text-muted-foreground'
+export const TABLE_ROW =
+  'col-span-full grid min-w-0 grid-cols-subgrid items-center border-hairline border-t px-0.5 py-2 text-[0.8rem]'
+/** The column that names the row: takes the slack, truncates. */
+export const CELL_MAIN = 'min-w-0 truncate text-foreground'
+/** A secondary reading. */
+export const CELL_SIDE = 'min-w-0 truncate text-[0.75rem] text-muted-foreground tabular-nums'
+/** The figure the row is about, right-aligned so the digits line up. */
+export const CELL_N = 'text-right text-foreground tabular-nums'

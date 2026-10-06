@@ -19,7 +19,7 @@
 
 html,
 body {
-  background: var(--background);
+  background-color: var(--sidebar);
   /* The page is never wider than the window. Sideways scroll on a phone is
      always a bug here — this is a dashboard of panels, and there is nothing
      off to the right that anybody wants — but ONE overlooked unbreakable
@@ -43,9 +43,20 @@ body {
 body {
   margin: 0;
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.55;
+  font-family: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* The canvas the rail sits on. The page itself is the inset panel
+     (shell.tsx), one step lighter — the Linear arrangement. */
+}
+
+::selection {
+  background: color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
 /* Identifiers are the thing on this dashboard with no space in them: a
@@ -61,8 +72,9 @@ body {
    wraps the text and still reports the unbroken token as its minimum, so the
    container overflows anyway. */
 code {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.86em;
+  font-family: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 
@@ -75,14 +87,16 @@ a:hover {
 }
 
 h1 {
-  font-size: 1.45rem;
-  letter-spacing: -0.02em;
+  font-size: 1.75rem;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
   margin: 0;
   font-weight: 600;
 }
 
 h2 {
-  font-size: 0.95rem;
+  font-size: 1rem;
+  letter-spacing: -0.015em;
   margin: 2.25rem 0 0.85rem;
   font-weight: 600;
 }

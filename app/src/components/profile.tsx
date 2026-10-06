@@ -11,7 +11,8 @@ import {
 
 import { mailAddressError } from '../lib/site-fields'
 import { resetProfilePictureFn, saveProfileFn, uploadProfilePictureFn } from '../server/profile'
-import { ASIDE, Mono, NOTE, Pending, Section, Stack, Unset } from './settings/shared'
+import { NOTE_SHOWN } from './settings/form'
+import { ASIDE, ERROR_NOTE, Mono, NOTE, Pending, Section, Stack, Unset } from './settings/shared'
 import { Button, buttonVariants } from './ui/button'
 import { Card, CardContent } from './ui/card'
 import { Field, FieldDescription, FieldError, FieldLabel } from './ui/field'
@@ -45,7 +46,7 @@ export function ProfilePage({
   profile: ProfileRead | null
 }) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {profile === null ? (
         <Card>
           <CardContent className="py-8">
@@ -56,7 +57,7 @@ export function ProfilePage({
         <Account profile={profile.value} />
       ) : (
         <Section title="Profile" icon="/icon-pocket-id.svg" mono>
-          <p className={NOTE}>{profile.reason}</p>
+          <p className={NOTE_SHOWN}>{profile.reason}</p>
         </Section>
       )}
 
@@ -102,7 +103,7 @@ function Account({ profile: p }: { profile: Profile }) {
         description="Saved to your Pocket ID account when you leave a field."
       >
         {locked && (
-          <p className={NOTE}>
+          <p className={NOTE_SHOWN}>
             This account is synced from LDAP, so Pocket ID refuses edits to it. Change it in the
             directory instead.
           </p>
@@ -225,14 +226,14 @@ function Identity({
           alt={name}
           width={112}
           height={112}
-          className="size-28 flex-none rounded-full border border-subtle object-cover"
+          className="size-28 flex-none rounded-full border border-hairline object-cover"
         />
         <div className="flex min-w-0 flex-col gap-1 max-sm:items-center">
-          <h2 className="m-0 truncate font-semibold text-[1.4rem] leading-tight tracking-[-0.01em]">
+          <h2 className="m-0 truncate text-[1.4rem] leading-tight tracking-[-0.02em] [font-weight:600]">
             {name}
           </h2>
-          <p className="m-0 truncate text-subdued text-[0.88rem]">{p.username}</p>
-          {p.email !== '' && <p className="m-0 truncate text-subdued text-[0.88rem]">{p.email}</p>}
+          <p className="m-0 truncate text-[0.875rem] text-subdued">{p.username}</p>
+          {p.email !== '' && <p className="m-0 truncate text-[0.875rem] text-subdued">{p.email}</p>}
           {(p.isAdmin || p.groups.length > 0) && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 max-sm:justify-center">
               {p.isAdmin && <Chip tone="ok">Pocket ID admin</Chip>}
@@ -278,7 +279,7 @@ function Identity({
             <span className={ASIDE}>PNG or JPEG, up to 5 MB</span>
           </div>
           {error !== null && (
-            <p role="alert" className="m-0 text-[0.78rem] text-destructive">
+            <p role="alert" className={ERROR_NOTE}>
               {error}
             </p>
           )}
@@ -356,10 +357,10 @@ function TextInner({
         }}
       />
       {error !== null ? (
-        <FieldError className="text-[0.76rem]">{error}</FieldError>
+        <FieldError className="text-[0.75rem]">{error}</FieldError>
       ) : (
         hint !== undefined && (
-          <FieldDescription className="text-muted-foreground text-[0.76rem]">
+          <FieldDescription className="text-[0.75rem] text-muted-foreground">
             {hint}
           </FieldDescription>
         )

@@ -15,7 +15,7 @@ import { useShown } from '../lib/shown'
 import { useSite } from '../lib/site-context'
 import { fetchModuleSwitchFn, setModuleEnabledFn, setModuleWebFn } from '../server/modules'
 import { GHOST_BTN } from './apps/shared'
-import { FOOT, INPUT_MONO, MONO, NOTE } from './tokens'
+import { CAPTION, FOOT, FOOT_BASE, INPUT_MONO, MONO, NOTE } from './tokens'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Picker } from './ui/picker'
@@ -34,11 +34,12 @@ import { Chip } from './viz'
 // the change lands, as for every other site change. The same dialog opens
 // from a module page's tab row, the module boards, and Settings › Modules.
 
-const OVERLAY = 'fixed inset-0 z-[70] bg-[color-mix(in_srgb,var(--overlay)_45%,transparent)]'
+const OVERLAY =
+  'fixed inset-0 z-[70] bg-[color-mix(in_oklch,var(--overlay)_45%,transparent)] backdrop-blur-[2px]'
 const PANEL = cn(
   'fixed top-1/2 left-1/2 z-[71] w-[min(92vw,36rem)] max-h-[88vh] overflow-y-auto',
-  '-translate-x-1/2 -translate-y-1/2 rounded-[12px] border border-(--border) bg-card p-[1.1rem]',
-  'text-foreground shadow-[0_24px_60px_-20px_rgb(0_0_0/0.5)] outline-none',
+  '-translate-x-1/2 -translate-y-1/2 rounded-2xl border border-hairline bg-popover p-5',
+  'text-popover-foreground shadow-(--float-shadow) outline-none',
 )
 const INPUT = cn(INPUT_MONO, 'w-[11rem] max-w-full')
 const AFFIX = 'font-mono text-[0.8rem] text-muted-foreground'
@@ -123,12 +124,15 @@ function ServiceSettingsDialog({
       <Dialog.Portal>
         <Dialog.Overlay className={OVERLAY} />
         <Dialog.Content className={PANEL} aria-labelledby={titleId}>
-          <div className="mb-[0.8rem] flex items-start gap-3">
+          <div className="mb-4 flex items-start gap-3">
             <div className="min-w-0 flex-auto">
-              <Dialog.Title id={titleId} className="m-0 text-[1rem] font-semibold">
+              <Dialog.Title
+                id={titleId}
+                className="m-0 text-[1rem] tracking-[-0.01em] [font-weight:600]"
+              >
                 {ids.length === 1 ? 'This service' : 'These services'}
               </Dialog.Title>
-              <Dialog.Description className={`${NOTE} m-0 mt-[0.15rem]`}>
+              <Dialog.Description className={cn(NOTE, 'm-0 mt-0.5')}>
                 On or off, where it answers, and who can reach it. Every change lands on the next
                 Apply.
               </Dialog.Description>
@@ -146,19 +150,19 @@ function ServiceSettingsDialog({
             </Dialog.Close>
           </div>
           {failed !== null ? (
-            <p className={`${NOTE} text-danger`}>{failed}</p>
+            <p className="m-0 text-[0.75rem] text-danger">{failed}</p>
           ) : rows === null ? (
             <p className={NOTE}>Reading the box…</p>
           ) : rows.length === 0 ? (
             <p className={NOTE}>This box declares none of {ids.join(', ')}.</p>
           ) : (
-            <div className="flex flex-col gap-[1rem]">
+            <div className="flex flex-col gap-3">
               {rows.map((m) => (
                 <ServiceCard key={m.id} m={m} onMoved={moved} />
               ))}
             </div>
           )}
-          <p className={`${FOOT} mt-[1rem]`}>
+          <p className={cn(FOOT, 'mt-4')}>
             Nothing here rebuilds. What you move is written to site.json on the next Apply, from the
             bar at the top of Apps; until then the box runs as it does now.
           </p>
@@ -185,12 +189,12 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
   }
 
   return (
-    <section className="rounded-[10px] border border-subtle bg-raised p-[0.8rem]">
-      <div className="flex flex-wrap items-center gap-[0.5rem]">
-        <span className={`${MONO} text-[0.9rem]`}>{m.id}</span>
+    <section className="rounded-xl border border-hairline bg-surface px-4 py-3.5 shadow-[inset_0_1px_0_var(--hairline-hi)]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn(MONO, 'text-[0.875rem]')}>{m.id}</span>
         <Chip tone={desired ? 'ok' : 'muted'}>{desired ? 'on' : 'off'}</Chip>
         {pending && <Chip tone="warn">{m.desired ? 'on after Apply' : 'off after Apply'}</Chip>}
-        <span className="ml-auto flex items-center gap-[0.5rem]">
+        <span className="ml-auto flex items-center gap-2">
           {m.structural ? (
             <span
               className="text-[0.75rem] text-muted-foreground"
@@ -208,12 +212,12 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
           )}
         </span>
       </div>
-      <p className={`${FOOT} mt-[0.3rem]`}>
+      <p className={cn(CAPTION, 'mt-1')}>
         {m.containers.length} {m.containers.length === 1 ? 'container' : 'containers'}
         {m.structural && ` · ${STRUCTURAL_WHY[m.id] ?? 'a running box cannot do without it'}`}
       </p>
       {asking && (
-        <div className="mt-[0.6rem] rounded-md border border-subtle bg-card p-[0.7rem]">
+        <div className="mt-3 rounded-lg border border-hairline bg-foreground/[0.03] p-3">
           <p className="m-0 text-[0.8rem] leading-[1.5]">
             Switching <b>{m.id}</b> off stops{' '}
             {m.containers.map((c, i) => (
@@ -231,7 +235,7 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
             . Its tab stays in the rail, greyed. The data stays where it is under the state root,
             and the switch is one Apply away from on again.
           </p>
-          <div className="mt-[0.5rem] flex gap-2">
+          <div className="mt-2.5 flex gap-2">
             <Button type="button" size="sm" onClick={() => move(false)}>
               Switch {m.id} off
             </Button>
@@ -248,13 +252,13 @@ function ServiceCard({ m, onMoved }: { m: ModuleSwitch; onMoved: () => void }) {
         </div>
       )}
       {m.web.length > 0 && (
-        <div className="mt-[0.7rem] flex flex-col gap-[0.6rem] border-subtle border-t pt-[0.6rem]">
+        <div className="mt-3 flex flex-col gap-2.5 border-hairline border-t pt-3">
           {m.web.map((w) => (
             <WebRow key={w.name} id={m.id} w={w} onMoved={onMoved} />
           ))}
         </div>
       )}
-      {refused !== null && <p className={`${FOOT} text-danger`}>{refused}</p>}
+      {refused !== null && <p className={cn(FOOT_BASE, 'text-danger')}>{refused}</p>}
     </section>
   )
 }
@@ -303,11 +307,11 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
 
   return (
     <div className="text-[0.8rem]">
-      <div className="flex flex-wrap items-center gap-x-[0.5rem] gap-y-[0.35rem]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <label htmlFor={inputId} className="min-w-[4.5rem] text-muted-foreground">
           {w.name === id ? 'Address' : w.name}
         </label>
-        <span className="inline-flex items-center gap-[0.3rem]">
+        <span className="inline-flex items-center gap-1">
           <Input
             id={inputId}
             className={INPUT}
@@ -350,9 +354,9 @@ function WebRow({ id, w, onMoved }: { id: string; w: ModuleWeb; onMoved: () => v
           </Button>
         )}
       </div>
-      {w.aliases.length > 0 && <p className={`${FOOT}`}>also answers at {w.aliases.join(', ')}</p>}
-      {local !== null && <p className={`${FOOT} text-danger`}>{local}</p>}
-      {refused !== null && <p className={`${FOOT} text-danger`}>{refused}</p>}
+      {w.aliases.length > 0 && <p className={CAPTION}>also answers at {w.aliases.join(', ')}</p>}
+      {local !== null && <p className={cn(FOOT_BASE, 'text-danger')}>{local}</p>}
+      {refused !== null && <p className={cn(FOOT_BASE, 'text-danger')}>{refused}</p>}
     </div>
   )
 }

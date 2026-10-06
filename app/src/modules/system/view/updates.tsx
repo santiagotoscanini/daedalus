@@ -7,7 +7,7 @@ import { UpdateProgress } from '../../../components/image-update'
 import { NixosCard } from '../../../components/nixos-card'
 import { RebootRequired } from '../../../components/reboot-required'
 import { usePolledStatus } from '../../../components/status'
-import { EMPTY, FOOT, MONO, MONO_FACE, NOTE } from '../../../components/tokens'
+import { CAPTION, EMPTY, FOOT, MONO, MONO_FACE, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { ImageUpdateStatus } from '../../../host/image-update'
@@ -59,7 +59,7 @@ import type { UpdateRow, UpdatesData } from '../data/updates'
 // consequence is stated there too, because it is the one thing batching
 // changes about the outcome: a single bad image reverts the whole commit.
 
-const ROWS = 'flex flex-col gap-[0.3rem]'
+const ROWS = 'm-0 flex list-none flex-col gap-1.5 p-0'
 
 /** One queued container: what the row had decided when it was added. */
 type QueueItem = {
@@ -297,7 +297,7 @@ function QueuePanel({
               {status.commit === null || status.commit === ''
                 ? 'Nothing was committed.'
                 : 'The commit was reverted and the system rebuilt onto the previous pins — every container in it, including the ones that were fine.'}
-              <pre className="mt-[0.4rem] max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
+              <pre className="mt-1.5 mb-0 max-h-28 overflow-auto whitespace-pre-wrap text-[0.75rem] text-danger">
                 {status.error}
               </pre>
             </div>
@@ -308,7 +308,7 @@ function QueuePanel({
           )}
 
           {mine && status.state === 'done' && status.phase !== REBOOT_REQUIRED && (
-            <div className="flex flex-wrap items-center gap-[0.6rem]">
+            <div className="flex flex-wrap items-center gap-2.5">
               <Chip tone="ok">{status.phase === 'no-change' ? 'already there' : 'updated'}</Chip>
               {status.commit !== null && status.commit !== '' && (
                 <span className={cn(MONO_FACE, 'text-[0.72rem] text-muted-foreground')}>
@@ -321,13 +321,13 @@ function QueuePanel({
           {/* What a single rebuild is about to move. One row per container,
               laid out like the host's own resolved list so the list you built
               and the list it resolved read as the same kind of thing. */}
-          <ul className="mb-[0.7rem] flex flex-col gap-[0.35rem] text-[0.76rem]">
+          <ul className="m-0 flex list-none flex-col p-0 text-[0.8rem]">
             {queue.map((q) => (
               <li
                 key={q.container}
-                className="flex flex-wrap items-center gap-[0.6rem] border-subtle border-b pb-[0.35rem] last:border-b-0"
+                className="flex flex-wrap items-center gap-2.5 border-hairline border-t py-2 first:border-t-0 first:pt-0"
               >
-                <span className="min-w-[11rem] text-subdued">{q.container}</span>
+                <span className="min-w-[11rem] text-foreground">{q.container}</span>
                 <span className={MONO}>
                   {q.tag}
                   {q.toTag === null ? ' — re-pull' : ` → ${q.toTag}`}
@@ -339,7 +339,7 @@ function QueuePanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className={cn(GHOST_BTN, 'ml-auto h-auto px-[0.55rem] py-[0.2rem] text-[0.7rem]')}
+                  className={cn(GHOST_BTN, 'ml-auto h-7 px-2.5 text-[0.75rem]')}
                   disabled={running}
                   onClick={() => {
                     onRemove(q.container)
@@ -355,7 +355,7 @@ function QueuePanel({
             // Restated here even though each was confirmed in its own row: by
             // the time six are queued, the one that takes the netns down with
             // it is three screens up.
-            <ul className="mb-[0.7rem] flex flex-col gap-[0.3rem] rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem] text-[0.76rem] text-subdued">
+            <ul className="m-0 flex list-none flex-col gap-1 rounded-xl border border-warning/40 bg-warning/8 px-3 py-2.5 text-[0.78rem] text-foreground">
               {ceremonies.map((q) => (
                 <li key={q.container}>
                   <strong>{q.container}</strong> {q.ceremony}.
@@ -364,7 +364,7 @@ function QueuePanel({
             </ul>
           )}
 
-          {refusal !== null && <p className="text-danger">{refusal}</p>}
+          {refusal !== null && <p className="m-0 text-[0.8rem] text-danger">{refusal}</p>}
 
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -394,7 +394,7 @@ function QueuePanel({
         </>
       )}
 
-      <p className={FOOT}>
+      <p className={CAPTION}>
         All of it or none of it. The queue becomes one commit and one rebuild, so if the build fails
         — or if any one of these containers does not come back on its new image — the whole commit
         is reverted and every pin here goes back, including the ones that were fine. Update a

@@ -16,39 +16,33 @@ import type { ReactNode } from 'react'
 import { cn } from '../lib/cn'
 import type { CommitGap, VersionGap } from '../lib/dashboard/github'
 import { EMPTY, FOOT, MONO, MONO_FACE, NOTE } from './tokens'
-import { Board } from './viz'
+import { Board, Chip } from './viz'
 
 /* A release is a disclosure, and the Updates page's container rows borrow this
    exact idiom — same triangle, same hover, same open rotation — so that opening
    a container there and opening a release inside it read as one gesture a
    level apart. */
-const REL = 'group overflow-hidden rounded-[9px] border border-subtle bg-raised'
+const REL = 'group overflow-hidden rounded-xl border border-hairline'
 const REL_SUMMARY = cn(
-  'flex min-w-0 cursor-pointer list-none items-baseline gap-[0.6rem] px-[0.6rem] py-[0.45rem]',
-  'hover:bg-lifted [&::-webkit-details-marker]:hidden',
+  'flex min-w-0 cursor-pointer list-none items-baseline gap-2.5 px-3 py-2',
+  'hover:bg-foreground/[0.05] [&::-webkit-details-marker]:hidden',
   "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
 )
-/* Which of these you are actually on. Without it a list that runs from the
-   installed version upward reads as "all of this is pending", which is the
-   opposite of what the bottom entry means. */
-const REL_RUNNING =
-  'rounded-full border border-[color-mix(in_srgb,var(--success)_40%,transparent)] px-[0.35rem] py-[0.05rem] text-[0.6rem] tracking-[0.08em] whitespace-nowrap text-success uppercase'
-const REL_BODY = 'border-t border-subtle pt-[0.1rem] pr-[0.75rem] pb-[0.6rem] pl-[1.35rem]'
-const REL_H5 =
-  'mt-[0.55rem] mb-[0.2rem] text-[0.66rem] font-semibold tracking-[0.08em] text-primary uppercase'
-const REL_ITEM = 'max-w-[90ch] text-[0.76rem] leading-[1.45] text-subdued'
+const REL_BODY = 'border-t border-hairline px-3 pt-0.5 pb-3 pl-6'
+const REL_H5 = 'mt-3 mb-1 text-[0.75rem] text-foreground [font-weight:550]'
+const REL_ITEM = 'max-w-[90ch] text-[0.78rem] leading-[1.5] text-muted-foreground'
 
 /* Each step in the chain points at the next; the last is where you end up, so
    it carries the reading colour and the warning-tinted edge instead of an
    arrow. */
 const CHAIN_STEP =
-  "flex items-center gap-[0.3rem] rounded-[6px] border border-subtle bg-raised px-[0.4rem] py-[0.12rem] text-[0.76rem] text-subdued after:ml-[0.1rem] after:text-muted-foreground after:content-['→']"
+  "flex items-center gap-1 rounded-[7px] border border-hairline px-2 py-0.5 text-[0.75rem] text-muted-foreground after:ml-0.5 after:text-muted-foreground after:content-['→']"
 const CHAIN_LAST =
-  'border-[color-mix(in_srgb,var(--warning)_45%,var(--border))] text-foreground after:content-none'
+  'border-[color-mix(in_oklch,var(--warning)_45%,transparent)] text-foreground after:content-none'
 
 const COMMIT =
-  'grid min-w-0 grid-cols-[4.5rem_1fr_auto] items-baseline gap-[0.6rem] rounded-[7px] px-[0.45rem] py-[0.24rem] text-[0.76rem] hover:bg-raised'
+  'grid min-w-0 grid-cols-[4.5rem_1fr_auto] items-baseline gap-2.5 border-hairline border-t px-0.5 py-2 text-[0.8rem] first:border-t-0'
 
 export type Release = {
   version: string
@@ -71,18 +65,20 @@ export function ReleaseNotes({
   if (releases.length === 0) return <p className={EMPTY}>{empty}</p>
 
   return (
-    <div className="flex flex-col gap-[0.35rem]">
+    <div className="flex flex-col gap-1.5">
       {releases.map((rel) => (
         <details key={rel.version} className={REL}>
           <summary className={REL_SUMMARY}>
             <span className={cn(MONO_FACE, 'whitespace-nowrap text-[0.82rem] text-foreground')}>
               {rel.version}
             </span>
-            {rel.version === running && <span className={REL_RUNNING}>running</span>}
-            <span className="text-[0.7rem] whitespace-nowrap text-muted-foreground">
+            {/* Which of these you are actually on. Without it a list that runs from the
+                installed version upward reads as "all of this is pending". */}
+            {rel.version === running && <Chip tone="ok">running</Chip>}
+            <span className="text-[0.75rem] whitespace-nowrap text-muted-foreground tabular-nums">
               {rel.date}
             </span>
-            <span className="ml-auto truncate text-[0.68rem] text-muted-foreground">
+            <span className="ml-auto truncate text-[0.72rem] text-muted-foreground">
               {rel.sections.map((s) => s.name).join(' · ')}
             </span>
           </summary>
@@ -95,7 +91,7 @@ export function ReleaseNotes({
                 // two "Fixed"), so the name alone is not a key.
                 <section key={`${String(i)}-${s.name}`}>
                   <h5 className={REL_H5}>{s.name}</h5>
-                  <ul className="flex flex-col gap-[0.15rem] pl-4">
+                  <ul className="flex list-disc flex-col gap-0.5 pl-4 marker:text-muted-foreground">
                     {s.items.map((it, n) => (
                       // biome-ignore lint/suspicious/noArrayIndexKey: release notes are a static list — items never reorder or update in place.
                       <li key={n} className={REL_ITEM}>
@@ -106,7 +102,7 @@ export function ReleaseNotes({
                 </section>
               ))
             )}
-            <p className="mt-[0.6rem] text-[0.7rem] text-muted-foreground">
+            <p className="mt-3 mb-0 text-[0.75rem] text-muted-foreground">
               {rel.truncated && 'Shortened. '}
               <a className="text-primary" href={rel.url} target="_blank" rel="noreferrer">
                 Full notes ↗
@@ -129,7 +125,7 @@ export function UpgradeChain({ behind }: { behind: string[] }) {
   if (behind.length === 0) return null
 
   return (
-    <ol className="mb-[0.6rem] flex flex-wrap items-center gap-[0.3rem]">
+    <ol className="m-0 mb-2.5 flex list-none flex-wrap items-center gap-1.5 p-0">
       {behind.map((v, i) => (
         <li key={v} className={cn(CHAIN_STEP, i === behind.length - 1 && CHAIN_LAST)}>
           <span className={MONO}>{v}</span>
@@ -189,7 +185,7 @@ export function Changelog({
           {build?.note ?? 'Nothing new on the branch since this image was built.'}
         </p>
       ) : (
-        <ul className="flex flex-col gap-[0.1rem]">
+        <ul className="m-0 flex list-none flex-col p-0">
           {build.behind.map((c) => (
             <li key={c.sha} className={COMMIT}>
               <a
@@ -201,7 +197,7 @@ export function Changelog({
                 {c.sha}
               </a>
               <span className="truncate text-foreground">{c.subject}</span>
-              <span className="text-[0.69rem] whitespace-nowrap text-muted-foreground tabular-nums">
+              <span className="text-[0.72rem] whitespace-nowrap text-muted-foreground tabular-nums">
                 {c.date}
               </span>
             </li>

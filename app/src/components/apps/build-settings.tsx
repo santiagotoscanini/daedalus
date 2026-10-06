@@ -23,7 +23,7 @@ import { type AppRecord, GHOST_BTN } from './shared'
 // not saveApp: the columns are engine-only, so a change here is live at once
 // and never waits for, or shows up in, an Apply.
 
-const FIELD_LABEL = 'text-[0.76rem] text-muted-foreground'
+const FIELD_LABEL = 'text-[0.75rem] text-muted-foreground'
 
 export function BuildSettings({ app }: { app: AppRecord }) {
   const repo = appRepo(useSite(), app.name)
@@ -51,7 +51,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
               'Pushes to the repo’s default branch build here, and Build now works. Nothing in the repo needs a workflow file: the box takes the push webhook itself.'
             }
           />
-          <div className="flex flex-col gap-[0.35rem]">
+          <div className="flex flex-col gap-1.5">
             <span className={FIELD_LABEL}>Strategy</span>
             <Segmented<BuildStrategy>
               value={app.buildStrategy as BuildStrategy}
@@ -71,7 +71,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
               one, else Railpack.
             </p>
           </div>
-          <div className="flex flex-col gap-[0.35rem]">
+          <div className="flex flex-col gap-1.5">
             <span className={FIELD_LABEL}>Publish</span>
             <Segmented<BuildPublish>
               value={app.buildPublish as BuildPublish}
@@ -104,7 +104,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
                       <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
                         {repo}
                       </a>{' '}
-                      <span className="font-mono text-[0.76rem] text-muted-foreground">
+                      <span className="font-mono text-[0.75rem] text-muted-foreground">
                         #{app.githubRepoId}
                       </span>
                     </span>
@@ -191,14 +191,14 @@ function EnvMapEditor({
       </h4>
       <p className={FOOT}>{help}</p>
       {rows.length > 0 && (
-        <ul className="m-0 flex list-none flex-col gap-[0.4rem] p-0">
+        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
           {rows.map((r) => {
             const rowError =
               r.key === '' && r.value === '' ? null : envEntryError(r.key.trim(), r.value)
             return (
               <li
                 key={r.id}
-                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-[0.4rem]"
+                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1.5"
               >
                 <Input
                   aria-label={`${title}: name`}
@@ -239,7 +239,7 @@ function EnvMapEditor({
         </ul>
       )}
       {problem !== null && dirty && (
-        <p role="alert" className="m-0 text-[0.76rem] text-danger">
+        <p role="alert" className="m-0 text-[0.75rem] text-danger">
           {problem}
         </p>
       )}

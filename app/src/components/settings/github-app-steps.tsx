@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
+import { NOTE_SHOWN } from './form'
 import { ERROR_NOTE, FIELD_LABEL, NOTE } from './shared'
 
 type Launch = { action: string; manifest: string; state: string }
@@ -92,7 +93,9 @@ export function CreateApp({ app }: { app: GithubAppStatus }) {
           {busy || launch !== null ? 'Opening GitHub…' : 'Create GitHub App…'}
         </Button>
       </form>
-      <p className={NOTE}>App names are unique across GitHub, {app.nameMax} characters at most.</p>
+      <p className={NOTE_SHOWN}>
+        App names are unique across GitHub, {app.nameMax} characters at most.
+      </p>
       {error !== null && (
         <p role="alert" className={ERROR_NOTE}>
           {error}
@@ -188,7 +191,7 @@ export function PendingApply({
             Discard
           </Button>
           {(error ?? notice) !== null && (
-            <span className={error !== null ? ERROR_NOTE : NOTE}>{error ?? notice}</span>
+            <span className={error !== null ? ERROR_NOTE : NOTE_SHOWN}>{error ?? notice}</span>
           )}
         </div>
       </AlertDescription>

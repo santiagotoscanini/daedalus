@@ -6,9 +6,10 @@ import { WipBoard } from '../../../../components/machine-head'
 import { Button } from '../../../../components/ui/button'
 import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
 import type { App } from '../../../../host/controller/generated'
+import { cn } from '../../../../lib/cn'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../../../lib/format'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
 
 /* ── Software / Apps ──────────────────────────────────────────────────── */
 
@@ -264,7 +265,7 @@ function MacApps({ d, apps }: { d: NodeSystemData; apps: App[] }) {
           </p>
         </Board>
       )}
-      <p className={FOOT}>
+      <p className={cn(CAPTION, 'col-span-12')}>
         {num(t?.app_count ?? apps.length)} apps in all, from the Applications folder, one level of
         subfolders, and the signed-in user&rsquo;s own; read every ten minutes.
       </p>
@@ -298,7 +299,7 @@ function AppList({
         ))}
       </ul>
       {apps.length > fold && (
-        <div className="mt-[0.5rem] flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="outline"

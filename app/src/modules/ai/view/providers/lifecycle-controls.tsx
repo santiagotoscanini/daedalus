@@ -61,8 +61,8 @@ export function LifecycleControls({ m }: { m: ProviderMachine }) {
   // (host/providers/lifecycle.ts); the board's notice says to update it.
   if (m.speaksLifecycle !== true) return null
   return (
-    <div className="mt-[0.9rem] flex flex-col gap-[0.6rem]">
-      <div className="flex flex-wrap items-center gap-x-[1.2rem] gap-y-[0.5rem]">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <PowerButton m={m} />
         <AlwaysOn m={m} />
       </div>
@@ -80,7 +80,7 @@ function PowerButton({ m }: { m: ProviderMachine }) {
   const wanted = running ? 'stop' : 'start'
   const error = failed(outcome)
   return (
-    <span className="flex items-center gap-[0.6rem]">
+    <span className="flex items-center gap-2.5">
       <Button
         type="button"
         variant="outline"
@@ -92,9 +92,9 @@ function PowerButton({ m }: { m: ProviderMachine }) {
       >
         {busy ? (running ? 'Stopping…' : 'Starting…') : running ? 'Stop' : 'Start'}
       </Button>
-      {error !== null && <span className="text-[0.74rem] text-danger">{error}</span>}
+      {error !== null && <span className="text-[0.75rem] text-danger">{error}</span>}
       {m.asked?.wanted != null && error === null && (
-        <span className="text-[0.72rem] text-muted-foreground">
+        <span className="text-[0.75rem] text-muted-foreground">
           kept {m.asked.wanted === 'start' ? 'running' : 'stopped'}
         </span>
       )}
@@ -155,9 +155,9 @@ function InstallControl({ m }: { m: ProviderMachine }) {
   const offer = !unmanaged && (!installed || behind > 0)
 
   return (
-    <div className="flex flex-col gap-[0.5rem]">
+    <div className="flex flex-col gap-2">
       {installed && (
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className="m-0 text-[0.8rem] text-subdued">
           {behind === 0
             ? `${m.version ?? 'This version'} is the newest release.`
             : `v${latest} is out — ${String(behind)} release${behind === 1 ? '' : 's'} newer than ${m.version ?? 'what runs'}.`}
@@ -217,10 +217,10 @@ function Notes({ installed }: { installed: string | null }) {
           })
       }}
     >
-      <summary className="cursor-pointer list-none text-[0.74rem] text-primary [&::-webkit-details-marker]:hidden">
+      <summary className="cursor-pointer list-none text-[0.75rem] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden before:mr-1.5 before:content-['▸'] group-open:before:content-['▾']">
         Release notes
       </summary>
-      <div className="mt-[0.5rem]">
+      <div className="mt-2">
         {notes?.error != null ? (
           <p className={cn(EMPTY, 'text-danger')}>
             Could not read the release notes (close and reopen to retry): {notes.error}

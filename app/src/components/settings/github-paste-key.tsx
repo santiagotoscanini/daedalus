@@ -6,7 +6,8 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { useAction } from '../use-action'
-import { ERROR_NOTE, FIELD_LABEL, NOTE, PANEL } from './shared'
+import { INSET, NOTE_SHOWN } from './form'
+import { ERROR_NOTE, FIELD_LABEL } from './shared'
 
 // The GitHub App's recovery form, and only that.
 //
@@ -67,7 +68,7 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
         {error !== null ? (
           <span className={ERROR_NOTE}>{error}</span>
         ) : (
-          notice !== null && <span className={NOTE}>{notice}</span>
+          notice !== null && <span className={NOTE_SHOWN}>{notice}</span>
         )}
       </div>
     )
@@ -75,13 +76,13 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
 
   return (
     <form
-      className={PANEL}
+      className={INSET}
       onSubmit={(e) => {
         e.preventDefault()
         submit()
       }}
     >
-      <p className={NOTE}>
+      <p className={NOTE_SHOWN}>
         For a lost or rotated key. The box keeps the key, the webhook secret and the client secret
         in one sealed file it cannot read back, so all three are replaced together. On the App’s
         settings page, generate a private key and a new client secret, and set a new webhook secret
@@ -102,8 +103,8 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
         }}
         className="max-h-60 font-mono text-[0.74rem] md:text-[0.74rem]"
       />
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div className="flex flex-col gap-1">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
           <label htmlFor={webhookId} className={FIELD_LABEL}>
             Webhook secret
           </label>
@@ -119,7 +120,7 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
             className="h-9 font-mono md:text-[0.8rem]"
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5">
           <label htmlFor={clientId} className={FIELD_LABEL}>
             Client secret
           </label>
@@ -141,7 +142,7 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
           {error}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-1 flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={!ready}>
           {busy ? 'Encrypting…' : 'Encrypt and apply'}
         </Button>

@@ -1,6 +1,11 @@
 import { Link, useSearch } from '@tanstack/react-router'
 import { OS_MARK } from '../../../../components/machine-head'
-import { FOOT } from '../../../../components/tokens'
+import {
+  CAPTION,
+  SEGMENT_ITEM,
+  SEGMENT_ITEM_ON,
+  SEGMENT_TRACK,
+} from '../../../../components/tokens'
 import { Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import type { ProviderMachine, ProvidersData } from '../../data/providers'
@@ -26,49 +31,45 @@ import { BOX_MARK, MachineView } from './machine'
    reads as a caption on it rather than as the control that decides
    everything below. The label earns its line for the same reason: a bare row
    of machine names does not say what picking one does. */
-const PICKER = 'mt-[1.6rem] mb-[1.35rem] flex flex-wrap items-center gap-[0.5rem]'
-const PICKER_LABEL = 'mr-[0.3rem] text-[0.6rem] tracking-[0.09em] text-muted-foreground uppercase'
+const PICKER = 'mt-6 mb-5 flex flex-wrap items-center gap-3'
+const PICKER_LABEL = 'text-[0.75rem] text-muted-foreground'
 
 function MachinePills({ machines, active }: { machines: ProviderMachine[]; active: string }) {
-  const pill = (selected: boolean) =>
-    cn(
-      'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[0.8rem] transition-colors',
-      selected
-        ? 'border-primary bg-primary/10 text-foreground'
-        : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground',
-    )
   return (
     <nav aria-label="Provider machine" className={PICKER}>
-      <span className={PICKER_LABEL}>machines</span>
-      {machines.map((m) => {
-        const mark = m.machine === 'box' ? BOX_MARK : OS_MARK[m.os]
-        // Only when one machine runs more than one model server does the
-        // kind belong in its name; otherwise it is a word repeated down the
-        // row that distinguishes nothing.
-        const ambiguous = machines.filter((o) => o.machine === m.machine).length > 1
-        return (
-          <Link
-            key={m.id}
-            to="/c/$category"
-            params={{ category: 'ai' }}
-            search={{ tab: 'providers', machine: m.id }}
-            className={pill(active === m.id)}
-          >
-            {mark !== undefined && (
-              <img
-                src={mark.src}
-                alt=""
-                width={14}
-                height={14}
-                className={cn('size-3.5', mark.invert && 'dark:invert')}
-              />
-            )}
-            {m.name}
-            {ambiguous && <span className="text-muted-foreground">· {m.kindName}</span>}
-            <Pulse on={m.reachable} tone={m.reachable ? 'ok' : 'muted'} />
-          </Link>
-        )
-      })}
+      <span className={PICKER_LABEL}>Machine</span>
+      <div className={cn(SEGMENT_TRACK, 'overflow-x-auto')}>
+        {machines.map((m) => {
+          const mark = m.machine === 'box' ? BOX_MARK : OS_MARK[m.os]
+          // Only when one machine runs more than one model server does the
+          // kind belong in its name; otherwise it is a word repeated down the
+          // row that distinguishes nothing.
+          const ambiguous = machines.filter((o) => o.machine === m.machine).length > 1
+          return (
+            <Link
+              key={m.id}
+              to="/c/$category"
+              params={{ category: 'ai' }}
+              search={{ tab: 'providers', machine: m.id }}
+              className={cn(SEGMENT_ITEM, active === m.id && SEGMENT_ITEM_ON)}
+              aria-current={active === m.id ? 'page' : undefined}
+            >
+              {mark !== undefined && (
+                <img
+                  src={mark.src}
+                  alt=""
+                  width={14}
+                  height={14}
+                  className={cn('size-3.5', mark.invert && 'dark:invert')}
+                />
+              )}
+              {m.name}
+              {ambiguous && <span className="text-muted-foreground">· {m.kindName}</span>}
+              <Pulse on={m.reachable} tone={m.reachable ? 'ok' : 'muted'} />
+            </Link>
+          )
+        })}
+      </div>
     </nav>
   )
 }
@@ -85,7 +86,7 @@ export function ProvidersView({ data }: { data: ProvidersData }) {
     <>
       <ChainBoard chain={data.chain} />
       {data.machines.length === 0 ? (
-        <p className={FOOT}>
+        <p className={CAPTION}>
           No machine provides models yet. Approve one on Settings › Machines and offer its provider,
           or switch the tv stack on for this box's own.
         </p>

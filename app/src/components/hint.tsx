@@ -52,9 +52,9 @@ export function InfoHint({
         id={id}
         role="tooltip"
         className={cn(
-          'pointer-events-none absolute z-40 rounded-md border border-border bg-lifted p-2.5',
-          'text-left font-normal text-foreground text-xs leading-snug tracking-normal normal-case',
-          'opacity-0 shadow-lg transition-opacity duration-100',
+          'pointer-events-none absolute z-40 rounded-[10px] border border-hairline bg-popover p-3',
+          'text-left font-normal text-popover-foreground text-[0.78rem] leading-[1.45] tracking-normal normal-case',
+          'opacity-0 shadow-(--float-shadow) transition-opacity duration-100',
           'group-hover/hint:opacity-100 group-focus-visible/hint:opacity-100',
           cardClassName,
         )}

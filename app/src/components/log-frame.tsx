@@ -13,11 +13,10 @@ import { Bar } from './skeleton'
    positioned over the skeleton inside it — so the box is the same size and
    shape throughout, and uncovering it changes nothing but what is inside. */
 const EMBED_WRAP =
-  'relative h-[22rem] overflow-hidden rounded-[9px] border border-subtle bg-background max-[50rem]:h-[18rem]'
+  'relative h-[22rem] overflow-hidden rounded-xl border border-hairline bg-foreground/[0.03] font-mono text-[0.75rem] max-[50rem]:h-[18rem]'
 /* Log-shaped: ragged lines of the app's own grey, so the wait looks like the
    rest of the dashboard loading rather than like Grafana loading. */
-const EMBED_SKELETON =
-  'absolute inset-0 flex flex-col justify-center gap-[0.85rem] px-[1.2rem] py-[1.1rem]'
+const EMBED_SKELETON = 'absolute inset-0 flex flex-col justify-center gap-3.5 px-5 py-4'
 /* Paints the embedded document's canvas in the page's scheme before Grafana's
    own styles arrive, rather than the browser's default white — the one place
    a utility reaches into content this app does not own. */

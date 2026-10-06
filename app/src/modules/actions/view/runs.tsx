@@ -1,5 +1,15 @@
 import { Ago } from '../../../components/ago'
-import { AXIS, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
+import {
+  AXIS,
+  CAPTION,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+} from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Columns, Stat, StatStrip } from '../../../components/viz'
 import { DASH, duration, num, pct } from '../../../lib/format'
 import type { ActionsData } from '../data'
@@ -14,13 +24,13 @@ function RunLine({ r, showFailure = false }: { r: RunRow; showFailure?: boolean 
       <RunChip status={r.status} conclusion={r.conclusion} />
       <span className={ROW_MAIN}>
         <Ext href={r.url}>
-          <b className="font-[550]">{r.repo}</b> · {r.workflow}
+          <b className="[font-weight:560]">{r.repo}</b> · {r.workflow}
         </Ext>
         {r.branch !== null && r.branch !== 'main' && (
-          <span className="ml-[0.4rem] text-muted-foreground">{r.branch}</span>
+          <span className="ml-1.5 text-muted-foreground">{r.branch}</span>
         )}
         {showFailure && r.failed !== null && (
-          <span className="ml-[0.4rem] text-danger">
+          <span className="ml-1.5 text-danger">
             {r.failed.job}
             {r.failed.step !== null && ` › ${r.failed.step}`}
           </span>
@@ -161,7 +171,7 @@ function RecentRunsBoard({ f }: { f: RunsFacts }) {
       aside={<span className={NOTE}>newest first · {num(d.recent.length)} shown</span>}
     >
       {d.recent.length === 0 ? (
-        <p className={FOOT}>No run the box can read in the last {String(d.windowDays)} days.</p>
+        <p className={CAPTION}>No run the box can read in the last {String(d.windowDays)} days.</p>
       ) : (
         <ul className={LIST}>
           {d.recent.map((r) => (
@@ -187,7 +197,7 @@ function FailuresBoard({ f }: { f: RunsFacts }) {
       }
     >
       {d.failures.length === 0 ? (
-        <p className={FOOT}>Nothing failed in the window.</p>
+        <p className={CAPTION}>Nothing failed in the window.</p>
       ) : (
         <ul className={LIST}>
           {d.failures.map((r) => (
@@ -219,7 +229,7 @@ function ByWorkflowBoard({ f }: { f: RunsFacts }) {
             </span>
           </li>
         ))}
-        {d.byWorkflow.length === 0 && <li className={FOOT}>no runs</li>}
+        {d.byWorkflow.length === 0 && <li className={CAPTION}>no runs</li>}
       </ul>
     </Board>
   )
@@ -234,7 +244,7 @@ function ByRepositoryBoard({ f }: { f: RunsFacts }) {
           <li key={r.repo} className={ROW}>
             <span className={ROW_MAIN}>
               <Ext href={`${r.url}/actions`}>{r.repo}</Ext>
-              <span className="ml-[0.4rem] text-muted-foreground">{r.kind}</span>
+              <span className="ml-1.5 text-muted-foreground">{r.kind}</span>
             </span>
             <span className={ROW_SIDE}>
               {r.access === 'app' || r.access === 'public' ? (

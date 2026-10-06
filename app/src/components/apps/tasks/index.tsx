@@ -3,11 +3,19 @@ import { cn } from '../../../lib/cn'
 
 import { saveApp } from '../../../server/registry'
 import { GrafanaLogs } from '../../logs'
-import { FOOT } from '../../tokens'
+import { CAPTION } from '../../tokens'
 import { Alert, AlertDescription } from '../../ui/alert'
 import { Button } from '../../ui/button'
 import { useAction } from '../../use-action'
-import { type AppRecord, GHOST_BTN, LEDE, SECTION_HEAD, SECTION_HEAD_SMALL } from '../shared'
+import { GLASS } from '../../viz/board'
+import {
+  type AppRecord,
+  GHOST_BTN,
+  LEDE,
+  SECTION_HEAD,
+  SECTION_HEAD_SMALL,
+  SegmentPicker,
+} from '../shared'
 import { TaskCard } from './card'
 import { TaskEditor } from './editor'
 import type { TaskDraft, TaskRow, TasksData } from './types'
@@ -71,7 +79,7 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
       {/* The sentence that keeps this tab honest. Everything below is a
           registry row; the timer is generated from site/apps.json, which only
           an Apply writes. */}
-      <p className={cn(LEDE, 'mt-[0.55rem]')}>
+      <p className={cn(LEDE, 'mt-2')}>
         Nothing here exists on the box until the next Apply. Adding, editing or removing a task
         changes this app’s registry entry — the Apply is what writes <code>site/apps.json</code>,
         rebuilds, and creates or removes the units.
@@ -85,7 +93,7 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
       )}
 
       {error !== null && (
-        <Alert variant="warning" className="mt-[1.1rem] mb-0 text-foreground">
+        <Alert variant="warning" className="mt-4 mb-0 text-foreground">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -101,7 +109,7 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
       )}
 
       {tasks.length > 0 && (
-        <ul className="mt-[1.4rem] mr-0 mb-0 ml-0 flex list-none flex-col gap-[0.8rem] p-0">
+        <ul className="mt-6 mr-0 mb-0 ml-0 flex list-none flex-col gap-3 p-0">
           {tasks.map((t) =>
             editor?.kind === 'edit' && editor.id === t.id ? (
               <TaskEditor
@@ -136,7 +144,7 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
       )}
 
       {editor?.kind === 'add' && (
-        <ul className="mt-[1.4rem] mr-0 mb-0 ml-0 flex list-none flex-col gap-[0.8rem] p-0">
+        <ul className="mt-6 mr-0 mb-0 ml-0 flex list-none flex-col gap-3 p-0">
           <TaskEditor
             app={app.name}
             taken={app.tasks.map((t) => t.id)}
@@ -154,7 +162,7 @@ export function Tasks({ app, td }: { app: AppRecord; td: TasksData }) {
           type="button"
           variant="outline"
           size="sm"
-          className={cn(GHOST_BTN, 'mt-[0.9rem]')}
+          className={cn(GHOST_BTN, 'mt-4')}
           disabled={saving}
           onClick={() => {
             setEditor({ kind: 'add' })
@@ -194,18 +202,18 @@ function EmptyState({
   onAdd: () => void
 }) {
   return (
-    <div className="mt-[1.4rem] rounded-lg border border-subtle border-dashed bg-card px-[1.05rem] py-[1.1rem]">
+    <div className={cn(GLASS, 'mt-6 border-dashed bg-transparent px-5 py-4 shadow-none')}>
       <p className="m-0 max-w-[74ch] text-[0.9rem] text-subdued">
         {app} runs nothing on a clock. A scheduled task is a command run inside this app’s own
         container on a systemd timer — a nightly digest, an hourly sync, a weekly prune — with its
         output in Loki and a mail if it fails.
       </p>
       {readOnly ? (
-        <p className={cn(FOOT, 'mt-[0.6rem]')}>
+        <p className={cn(CAPTION, 'mt-2.5')}>
           This app is declared by hand in Nix, so its tasks are written there rather than here.
         </p>
       ) : (
-        <Button type="button" size="sm" className="mt-[0.85rem]" onClick={onAdd}>
+        <Button type="button" size="sm" className="mt-3.5" onClick={onAdd}>
           Add the first task
         </Button>
       )}
@@ -229,22 +237,13 @@ function TaskLogs({ tasks }: { tasks: TaskRow[] }) {
   return (
     <>
       {tasks.length > 1 && (
-        <div className="mb-[0.7rem] flex flex-wrap gap-[0.4rem]">
-          {tasks.map((t) => (
-            <Button
-              key={t.id}
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn(GHOST_BTN, t.id === shown.id && 'border-primary/45 text-foreground')}
-              onClick={() => {
-                setSelected(t.id)
-              }}
-            >
-              {t.id}
-            </Button>
-          ))}
-        </div>
+        <SegmentPicker
+          value={shown.id}
+          onChange={setSelected}
+          label="Task logs"
+          className="mb-3 h-auto flex-wrap"
+          options={tasks.map((t) => ({ value: t.id, label: t.id }))}
+        />
       )}
       {/* `.service`, and the `unit` form of LogSource: a task is its own
           systemd unit (`app-<name>-task-<id>.service`), so alloy labels its

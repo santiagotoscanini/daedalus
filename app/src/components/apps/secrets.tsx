@@ -12,8 +12,9 @@ import { EMPTY } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { useAction } from '../use-action'
-import { Board, BoardGrid } from '../viz'
+import { Board, BoardGrid, Chip } from '../viz'
 import { ENV_LEGEND, ENV_ROW, ENV_TABLE, OperatorSecrets } from './operator-secrets'
+import { CHIP } from './shared'
 
 type EnvData = { available: boolean; takenAt: string | null; vars: EnvRowData[] }
 
@@ -63,7 +64,7 @@ export function Secrets({
 
   return (
     <>
-      <Alert className="mb-[1.35rem] border-info/35 bg-info/7 text-subdued">
+      <Alert className="mb-5 border-info/35 bg-info/7 text-subdued">
         <AlertDescription>
           Injected at container start, not hot-reloaded. A change takes effect on the next deploy or
           Apply.
@@ -77,7 +78,7 @@ export function Secrets({
           span={12}
           aside={
             env.takenAt ? (
-              <span className="text-[0.72rem] tracking-normal text-muted-foreground normal-case">
+              <span className="text-[0.75rem] text-muted-foreground">
                 read from the container {<When at={env.takenAt} />}
               </span>
             ) : null
@@ -90,25 +91,28 @@ export function Secrets({
             page&apos;s source.
           </p>
           {groups.map(({ g, vars }) => (
-            <section key={g} className="mb-[1.4rem] last:mb-0">
-              <h4 className="m-0 mb-[0.15rem] flex flex-wrap items-center gap-2 text-[0.82rem] font-semibold text-foreground">
-                <span className="text-[0.95rem] leading-none text-primary" aria-hidden="true">
+            <section key={g} className="mb-6 last:mb-0">
+              <h4 className="m-0 mb-1 flex flex-wrap items-center gap-2 text-[0.82rem] font-[560] text-foreground">
+                <span
+                  className="text-[0.95rem] leading-none text-muted-foreground"
+                  aria-hidden="true"
+                >
                   {GROUP_LABELS[g].icon}
                 </span>
                 {GROUP_LABELS[g].title}
-                <span className="rounded-full border px-[0.4rem] text-[0.68rem] text-muted-foreground">
+                <Chip tone="muted" className={CHIP}>
                   {vars.length}
-                </span>
+                </Chip>
               </h4>
               {GROUP_LABELS[g].hint && (
-                <p className="mt-0 mr-0 mb-2 ml-0 text-[0.76rem] text-muted-foreground">
+                <p className="mt-0 mr-0 mb-2 ml-0 text-[0.75rem] text-muted-foreground">
                   {GROUP_LABELS[g].hint}
                 </p>
               )}
               {/* Indented under its heading so the groups read as one list
                   broken into parts, rather than as separate tables that happen
                   to be adjacent. */}
-              <div className={cn(ENV_TABLE, 'border-l border-l-subtle pl-[0.9rem]')}>
+              <div className={cn(ENV_TABLE, 'border-hairline border-l pl-4')}>
                 {vars.map((v) => (
                   <EnvRow key={v.key} app={app} v={v} />
                 ))}
@@ -216,8 +220,8 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
         <code>{v.key}</code>
         <span
           className={cn(
-            'flex-none rounded-[4px] border px-[0.35rem] py-[0.05rem] text-[0.6rem] tracking-[0.08em] text-muted-foreground uppercase',
-            v.origin === 'registry' && 'border-primary/40 text-primary',
+            'flex-none rounded-full px-1.5 py-px text-[0.7rem] text-muted-foreground ring-1 ring-hairline ring-inset',
+            v.origin === 'registry' && 'text-primary ring-primary/40',
             v.origin === 'image' && 'opacity-55',
           )}
         >
@@ -241,7 +245,7 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
               type="button"
               variant="outline"
               size="sm"
-              className="h-auto flex-none rounded-[6px] bg-raised px-[0.4rem] py-[0.22rem] text-[0.72rem] leading-none hover:enabled:bg-lifted disabled:pointer-events-auto disabled:cursor-wait dark:bg-raised"
+              className="h-auto flex-none rounded-[7px] px-2 py-1 text-[0.72rem] leading-none disabled:pointer-events-auto disabled:cursor-wait"
               disabled={busy}
               title={revealed === null ? 'Reveal' : 'Hide'}
               aria-label={revealed === null ? `Reveal ${v.key}` : `Hide ${v.key}`}
@@ -263,12 +267,10 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
           )}
         </div>
         {error !== null && (
-          <p className="mt-[0.35rem] mr-0 mb-0 ml-0 text-[0.78rem] text-danger">{error}</p>
+          <p className="mt-1.5 mr-0 mb-0 ml-0 text-[0.78rem] text-danger">{error}</p>
         )}
         {v.note && (
-          <p className="mt-[0.35rem] mr-0 mb-0 ml-0 text-[0.78rem] text-muted-foreground">
-            {v.note}
-          </p>
+          <p className="mt-1.5 mr-0 mb-0 ml-0 text-[0.78rem] text-muted-foreground">{v.note}</p>
         )}
       </div>
     </div>

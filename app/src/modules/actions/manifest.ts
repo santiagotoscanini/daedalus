@@ -8,6 +8,7 @@ export const manifest = {
   // network's, not about a service the box runs. Why it is not part of Apps:
   // view/index.tsx.
   order: 68,
+  section: 'Infrastructure',
   boardSpans: [8, 4, 12, 6, 6],
   // No ServiceHead: the subject is a platform, not a container with a
   // version. No dot: nothing on the box probes GitHub.

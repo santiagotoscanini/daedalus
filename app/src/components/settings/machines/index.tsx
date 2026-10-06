@@ -3,8 +3,9 @@ import { MonitorSmartphoneIcon, NetworkIcon } from 'lucide-react'
 
 import type { MachinesData } from '../../../lib/dashboard/machines'
 import { Ago } from '../../ago'
+import { NOTE_SHOWN } from '../form'
 import { BoxProvider, GatewaySync } from '../provider-models'
-import { ASIDE, Mono, NOTE, Rows, Section } from '../shared'
+import { ASIDE, Mono, Rows, Section } from '../shared'
 import { Install } from './install'
 import { BACK, MachineSection, PendingSection } from './machine-section'
 import { RotateKey, RotationState } from './rotate'
@@ -40,14 +41,14 @@ export function Machines({ d }: { d: MachinesData }) {
   const c = d.controller
   const sync = d.sync
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {d.machines.length === 0 ? (
         <Section
           title="Machines"
           icon={<MonitorSmartphoneIcon />}
           description="No machine has joined yet."
         >
-          <p className={NOTE}>
+          <p className={NOTE_SHOWN}>
             {d.listError !== null
               ? `The controller's list could not be read: ${d.listError}`
               : 'Install the agent on a machine with a line below and it appears here, waiting for you to approve it.'}

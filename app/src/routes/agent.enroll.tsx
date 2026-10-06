@@ -2,7 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { LaptopIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Measure, PageHead } from '../components/page'
-import { ERROR_NOTE, Mono, NOTE, Section } from '../components/settings/shared'
+import { NOTE_SHOWN } from '../components/settings/form'
+import { ERROR_NOTE, Mono, Section } from '../components/settings/shared'
 import { Button } from '../components/ui/button'
 import { useAction } from '../components/use-action'
 import type { EnrollPage } from '../host/enroll'
@@ -28,7 +29,7 @@ export const Route = createFileRoute('/agent/enroll')({
 function EnrollRoute() {
   const [page] = useState<EnrollPage>(Route.useLoaderData())
   return (
-    <Measure>
+    <Measure className="max-w-[40rem]">
       <EnrollView page={page} />
     </Measure>
   )
@@ -136,14 +137,16 @@ function ConfirmView({ page }: { page: Extract<EnrollPage, { kind: 'ready' }> })
           { k: 'Node', v: <Mono>{m.id}</Mono> },
         ]}
       >
-        <p className={NOTE}>
+        <p className={NOTE_SHOWN}>
           Confirm lets this Mac join the box's VPN with a tunnel of its own, through which it links
           to the box. Once santree is on for it in Settings › Machines, that is also a shell on the
           box.
         </p>
-        {STANDING[page.standing] !== null && <p className={NOTE}>{STANDING[page.standing]}</p>}
+        {STANDING[page.standing] !== null && (
+          <p className={NOTE_SHOWN}>{STANDING[page.standing]}</p>
+        )}
         {error !== null && <p className={ERROR_NOTE}>{error}</p>}
-        {leaving && <p className={NOTE}>Handing over to the Mac…</p>}
+        {leaving && <p className={NOTE_SHOWN}>Handing over to the Mac…</p>}
         <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={busy || spent} onClick={confirm}>
             Confirm

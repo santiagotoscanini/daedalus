@@ -221,6 +221,7 @@ function HowItIsRunBoard({ f }: { f: MinecraftFacts }) {
   return (
     <Board title="How it is run" icon="⚒" span={12}>
       <Facts
+        list
         rows={[
           { k: 'Address', v: <span className={MONO}>{mc.connect}</span> },
           {
@@ -257,7 +258,7 @@ function ContainersBoard({ f }: { f: MinecraftFacts }) {
       {data.images.length === 0 ? (
         <p className={EMPTY}>neither container carries a digest pin this box publishes</p>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-[0.3rem] p-0">
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {data.images.map((r) => (
             <ImageRow key={r.container} r={r} status={data.imageStatus} />
           ))}

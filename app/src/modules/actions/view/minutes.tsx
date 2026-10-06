@@ -1,4 +1,13 @@
-import { AXIS, FOOT, LIST, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
+import {
+  AXIS,
+  CAPTION,
+  FOOT,
+  LIST,
+  NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+} from '../../../components/tokens'
 import {
   BarList,
   Board,
@@ -108,21 +117,21 @@ function AgainstThePlanBoard({ f }: { f: MinutesFacts }) {
   return (
     <Board title="Against the plan" icon="grid" span={4}>
       <Progress pct={Math.min(100, share)} tone={share > 80 ? 'warn' : 'accent'} />
-      <p className={`${FOOT} mt-[0.5rem]`}>
+      <p className={CAPTION}>
         {pct(share)} of the {num(d.allowance)} minutes GitHub Free includes for private repositories
-        each month, from the jobs the box could read since {d.month.from}. The plan itself is
-        assumed; GitHub's own meter needs a user token nothing on this box holds.
+        each month, from the jobs the box could read since {d.month.from}.
       </p>
-      <div className="mt-[0.6rem]">
-        <BarList
-          items={[
-            { label: 'Linux', value: t.billedByOs.linux },
-            { label: 'Windows', value: t.billedByOs.windows },
-            { label: 'macOS', value: t.billedByOs.macos },
-          ].filter((i) => i.value > 0)}
-          empty="nothing billed"
-        />
-      </div>
+      <p className={FOOT}>
+        The plan itself is assumed; GitHub's own meter needs a user token nothing on this box holds.
+      </p>
+      <BarList
+        items={[
+          { label: 'Linux', value: t.billedByOs.linux },
+          { label: 'Windows', value: t.billedByOs.windows },
+          { label: 'macOS', value: t.billedByOs.macos },
+        ].filter((i) => i.value > 0)}
+        empty="nothing billed"
+      />
     </Board>
   )
 }
@@ -147,7 +156,7 @@ function ByRepositoryBoard({ f }: { f: MinutesFacts }) {
             </span>
           </li>
         ))}
-        {d.byRepo.length === 0 && <li className={FOOT}>no jobs read</li>}
+        {d.byRepo.length === 0 && <li className={CAPTION}>no jobs read</li>}
       </ul>
       <p className={FOOT}>
         L, W, M are wall minutes per image before the multiplier. "Unread" runs are beyond the
@@ -168,7 +177,7 @@ function WhatARunnerHereWouldTakeBoard({ f }: { f: MinutesFacts }) {
       aside={<Chip tone={savingTotal > 0 ? 'ok' : 'muted'}>{num(savingTotal)} min</Chip>}
     >
       {d.saving.length === 0 ? (
-        <p className={FOOT}>No hosted job in the window.</p>
+        <p className={CAPTION}>No hosted job in the window.</p>
       ) : (
         <ul className={LIST}>
           {d.saving.map((s) => (
@@ -226,7 +235,7 @@ function CostPerWorkflowBoard({ f }: { f: MinutesFacts }) {
             <span className={ROW_MAIN}>
               {w.label}
               {w.topJob !== null && (
-                <span className="ml-[0.4rem] text-muted-foreground">
+                <span className="ml-1.5 text-muted-foreground">
                   {w.topJob} {num(w.topJobBilled)}
                 </span>
               )}
@@ -234,7 +243,7 @@ function CostPerWorkflowBoard({ f }: { f: MinutesFacts }) {
             <span className={ROW_SIDE}>{num(w.billed)} billed</span>
           </li>
         ))}
-        {d.byWorkflow.length === 0 && <li className={FOOT}>no hosted jobs read</li>}
+        {d.byWorkflow.length === 0 && <li className={CAPTION}>no hosted jobs read</li>}
       </ul>
       <p className={FOOT}>Ranked by billed minutes, with the job that dominates each one.</p>
     </Board>

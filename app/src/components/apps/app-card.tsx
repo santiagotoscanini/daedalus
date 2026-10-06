@@ -8,6 +8,7 @@ import type { Tone } from '../../lib/tone'
 import { Ago } from '../ago'
 import { AppIcon, type AppState, StateDot } from '../controls'
 import { Chip, Spark } from '../viz'
+import { GLASS } from '../viz/board'
 import { CloneButton } from '../workspace'
 import type { ExternalEntry, Row } from './apps-list'
 import { CHIP } from './shared'
@@ -48,7 +49,9 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
     <li className={cn(CARD, CARD_ASIDE)}>
       <Link to="/apps/offbox/$id" params={{ id: entry.id }} className={CARD_LINK}>
         <div className={CARD_HEAD}>
-          <AppIcon name={entry.id} hasIcon={entry.hasIcon} size={30} />
+          <span className={CARD_ICON}>
+            <AppIcon name={entry.id} hasIcon={entry.hasIcon} size={36} />
+          </span>
           <div className="min-w-0 flex-1">
             <div className={APP_NAME}>
               {entry.name}
@@ -58,7 +61,7 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
           </div>
         </div>
         {entry.description !== null && <p className={APP_DESC}>{entry.description}</p>}
-        <div className="mt-auto flex flex-wrap items-center gap-x-[0.6rem] gap-y-1 text-[0.76rem] text-muted-foreground">
+        <div className="mt-auto flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.75rem] text-muted-foreground">
           {entry.deployed !== null && (
             <span>
               deployed <Ago at={entry.deployed.at} />
@@ -72,7 +75,7 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
           ))}
         </div>
       </Link>
-      <div className="flex min-w-0 items-center justify-between gap-[0.9rem] border-t border-t-subtle px-4 pt-[0.6rem] pb-[0.75rem] text-[0.8rem]">
+      <div className="flex min-w-0 items-center justify-between gap-3 border-hairline border-t px-4 py-2.5 text-[0.8rem]">
         <a
           className="shrink-0 text-subdued"
           href={`https://${entry.host}`}
@@ -104,30 +107,37 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
   )
 }
 
-export const CARD =
-  'flex min-w-0 flex-col rounded-lg border border-subtle bg-card transition-colors duration-150 hover:border-foreground/30'
+export const CARD = cn(
+  GLASS,
+  'flex min-w-0 flex-col transition-[background-color,border-color,translate] duration-150 hover:-translate-y-px hover:border-foreground/15 hover:bg-surface-hover motion-reduce:hover:translate-y-0',
+)
 
 /** Off-box and control-plane cards: dashed, the visual for "listed here, not
     one of the things being managed". */
-export const CARD_ASIDE = 'border-dashed bg-transparent'
+export const CARD_ASIDE = 'border-dashed bg-transparent shadow-none'
 
 /* The whole card is the link; the foot rides inside it so one hover means
    one destination. External cards keep their outbound links in a foot beside it (see ExternalRow). */
 export const CARD_LINK =
-  'flex min-w-0 flex-1 flex-col gap-[0.55rem] px-4 pt-[0.85rem] pb-[0.9rem] text-inherit hover:no-underline'
+  'flex min-w-0 flex-1 flex-col gap-3 px-4 pt-4 pb-4 text-inherit hover:no-underline'
 
-export const CARD_HEAD = 'flex min-w-0 items-center gap-[0.65rem]'
+export const CARD_HEAD = 'flex min-w-0 items-center gap-3'
 
-export const APP_NAME = 'flex min-w-0 items-center gap-2 text-[0.95rem] [font-weight:550]'
+/** AppIcon draws a 5px corner for its small uses; at card size it is clipped to the
+    control radius so the icon reads as a tile, not a stamp. */
+export const CARD_ICON = 'inline-flex flex-none overflow-hidden rounded-[10px]'
 
-export const APP_HOST = 'block truncate text-[0.76rem] text-muted-foreground'
+export const APP_NAME =
+  'flex min-w-0 items-center gap-2 text-[0.9rem] [font-weight:560] text-foreground'
+
+export const APP_HOST = 'block truncate font-mono text-[0.75rem] text-muted-foreground'
 
 /** Two lines, then quiet: a card column where one long description makes one
     row twice as tall reads as a layout accident. */
-export const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.45] text-subdued'
+export const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.5] text-subdued'
 
 /** The spark sizes itself from its height and is pushed to the right edge. */
-export const CARD_FOOT = 'mt-auto flex items-center gap-[0.6rem] pt-[0.15rem] [&>svg]:ml-auto'
+export const CARD_FOOT = 'mt-auto flex items-center gap-2.5 pt-0.5 [&>svg]:ml-auto'
 
 /** The exposure chip, by stage — the label included, so the row has nothing
     left to decide. `lab` is the fourth status colour: a fact about where the
@@ -138,7 +148,7 @@ export const STAGE_CHIP: Record<AppStage, { tone: Tone; className: string; label
   live: { tone: 'ok', className: CHIP, label: 'public' },
   lab: {
     tone: 'info',
-    className: cn(CHIP, 'bg-info/8'),
+    className: CHIP,
     label: 'lab',
   },
   off: { tone: 'muted', className: CHIP, label: 'off' },
@@ -160,7 +170,9 @@ export function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
         className={CARD_LINK}
       >
         <div className={CARD_HEAD}>
-          <AppIcon name={row.name} hasIcon={row.hasIcon} size={30} />
+          <span className={CARD_ICON}>
+            <AppIcon name={row.name} hasIcon={row.hasIcon} size={36} />
+          </span>
           <div className="min-w-0 flex-1">
             <div className={APP_NAME}>
               {row.name}
@@ -189,7 +201,7 @@ export function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
         <div className={CARD_FOOT}>
           <Chip
             tone={row.isNew ? 'muted' : stage.tone}
-            className={row.isNew ? cn(CHIP, 'border-dashed') : stage.className}
+            className={row.isNew ? cn(CHIP, 'border border-dashed ring-0') : stage.className}
             title={row.isNew ? 'Setting up: this is where it will run' : undefined}
           >
             {stage.label}
@@ -204,7 +216,7 @@ export function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
             width={72}
             height={18}
           />
-          <span className="text-[0.74rem] text-muted-foreground tabular-nums">
+          <span className="text-[0.75rem] text-muted-foreground tabular-nums">
             {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)} rpm`}
           </span>
         </div>

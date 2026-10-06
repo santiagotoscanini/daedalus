@@ -18,6 +18,7 @@ import type { Repo } from '../../host/github-repos'
 import { cn } from '../../lib/cn'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { GLASS } from '../viz/board'
 import { Cells, Chips, Derivation, REPO_DESC, REPO_NAME } from './repo-row'
 import { GHOST_BTN } from './shared'
 
@@ -27,16 +28,15 @@ import { GHOST_BTN } from './shared'
 
 /** The picker's top edge: the field on the left, the tally on the right, both
     aligned with the list below them. */
-export const PICKER_HEAD = 'mb-[0.6rem] flex items-center gap-4'
+export const PICKER_HEAD = 'mb-3 flex items-center gap-4'
 /** The search field's share of that row. */
 export const PICKER_SEARCH = 'flex-[0_1_22rem]'
 export const PICKER_COUNT =
-  'ml-auto text-[0.7rem] tracking-[0.13em] whitespace-nowrap text-muted-foreground uppercase'
+  'ml-auto text-[0.75rem] whitespace-nowrap text-muted-foreground tabular-nums'
 
 /** The frame. The border and the radius sit here rather than on the scroller:
     a mask applied to the bordered element fades the border away with the rows. */
-export const PICKER_BOX =
-  'overflow-hidden rounded-lg border border-subtle bg-card [--repo-row-h:2.9rem]'
+export const PICKER_BOX = cn(GLASS, 'overflow-hidden [--repo-row-h:2.9rem]')
 
 /* One grid for the whole list rather than one per row. A row-level grid sizes
    its chip column to that row's OWN chips, which is why the description used
@@ -51,9 +51,9 @@ export const PICKER_BOX =
    list overflows — which is a scroll listener's worth of JavaScript behind a
    decoration, and the padding is the cheaper half of that bargain. */
 export const REPO_LIST = cn(
-  'grid grid-cols-[minmax(6rem,14rem)_auto_minmax(0,1fr)_auto] gap-x-4 overflow-x-hidden overflow-y-auto pb-[1.6rem]',
+  'grid grid-cols-[minmax(6rem,14rem)_auto_minmax(0,1fr)_auto] gap-x-4 overflow-x-hidden overflow-y-auto pb-6',
   'max-h-[calc(var(--repo-row-h)_*_8_+_1.6rem)] mask-b-from-[calc(100%_-_1.6rem)]',
-  '[&>*+*]:border-t [&>*+*]:border-t-subtle',
+  '[&>*+*]:border-hairline [&>*+*]:border-t',
 )
 
 /* Without subgrid the row keeps fixed tracks: the chip column stops sizing
@@ -67,20 +67,19 @@ export const REPO_OPT = cn('group/opt col-span-full grid min-w-0 grid-cols-subgr
    app — the same row either way, because the difference is where it takes you,
    not how much it matters. Never a tab stop (see the file header). */
 export const REPO_ROW = cn(
-  'group/row col-span-full grid min-h-(--repo-row-h) w-full cursor-pointer grid-cols-subgrid items-baseline border-0 bg-transparent px-4 py-[0.62rem] text-left text-foreground',
+  'group/row col-span-full grid min-h-(--repo-row-h) w-full cursor-pointer grid-cols-subgrid items-baseline border-0 bg-transparent px-4 py-2.5 text-left text-foreground',
   NO_SUBGRID,
-  'hover:bg-raised hover:no-underline group-aria-selected/opt:bg-raised group-aria-selected/opt:no-underline',
+  'hover:bg-foreground/[0.05] hover:no-underline group-aria-selected/opt:bg-foreground/[0.075] group-aria-selected/opt:no-underline',
   // Inset, unlike the shell's rings: the row is full-bleed inside a clipping
   // frame, so an outward offset would be cut off by the picker box.
   'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-dim',
 )
 
-export const PICKER_HINT = 'mt-[0.55rem] mb-0 text-[0.7rem] text-muted-foreground'
+export const PICKER_HINT = 'mt-2 mb-0 text-[0.72rem] text-muted-foreground'
 
 /* Picked, so the search and the list collapse to the single line they
    produced — the choice is made, and the page below it is the point now. */
-const REPO_PICKED =
-  'flex flex-wrap items-baseline gap-x-[0.9rem] gap-y-[0.45rem] rounded-lg border border-subtle bg-card px-4 py-[0.7rem]'
+const REPO_PICKED = cn(GLASS, 'flex flex-wrap items-baseline gap-x-3.5 gap-y-2 px-4 py-3')
 
 export function RepoPicker({
   repos,
@@ -196,7 +195,7 @@ export function RepoPicker({
         {/* A flex row, not the list's grid: the name and its chips are the
             answer and never shrink; the description takes what is left. */}
         <div className={REPO_PICKED}>
-          <span className={cn(REPO_NAME, 'flex-none text-[1.02rem]')}>{picked.name}</span>
+          <span className={cn(REPO_NAME, 'flex-none text-[1rem]')}>{picked.name}</span>
           <Chips repo={picked} taken={taken.includes(picked.name)} className="flex-none" />
           <span className={cn(REPO_DESC, 'flex-[1_1_14rem]')}>{picked.description ?? '—'}</span>
           <Button
@@ -301,7 +300,7 @@ export function RepoPicker({
             )
           })}
           {visible.length === 0 && (
-            <div className="col-span-full px-4 py-[1.6rem] text-[0.85rem] text-muted-foreground">
+            <div className="col-span-full px-4 py-6 text-[0.85rem] text-muted-foreground">
               No repositories match that filter.
             </div>
           )}

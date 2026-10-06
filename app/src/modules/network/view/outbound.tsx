@@ -8,7 +8,20 @@ import { Board, BoardGrid, Chip, Columns, Facts, Measures, Pulse } from '../../.
 import { cn } from '../../../lib/cn'
 import { DASH, flag, pct, until } from '../../../lib/format'
 import type { NetworkData } from '../data'
-import { AXIS, EMPTY, FOOT, LIVE, MAIN, MONO, NOTE, ROW, ROWS, SWITCH_BAR, tone } from './shared'
+import {
+  AXIS,
+  CAPTION,
+  EMPTY,
+  FOOT,
+  LIVE,
+  MAIN,
+  MONO,
+  NOTE,
+  ROW,
+  ROWS,
+  SWITCH_BAR,
+  tone,
+} from './shared'
 
 // ── Going out: the egress tunnels ──────────────────────────────────────────
 
@@ -149,7 +162,7 @@ export function OutboundView({ data }: { data: Outbound }) {
       <div className={SWITCH_BAR}>
         {/* What the switch cannot say, and only that: where the selected
             tunnel comes out. Its name and its health are on the button. */}
-        <span className="inline-flex min-w-0 items-baseline gap-[0.55rem] text-[0.86rem] text-subdued">
+        <span className="inline-flex min-w-0 items-baseline gap-2 text-[0.84rem] text-muted-foreground">
           <span className={cn(MONO, 'text-[0.78rem] text-muted-foreground')}>
             {t.exit.ip ?? DASH}
           </span>
@@ -257,9 +270,11 @@ function StayingUpBoard({
             carries a bad day. */}
         gluetun reports its own tunnel state every 30 seconds; this is the share of each day it said
         it was connected. Columns are near-full by design, so a day that dropped at all is
-        underlined in red rather than left to a difference of a pixel. The WireGuard key expires{' '}
-        <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead, and the renewal runbook is
-        the header of <code>{t.runbook}</code>.
+        underlined in red rather than left to a difference of a pixel.
+      </p>
+      <p className={CAPTION}>
+        The WireGuard key expires <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead,
+        and the renewal runbook is the header of <code>{t.runbook}</code>.
       </p>
     </Board>
   )
@@ -302,7 +317,7 @@ function ExitBoard({ t }: { t: Outbound['tunnels'][number] }) {
       aside={
         // A provider's mark beside the title — the network a tunnel comes
         // out on is a brand, and the logo says it faster than the word.
-        <span className="inline-flex items-center gap-[0.35rem] text-[0.72rem] text-muted-foreground [&_img]:block [&_img]:rounded-[3px]">
+        <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-muted-foreground [&_img]:block [&_img]:rounded-[3px]">
           <img src="/icon-protonvpn.svg" alt="" width={16} height={16} />
           {t.provider}
         </span>

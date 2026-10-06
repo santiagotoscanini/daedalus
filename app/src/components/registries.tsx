@@ -20,9 +20,8 @@ import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 /* A repository name as a small monospace pill: a round `Chip`, taken
    down to the size the list was drawn at: forty of these in a 4-span board
    have to read as a cloud of names, not a row of buttons. */
-const REPOS = 'mb-[0.7rem] flex flex-wrap gap-[0.35rem]'
-const REPO =
-  'gap-[0.35rem] rounded-full border-subtle bg-raised px-[0.55rem] py-[0.2rem] font-mono text-[0.74rem] font-normal text-foreground'
+const REPOS = 'mb-3 flex flex-wrap gap-1.5'
+const REPO = 'gap-1.5 px-2 py-0.5 font-mono text-[0.75rem] font-normal text-foreground'
 /* Pull-through copies of upstream images: present, but not something built
    here, so they read as background against the app repositories. */
 const REPO_MUTED = 'bg-transparent text-muted-foreground'

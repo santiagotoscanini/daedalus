@@ -36,14 +36,14 @@ type Preflight = Awaited<ReturnType<typeof fetchAppPreflight>>
    container: the loading placeholder and the real thing then begin at exactly
    the same y, which is the whole point of a shape-matched skeleton — and why
    these three are exported to `NewAppSkeleton` rather than restated there. */
-export const WIZARD = 'mt-[1.6rem] flex flex-col'
+export const WIZARD = 'mt-6 flex flex-col'
 /** No margin of its own — see above. `min-width: 0` because the board grid
     inside is wider than its content and a flex item floors at min-content. */
 export const WIZARD_STEP = 'min-w-0'
 export const FIRST_STEP_HEAD = cn(SECTION_HEAD, 'mt-0 border-t-0 pt-0')
 
-const WARN_BANNER = 'mb-[1.35rem] text-foreground'
-const MUTED_BANNER = 'mb-[1.35rem] text-subdued'
+const WARN_BANNER = 'mb-5 text-foreground'
+const MUTED_BANNER = 'mb-5 text-subdued'
 
 export function Wizard({ options }: { options: Options }) {
   const site = useSite()

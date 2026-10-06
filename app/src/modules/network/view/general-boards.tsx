@@ -1,10 +1,11 @@
 import type { LogNeighbour } from '../../../components/logs'
 import { LogBoard } from '../../../components/logs'
+import { Button } from '../../../components/ui/button'
 import { BarList, Board, Chip, Facts, Measures, Pulse, Trend } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, compact, DASH, num, pct } from '../../../lib/format'
 import type { General, GeneralFacts } from './general'
-import { ACTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
+import { CAPTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
 
 export function WhatCrossesTheCableBoard({ f }: { f: GeneralFacts }) {
   const { wire } = f
@@ -64,14 +65,12 @@ export function TheWayOutBoard({ f }: { f: GeneralFacts }) {
       {/* The one number on this page that cannot be read anywhere else on
           the box, so it gets the treatment of a headline rather than a
           table row. */}
-      <div className="mb-[0.7rem] flex flex-col gap-[0.1rem] rounded-[9px] border border-subtle bg-[linear-gradient(150deg,var(--panel-2),var(--card))] px-3 py-[0.6rem]">
-        <span className="text-[0.66rem] tracking-[0.09em] text-muted-foreground uppercase">
-          public address
-        </span>
-        <strong className="font-mono text-[1.3rem] tracking-[-0.01em] tabular-nums">
+      <div className="flex flex-col gap-0.5 rounded-xl border border-hairline bg-foreground/[0.03] px-4 py-3">
+        <span className="text-[0.75rem] text-muted-foreground">Public address</span>
+        <strong className="font-mono text-[1.4rem] leading-[1.2] tracking-[-0.02em] tabular-nums [font-weight:560]">
           {router.wan ?? DASH}
         </strong>
-        <span className="text-[0.7rem] text-muted-foreground">
+        <span className="text-[0.75rem] text-muted-foreground">
           {router.wanError ?? 'this house, as Cloudflare’s edge sees it arrive'}
         </span>
       </div>
@@ -80,15 +79,15 @@ export function TheWayOutBoard({ f }: { f: GeneralFacts }) {
           context for the number beside it, not a chart anyone reads on its
           own, and a heading would promote it above the reading that
           matters. */}
-      <ul className="mx-0 mt-[0.7rem] mb-0 list-none p-0">
+      <ul className="m-0 list-none p-0">
         {hops.map((h) => (
           <li
             key={h.id}
-            className="grid grid-cols-[auto_1fr_auto_minmax(3rem,5rem)] items-center gap-2 py-[0.3rem] not-first:border-t not-first:border-subtle"
+            className="grid grid-cols-[auto_1fr_auto_minmax(3rem,5rem)] items-center gap-2.5 py-2 not-first:border-t not-first:border-hairline"
           >
             <Pulse on={h.up === true} tone={h.up === true ? 'ok' : 'bad'} />
-            <span className="text-[0.78rem] text-foreground">{h.label}</span>
-            <span className={cn(MONO, 'text-[0.74rem] text-foreground tabular-nums')}>
+            <span className="text-[0.8rem] text-foreground">{h.label}</span>
+            <span className={cn(MONO, 'text-[0.75rem] text-foreground tabular-nums')}>
               {rtt(h.rttMs)}
             </span>
             <Trend values={h.history} height={22} tone="muted" empty="" />
@@ -132,7 +131,7 @@ export function TheRouterBoard({ f }: { f: GeneralFacts }) {
           whose subject is a physical object in the house — everything else
           here is a counter. Sized to the type beside it rather than to the
           artwork, and it shrinks first when the column narrows. */}
-      <div className="flex items-center gap-[0.9rem] pb-[0.4rem]">
+      <div className="flex items-center gap-4 pb-1">
         <img
           className="h-auto w-[clamp(72px,34%,132px)] flex-none object-contain"
           src="/router-axe75.png"
@@ -140,27 +139,26 @@ export function TheRouterBoard({ f }: { f: GeneralFacts }) {
           width={150}
           height={150}
         />
-        <div className="flex min-w-0 flex-col items-start gap-[0.3rem]">
-          <strong className="flex items-baseline gap-[0.35rem] text-[1.05rem] tracking-[-0.01em] text-foreground">
+        <div className="flex min-w-0 flex-col items-start gap-1">
+          <strong className="flex items-baseline gap-1.5 text-[1rem] tracking-[-0.01em] text-foreground [font-weight:600]">
             {router.model ?? 'Unknown'}
             {/* The hardware revision is part of the identity and never the
                 thing you are looking for, so it rides the model at the size
                 of a footnote. */}
             {router.hardware !== null && (
-              <span className="text-[0.7rem] font-normal text-muted-foreground">
+              <span className="text-[0.72rem] font-normal text-muted-foreground">
                 {router.hardware}
               </span>
             )}
           </strong>
-          <span className="text-[0.72rem] leading-[1.3] text-subdued">{router.product}</span>
-          <a
-            className={cn(ACTION, 'mt-[0.15rem]')}
-            href={router.adminUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open the admin ↗
-          </a>
+          <span className="text-[0.75rem] leading-[1.4] text-muted-foreground">
+            {router.product}
+          </span>
+          <Button asChild size="sm" className="mt-1 self-start">
+            <a href={router.adminUrl} target="_blank" rel="noreferrer">
+              Open the admin ↗
+            </a>
+          </Button>
         </div>
       </div>
       <Facts
@@ -253,7 +251,9 @@ export function WhatThisHouseAsksForBoard({ f }: { f: GeneralFacts }) {
       <BarList items={dns.topDomains} tone="accent" empty="no queries recorded" />
       <p className={FOOT}>
         The names most looked up, which is the closest thing to a list of what this house depends on
-        outside itself.{' '}
+        outside itself.
+      </p>
+      <p className={CAPTION}>
         {dns.fromBox === null || dns.queries === null
           ? 'Most of it is this box rather than the devices on the LAN.'
           : `${pct((dns.fromBox / dns.queries) * 100)} of it came from 127.0.0.1. Every container on this box resolves through the host’s stub, so pi-hole sees them as one client and no split by service is available from here.`}
@@ -322,11 +322,11 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
   const width = (n: number) => `${String((n / ceiling) * 100)}%`
 
   return (
-    <li className="grid grid-cols-[minmax(4rem,10rem)_1fr_auto] items-center gap-[0.6rem] py-[0.22rem] text-[0.75rem]">
+    <li className="grid grid-cols-[minmax(4rem,10rem)_1fr_auto] items-center gap-2.5 py-1 text-[0.78rem]">
       <span className="truncate text-foreground" title={row.name}>
         {row.name}
       </span>
-      <span className="flex h-2 min-w-0 overflow-hidden rounded-full bg-raised">
+      <span className="flex h-1.5 min-w-0 overflow-hidden rounded-full bg-foreground/[0.08]">
         <span
           className="bg-primary"
           style={{ width: width(row.in) }}
@@ -338,7 +338,7 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
           title={`${bytes(row.out)} out`}
         />
       </span>
-      <span className={cn(MONO, 'text-[0.7rem] text-muted-foreground tabular-nums')}>
+      <span className={cn(MONO, 'text-[0.72rem] text-muted-foreground tabular-nums')}>
         {bytes(total)}
       </span>
     </li>

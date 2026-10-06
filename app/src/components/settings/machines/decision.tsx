@@ -6,7 +6,8 @@ import { Ago } from '../../ago'
 import { NodeCommandButton } from '../../node-command'
 import { Button } from '../../ui/button'
 import { useAction } from '../../use-action'
-import { ERROR_NOTE, MONO, NOTE } from '../shared'
+import { NOTE_SHOWN } from '../form'
+import { ERROR_NOTE, MONO } from '../shared'
 
 // A machine's trust: waiting, approved or revoked, and the buttons that move
 // it between them. A waiting key is the controller's — it has no row until
@@ -46,7 +47,7 @@ export function Decision({ m }: { m: Machine }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className={NOTE}>{line}</p>
+      <p className={NOTE_SHOWN}>{line}</p>
       <div className="flex flex-wrap items-center gap-2">
         {node?.state !== 'approved' && (
           <Button size="sm" disabled={busy} onClick={() => act(approveNodeFn)}>
@@ -68,7 +69,7 @@ export function Decision({ m }: { m: Machine }) {
         )}
         {id !== null && (
           <span
-            className={cn(MONO, 'text-[0.7rem] text-muted-foreground')}
+            className={cn(MONO, 'text-[0.72rem] text-muted-foreground')}
             title="sha256 of the machine's public key, the first 16 hex digits: what the box trusts"
           >
             key {id}

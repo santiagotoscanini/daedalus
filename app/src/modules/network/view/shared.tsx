@@ -17,7 +17,7 @@ export function tone(ok: boolean | null): Tone | null {
    The board vocabulary every category page uses lives in components/tokens.ts;
    it is re-exported here so a tab imports only its own page's shared file.
    Below is what is genuinely Network's. */
-export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from '../../../components/tokens'
+export { AXIS, CAPTION, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from '../../../components/tokens'
 
 /* Rows of a table, not a stack of pills: a hairline between rows says what a
    filled capsule per fact said, at a fraction of the ink. */
@@ -27,7 +27,7 @@ export const ROWS = 'm-0 flex list-none flex-col p-0'
 
 /** One row of it. */
 export const ROW =
-  'flex min-w-0 items-center gap-[0.45rem] px-[0.1rem] py-[0.34rem] text-[0.77rem] not-first:border-t not-first:border-subtle'
+  'flex min-w-0 items-center gap-2 px-0.5 py-2 text-[0.8rem] not-first:border-t not-first:border-hairline'
 
 /** The name in a row. Takes the slack, so the detail is pushed right. */
 export const MAIN = 'min-w-0 flex-auto truncate text-foreground'
@@ -35,7 +35,7 @@ export const MAIN = 'min-w-0 flex-auto truncate text-foreground'
 /** The detail at the end of a row. Truncates: a record's content is 200
     characters of base64 nobody reads on a dashboard. */
 export const SIDE =
-  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
+  'min-w-0 max-w-[60%] flex-initial truncate text-[0.72rem] text-muted-foreground tabular-nums'
 
 /** The count at the end of a row. */
 export const N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
@@ -44,29 +44,18 @@ export const N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
     and colour are left to the caller — a fold inside a board and the fold that
     ends a ranked list are the same mechanism at two weights. */
 const FOLD =
-  "[&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:items-center [&>summary]:gap-[0.45rem] [&>summary]:px-[0.1rem] [&>summary]:py-[0.3rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:before:text-[0.7rem] [&>summary]:before:text-muted-foreground [&>summary]:before:transition-transform [&>summary]:before:duration-[0.12s] [&>summary]:before:ease-[ease] [&>summary]:before:content-['▸'] [&[open]>summary]:before:rotate-90"
+  "[&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:items-center [&>summary]:gap-2 [&>summary]:px-0.5 [&>summary]:py-1.5 [&>summary]:transition-colors [&>summary]:hover:text-foreground [&>summary::-webkit-details-marker]:hidden [&>summary]:before:text-[0.7rem] [&>summary]:before:text-muted-foreground [&>summary]:before:transition-transform [&>summary]:before:duration-[0.12s] [&>summary]:before:ease-[ease] [&>summary]:before:content-['▸'] [&[open]>summary]:before:rotate-90"
 
 /** The tail of a list, folded. Set apart from the rows above it so the fold
     reads as the end of the list rather than as another row in it. */
-export const MORE = `${FOLD} mt-[0.4rem] border-t border-subtle [&>summary]:text-[0.72rem] [&>summary]:text-subdued`
+export const MORE = `${FOLD} mt-1.5 border-t border-hairline pt-1 [&>summary]:text-[0.75rem] [&>summary]:text-muted-foreground`
 
 /** A folded group inside a board. */
-export const GROUP = `${FOLD} [&>summary]:text-[0.78rem] [&>summary]:text-foreground`
-
-/**
- * The primary link of a header or board ("Open the admin").
- *
- * The primary action is the FOREGROUND colour, not the brand one — the accent
- * identifies the app, this identifies the one thing you came to press. The
- * label is `text-background` rather than a literal near-black, which would be
- * black on black in the light theme.
- */
-export const ACTION =
-  'inline-flex cursor-pointer items-center rounded-[7px] border border-foreground bg-foreground px-[0.85rem] py-[0.42rem] text-[0.84rem] font-[550] whitespace-nowrap text-background no-underline transition-colors hover:border-foreground/85 hover:bg-foreground/85 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-dim'
+export const GROUP = `${FOLD} [&>summary]:text-[0.8rem] [&>summary]:text-foreground`
 
 /** The bar that carries a tab's route/tunnel switch. The switch is always at
     the right, whether or not anything sits to its left — `ml-auto` on the last
     child does both cases, where `justify-between` would park a lone child at
     the start. */
 export const SWITCH_BAR =
-  'mx-0 mt-7 mb-6 flex flex-wrap items-center gap-4 border-b border-border pb-[0.9rem] [&>*:last-child]:ml-auto'
+  'mx-0 mt-7 mb-6 flex flex-wrap items-center gap-4 border-b border-hairline pb-4 [&>*:last-child]:ml-auto'

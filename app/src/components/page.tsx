@@ -23,13 +23,13 @@ export function PageHead({
 }) {
   return (
     <>
-      <header className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-        <h1 className="m-0 font-semibold text-[1.45rem] tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
+      <header className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h1 className="m-0 text-[1.75rem] leading-tight tracking-[-0.032em] [font-weight:640] max-[34rem]:text-[1.45rem]">
           {title}
         </h1>
         {aside}
       </header>
-      {children !== undefined && <Lede className="-mt-3 mb-6">{children}</Lede>}
+      {children !== undefined && <Lede className="-mt-4 mb-8">{children}</Lede>}
     </>
   )
 }
@@ -37,21 +37,32 @@ export function PageHead({
 /**
  * One measure of page-level prose.
  *
- * 74ch, deliberately wider than the 62ch a book would use: these are
+ * 68ch, a little wider than the 62ch a book would use: these are
  * introductions read in one glance, not chapters. A caption INSIDE a board
  * does not get this — the board is already the measure, and capping it again
  * leaves the text hugging one edge of a wide panel with empty background
  * beside it, which reads as a layout bug.
  */
 function Lede({ className, ...props }: ComponentProps<'p'>) {
-  return <p className={cn('mt-1 max-w-[74ch] text-subdued text-sm', className)} {...props} />
+  return (
+    <p
+      className={cn(
+        'mt-1 max-w-[68ch] text-[0.9rem] text-muted-foreground leading-relaxed',
+        className,
+      )}
+      {...props}
+    />
+  )
 }
 
 /** The trail above a detail page's title. */
 export function Crumbs({ className, ...props }: ComponentProps<'p'>) {
   return (
     <p
-      className={cn('mt-0 mb-3.5 text-muted-foreground text-[0.84rem] [&_span]:mx-1.5', className)}
+      className={cn(
+        'mt-0 mb-4 text-muted-foreground text-[0.8rem] [&_a]:text-muted-foreground [&_a:hover]:text-foreground [&_span]:mx-1.5 [&_span]:opacity-50',
+        className,
+      )}
       {...props}
     />
   )

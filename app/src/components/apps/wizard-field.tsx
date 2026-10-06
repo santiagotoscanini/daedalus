@@ -33,8 +33,8 @@ export function WizardField({
     // `has-[:disabled]:opacity-100`: the Name row is disabled by design — the
     // repo decides it — and dimming its label would say "locked" about the one
     // field the reader most needs to read. The input dims itself.
-    <Field className="gap-[0.3rem] py-2 has-[:disabled]:opacity-100">
-      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-muted-foreground">
+    <Field className="gap-1 py-2 has-[:disabled]:opacity-100">
+      <FieldLabel htmlFor={id} className="text-[0.75rem] font-normal text-muted-foreground">
         {label}
       </FieldLabel>
       <Input
@@ -50,10 +50,10 @@ export function WizardField({
         }}
       />
       {error !== null ? (
-        <FieldError className="text-[0.76rem] leading-[1.45]">{error}</FieldError>
+        <FieldError className="text-[0.75rem] leading-[1.5]">{error}</FieldError>
       ) : (
         hint !== undefined && (
-          <FieldDescription className="text-[0.76rem] leading-[1.45]">{hint}</FieldDescription>
+          <FieldDescription className="text-[0.75rem] leading-[1.5]">{hint}</FieldDescription>
         )
       )}
     </Field>

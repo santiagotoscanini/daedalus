@@ -15,8 +15,9 @@ import type { NodeRow } from '../../../lib/repo/nodes'
 import { useShown } from '../../../lib/shown'
 import { Input } from '../../ui/input'
 import { Switch } from '../../ui/switch'
+import { CONTROL_H } from '../form'
 import { ProviderModels } from '../provider-models'
-import { ASIDE, ERROR_NOTE, FIELD_LABEL, Mono, Rows, Stack } from '../shared'
+import { ASIDE, ERROR_NOTE, Mono, Rows, Stack } from '../shared'
 import {
   blurOnEnter,
   policyAlert,
@@ -57,8 +58,8 @@ export function Policy({
   // share: it joins the line once hydration is done (lib/hydrated.ts).
   const hydrated = useHydrated()
   return (
-    <div className="flex flex-col gap-3 border-subtle border-t pt-4">
-      <h3 className={cn(FIELD_LABEL, 'm-0')}>Policy</h3>
+    <div className="flex flex-col gap-3 border-hairline border-t pt-4">
+      <h3 className="m-0 text-[0.875rem] [font-weight:560]">Policy</h3>
       <Rows
         rows={[
           ...policyNames(ed, n, lanDomain),
@@ -114,6 +115,7 @@ function policyNames(ed: PolicyEditor, n: NodeRow, lanDomain: string): Row[] {
       v: (
         <Stack className="w-full max-w-[22rem]">
           <Input
+            className={CONTROL_H}
             value={ed.name}
             placeholder={n.hostname}
             maxLength={40}
@@ -132,6 +134,7 @@ function policyNames(ed: PolicyEditor, n: NodeRow, lanDomain: string): Row[] {
         <Stack className="w-full max-w-[22rem]">
           <span className="inline-flex items-center gap-2">
             <Input
+              className={CONTROL_H}
               value={ed.netName}
               placeholder={slugOf(n.hostname)}
               maxLength={32}
@@ -231,7 +234,7 @@ function ProviderRow({
         <span className="inline-flex items-center gap-2 text-[0.82rem]">
           port
           <Input
-            className="w-[6.5rem]"
+            className={cn(CONTROL_H, 'w-26')}
             value={port}
             inputMode="numeric"
             disabled={busy}

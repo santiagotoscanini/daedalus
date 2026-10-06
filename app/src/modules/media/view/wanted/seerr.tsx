@@ -12,9 +12,9 @@ import { WANTED_NEIGHBOURS } from './shared'
 /* Status first, because it is the column that decides whether the row needs
    you. The title takes the slack; requester and age are fixed so the eye can
    run down them. Below 34rem the five stack. */
-const REQS = `${LIST} gap-[0.2rem]`
+const REQS = `${LIST} gap-1`
 const REQ =
-  'grid grid-cols-[5.6rem_minmax(0,1fr)_3.6rem_6rem_5rem] items-center gap-[0.6rem] py-[0.22rem] text-[0.82rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-[0.15rem]'
+  'grid grid-cols-[5.6rem_minmax(0,1fr)_3.6rem_6rem_5rem] items-center gap-2.5 py-1 text-[0.8rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-0.5'
 const REQ_SIDE = 'text-[0.75rem] text-muted-foreground'
 const REQ_WHEN = `${REQ_SIDE} text-right max-[34rem]:text-left`
 
@@ -92,7 +92,7 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           {d.people.length === 0 ? (
             <p className={EMPTY}>no requests yet</p>
           ) : (
-            <ul className={`${LIST} gap-[0.1rem]`}>
+            <ul className={`${LIST} gap-0.5`}>
               {d.people.map((p) => (
                 <RankRow
                   key={p.name}

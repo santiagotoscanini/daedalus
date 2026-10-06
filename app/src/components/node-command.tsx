@@ -45,14 +45,14 @@ export function NodeCommandButton({
         <span
           className={
             error !== null
-              ? 'text-[0.74rem] text-destructive'
-              : 'text-[0.74rem] text-muted-foreground'
+              ? 'text-[0.75rem] text-destructive'
+              : 'text-[0.75rem] text-muted-foreground'
           }
         >
           {said}
         </span>
       ) : (
-        note !== undefined && <span className="text-[0.74rem] text-muted-foreground">{note}</span>
+        note !== undefined && <span className="text-[0.75rem] text-muted-foreground">{note}</span>
       )}
     </span>
   )

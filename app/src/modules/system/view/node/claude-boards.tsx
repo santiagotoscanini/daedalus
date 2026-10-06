@@ -206,7 +206,7 @@ export function MachineBoard({ f }: { f: ClaudeFacts }) {
 }
 
 /** The row a control sits on, under a board's facts. */
-const CONTROL = 'mt-[0.7rem] flex flex-wrap items-center gap-3 border-subtle border-t pt-[0.75rem]'
+const CONTROL = 'flex flex-wrap items-center gap-3 border-hairline border-t pt-3'
 
 /**
  * Update Claude Code on this machine.
@@ -253,7 +253,7 @@ function UpdateControl({ node, claude }: { node: NodeRow; claude: NodeClaudeData
           of them shows up in a version number. */}
       {last !== null && (
         <span
-          className={`w-full text-[0.74rem] ${last.ok ? 'text-muted-foreground' : 'text-destructive'}`}
+          className={`w-full text-[0.75rem] ${last.ok ? 'text-muted-foreground' : 'text-destructive'}`}
         >
           last update <Ago at={last.at} />:{' '}
           {last.from !== null && last.to !== null && last.from !== last.to

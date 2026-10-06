@@ -1,6 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Button } from '../../../components/ui/button'
 import type { Tone } from '../../../components/viz'
 import {
   BarList,
@@ -16,7 +17,7 @@ import { cn } from '../../../lib/cn'
 import { bytes, compact, DASH, ms, num, pct, since, until } from '../../../lib/format'
 import type { NetworkData } from '../data'
 import { FOLD_STACK } from './dns-records'
-import { ACTION, FOOT, GROUP, MAIN, MONO, N, NOTE, ROW, ROWS, SIDE, SUB } from './shared'
+import { CAPTION, FOOT, GROUP, MAIN, MONO, N, NOTE, ROW, ROWS, SIDE, SUB } from './shared'
 
 // Network › DNS, the resolver side: pi-hole, as every device in the house
 // meets it. One component per board, so the view reads as the list of them.
@@ -79,9 +80,11 @@ export function ResolverView({
         }
         actions={
           admin !== null && (
-            <a className={ACTION} href={`${admin}/`} target="_blank" rel="noreferrer">
-              Open the admin ↗
-            </a>
+            <Button asChild size="sm">
+              <a href={`${admin}/`} target="_blank" rel="noreferrer">
+                Open the admin ↗
+              </a>
+            </Button>
           )
         }
       />
@@ -138,14 +141,14 @@ function DeclaredNames({ lan }: { lan: Dns['lan'] }) {
               and a column wide enough for the longest leaves the shortest
               floating in whitespace. Wrapping puts as many on each line as fit
               and nothing anywhere else. */}
-      <ul className="m-0 flex list-none flex-wrap gap-[0.3rem] p-0">
+      <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
         {lan.map((n) => (
           <li
             key={n.fqdn}
             className={cn(
-              'inline-flex min-w-0 items-center gap-[0.35rem] rounded-[7px] bg-raised px-2 py-[0.22rem] text-[0.75rem]',
+              'inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 py-1 text-[0.75rem] ring-1 ring-hairline ring-inset',
               // The one state worth interrupting the wall of names for.
-              n.served === false && 'shadow-[inset_0_0_0_1px_var(--danger)]',
+              n.served === false && 'ring-danger/50',
             )}
           >
             <span className={cn(MONO, 'text-foreground')}>{n.short}</span>
@@ -153,7 +156,7 @@ function DeclaredNames({ lan }: { lan: Dns['lan'] }) {
                     it is a distinction rather than a column — it earns the eye
                     by being rare. */}
             {n.elsewhere && (
-              <span className={cn(MONO, 'text-[0.68rem] text-muted-foreground tabular-nums')}>
+              <span className={cn(MONO, 'text-[0.7rem] text-muted-foreground tabular-nums')}>
                 {n.ip}
               </span>
             )}
@@ -206,9 +209,10 @@ function AnswerSources({ d }: { d: Resolver }) {
           </li>
         ))}
       </ul>
+      <p className={CAPTION}>{num(sum)} queries in the window FTL keeps in memory.</p>
       <p className={FOOT}>
-        {num(sum)} queries in the window FTL keeps in memory. Cache and the hosts file never left
-        the box, which is the whole job. The forwarded slice is the only part any upstream sees.
+        Cache and the hosts file never left the box, which is the whole job. The forwarded slice is
+        the only part any upstream sees.
       </p>
 
       <h4 className={SUB}>Upstreams</h4>
@@ -262,10 +266,10 @@ function Traffic({ d }: { d: Resolver }) {
         }))}
         empty="pi-hole returned no history"
       />
+      <p className={CAPTION}>The last day, busiest hour {num(busiest)}.</p>
       <p className={FOOT}>
-        The last day, busiest hour {num(busiest)}. A house at rest still asks thousands of questions
-        an hour, most of it background chatter from devices nobody is touching, which is why the
-        cache share above is what it is.
+        A house at rest still asks thousands of questions an hour, most of it background chatter
+        from devices nobody is touching, which is why the cache share above is what it is.
       </p>
     </Board>
   )

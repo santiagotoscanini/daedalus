@@ -1,7 +1,7 @@
 // The model widget: one machine's catalog grouped by kind.
 
-import { FOOT, MONO, NOTE } from '../../../../components/tokens'
-import { Board } from '../../../../components/viz'
+import { CAPTION, FOOT, MONO, NOTE } from '../../../../components/tokens'
+import { Board, Chip } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { compact, DASH, num } from '../../../../lib/format'
 import { MODE_WORD } from '../../../../lib/providers/policy'
@@ -12,32 +12,30 @@ import { ModelAlt, ModelHero } from './model-row'
 
 /* Styled as a sibling of the changelog's release rows: both are "a stack of
    things you open", and looking alike is the point. */
-const KIND = 'border-b border-subtle last-of-type:border-b-0 [&[open]>summary]:before:rotate-90'
+const KIND = 'border-b border-hairline last-of-type:border-b-0 [&[open]>summary]:before:rotate-90'
 const KIND_SUMMARY =
-  "flex min-w-0 cursor-pointer list-none items-baseline gap-[0.55rem] px-[0.15rem] py-[0.5rem] hover:bg-lifted [&::-webkit-details-marker]:hidden before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:ease-[ease] before:content-['▸']"
-const KIND_TYPE = 'text-[0.68rem] font-semibold tracking-[0.11em] text-primary uppercase'
-const KIND_FREE =
-  'rounded-full border border-warning/40 px-[0.35rem] py-[0.02rem] text-[0.62rem] text-warning'
+  "flex min-w-0 cursor-pointer list-none items-baseline gap-2 rounded-lg px-1 py-2 transition-colors hover:bg-foreground/[0.05] [&::-webkit-details-marker]:hidden before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:ease-[ease] before:content-['▸']"
+const KIND_TYPE =
+  'inline-block text-[0.8rem] first-letter:uppercase text-foreground [font-weight:550]'
 /* The aggregate for the whole kind, so a collapsed row still says
    something. Interpuncts generated rather than typed, so a missing figure
    does not leave a dangling separator. */
 const KIND_AGG =
-  "ml-auto flex gap-[0.45rem] whitespace-nowrap text-[0.7rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-[0.45rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']"
-const KIND_BODY = 'pt-[0.1rem] pb-[0.7rem]'
-const KIND_EMPTY = 'm-0 text-[0.78rem] text-warning'
+  "ml-auto flex gap-2 whitespace-nowrap text-[0.75rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-2 [&>span+span]:before:text-border [&>span+span]:before:content-['·']"
+const KIND_BODY = 'pt-1 pb-3'
+const KIND_EMPTY = 'm-0 text-[0.8rem] text-warning'
 
 /* The other models of this kind — one click from the slot. */
-const ALTS = 'm-0 mt-[0.3rem] flex list-none flex-col gap-[0.15rem] p-0'
+const ALTS = 'm-0 mt-1.5 flex list-none flex-col gap-0.5 p-0'
 
 /* Only present mid-download, so it is allowed to be loud. */
-const DOWNLOADS = 'm-0 mb-[0.6rem] flex list-none flex-col gap-[0.2rem] p-0'
-const DOWNLOAD =
-  'flex gap-[0.6rem] rounded-[6px] bg-[color-mix(in_srgb,var(--primary)_10%,var(--panel-2))] px-[0.45rem] py-[0.2rem] text-[0.74rem] text-subdued'
+const DOWNLOADS = 'm-0 flex list-none flex-col gap-1 p-0'
+const DOWNLOAD = 'flex gap-2.5 rounded-lg bg-primary/10 px-2.5 py-1 text-[0.75rem] text-subdued'
 
 /* Build numbers for the runtimes named on the models above. One line: that
    is all they are worth once the runtime itself is stated per model. */
 const BUILDS =
-  'mx-0 mt-[1.1rem] mb-0 flex flex-wrap gap-x-[1.1rem] gap-y-[0.2rem] border-t border-subtle pt-[0.7rem] text-[0.68rem] text-muted-foreground'
+  'm-0 flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline pt-3 text-[0.75rem] text-muted-foreground'
 
 type Group = { mode: CatalogEntry['mode']; models: CatalogEntry[] }
 
@@ -91,7 +89,7 @@ function ModelKind({ group, m }: { group: Group; m: ProviderMachine }) {
     <details className={KIND} open={resident !== null}>
       <summary className={KIND_SUMMARY}>
         <span className={KIND_TYPE}>{MODE_WORD[group.mode]}</span>
-        {slotFree && <span className={KIND_FREE}>slot free</span>}
+        {slotFree && <Chip tone="warn">slot free</Chip>}
         {/* Abbreviated: these are a sense of scale rather than quantities —
             976k answers "has anything been using these", and 976,228
             answers it no better while costing half the row. */}
@@ -166,7 +164,7 @@ export function ModelsBoard({ m }: { m: ProviderMachine }) {
       )}
 
       {groups.length === 0 ? (
-        <p className={FOOT}>
+        <p className={CAPTION}>
           {m.reachable ? 'The provider lists no models.' : 'Unknown until it answers.'}
         </p>
       ) : (
@@ -181,7 +179,7 @@ export function ModelsBoard({ m }: { m: ProviderMachine }) {
       {backends.length > 0 && (
         <p className={BUILDS}>
           {backends.map((b) => (
-            <span key={`${b.recipe}-${b.backend}`} className="inline-flex gap-[0.35rem]">
+            <span key={`${b.recipe}-${b.backend}`} className="inline-flex gap-1.5">
               {b.recipe}
               {b.url === null ? (
                 <span className={cn(MONO, 'text-subdued')}>{b.version ?? DASH}</span>

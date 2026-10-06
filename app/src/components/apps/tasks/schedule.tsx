@@ -44,8 +44,8 @@ export function ScheduleField({
   const schedule = scheduleOf(mode, custom, app)
   const scheduleErr = taskScheduleError(schedule)
   return (
-    <Field className="gap-[0.35rem] py-2">
-      <FieldLabel className="text-[0.76rem] font-normal text-muted-foreground">Schedule</FieldLabel>
+    <Field className="gap-1.5 py-2">
+      <FieldLabel className="text-[0.75rem] font-normal text-muted-foreground">Schedule</FieldLabel>
       <div>
         <Segmented
           value={mode}
@@ -63,7 +63,7 @@ export function ScheduleField({
       {mode === 'custom' && (
         <Input
           type="text"
-          className={cn(INPUT_FORM, 'mt-[0.35rem] font-mono')}
+          className={cn(INPUT_FORM, 'mt-1.5 font-mono')}
           value={custom}
           placeholder="Mon *-*-* 03:17:00"
           aria-invalid={scheduleErr !== null && custom !== ''}
@@ -77,15 +77,15 @@ export function ScheduleField({
           preset that did not show its minute would be a schedule chosen
           blind — and the minute is the whole reason the presets exist. */}
       {scheduleErr !== null && !(mode === 'custom' && custom === '') ? (
-        <FieldError className="text-[0.76rem] leading-[1.45]">{scheduleErr}</FieldError>
+        <FieldError className="text-[0.75rem] leading-[1.5]">{scheduleErr}</FieldError>
       ) : (
-        <p className="mt-[0.15rem] mr-0 mb-0 ml-0 flex flex-wrap items-baseline gap-x-[0.7rem] text-[0.8rem]">
+        <p className="mt-0.5 mr-0 mb-0 ml-0 flex flex-wrap items-baseline gap-x-3 text-[0.8rem]">
           <span>{schedule === '' ? 'No schedule yet' : describeSchedule(schedule)}</span>
-          <code className="text-[0.78rem] text-muted-foreground">{schedule}</code>
+          <code className="text-[0.75rem] text-muted-foreground">{schedule}</code>
         </p>
       )}
       {mode !== 'custom' && (
-        <FieldDescription className="text-[0.76rem] leading-[1.45]">
+        <FieldDescription className="text-[0.75rem] leading-[1.5]">
           The minute is derived from this app’s name, so it is stable across edits and never :00 —
           that is when myspeed’s speedtest takes house-wide DNS down for a couple of minutes.
         </FieldDescription>

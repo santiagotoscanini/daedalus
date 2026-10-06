@@ -15,7 +15,15 @@ import { Board, BoardGrid } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, duration, num } from '../../../lib/format'
 import type { SystemData } from '../data'
-import { SYSTEM_SNAPSHOT } from './shared'
+import {
+  CELL_MAIN,
+  CELL_N,
+  CELL_SIDE,
+  SYSTEM_SNAPSHOT,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from './shared'
 
 /* ── Backups ──────────────────────────────────────────────────────────── */
 
@@ -33,13 +41,19 @@ export function BackupsView({ d }: { d: Backups }) {
         {d.pairs.length === 0 ? (
           <p className={EMPTY}>no replication pairs found</p>
         ) : (
-          <ul className={LIST}>
+          <ul className={cn(TABLE, 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]')}>
+            <li className={TABLE_HEAD} aria-hidden="true">
+              <span>Source</span>
+              <span>Replica</span>
+              <span>Snapshots</span>
+              <span className="text-right">Lag</span>
+            </li>
             {d.pairs.map((p) => (
-              <li key={p.target} className={ROW}>
-                <span className={cn(ROW_MAIN, MONO)}>{p.source}</span>
-                <span className={cn(ROW_SIDE, MONO_FACE)}>→ {p.target}</span>
-                <span className={ROW_SIDE}>{num(p.targetSnapshots)} snapshots</span>
-                <span className={ROW_N}>
+              <li key={p.target} className={TABLE_ROW}>
+                <span className={cn(CELL_MAIN, MONO)}>{p.source}</span>
+                <span className={cn(CELL_SIDE, MONO_FACE)}>→ {p.target}</span>
+                <span className={CELL_SIDE}>{num(p.targetSnapshots)} snapshots</span>
+                <span className={CELL_N}>
                   {p.lagSeconds === null ? (
                     DASH
                   ) : p.lagSeconds > 7200 ? (
@@ -94,12 +108,17 @@ export function BackupsView({ d }: { d: Backups }) {
         span={8}
         aside={<span className={NOTE}>{num(d.coverage.length)} enrolled</span>}
       >
-        <ul className={LIST}>
+        <ul className={cn(TABLE, 'grid-cols-[minmax(0,1fr)_auto_auto]')}>
+          <li className={TABLE_HEAD} aria-hidden="true">
+            <span>Dataset</span>
+            <span>Snapshots</span>
+            <span className="text-right">Used</span>
+          </li>
           {d.coverage.map((c) => (
-            <li key={c.name} className={ROW}>
-              <span className={cn(ROW_MAIN, MONO)}>{c.name}</span>
-              <span className={ROW_SIDE}>{num(c.snapshots)} snapshots</span>
-              <span className={ROW_N}>{bytes(c.usedBytes)}</span>
+            <li key={c.name} className={TABLE_ROW}>
+              <span className={cn(CELL_MAIN, MONO)}>{c.name}</span>
+              <span className={CELL_SIDE}>{num(c.snapshots)} snapshots</span>
+              <span className={CELL_N}>{bytes(c.usedBytes)}</span>
             </li>
           ))}
         </ul>

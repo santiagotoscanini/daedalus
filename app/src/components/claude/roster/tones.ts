@@ -31,7 +31,7 @@ export const STATE_LABEL: Record<SessionState, string> = {
    Every row carries the border and the padding, so the text edge never moves;
    the two quiet populations simply make theirs transparent. That is the whole
    reason this is not a conditional wrapper. */
-export const ROW_ACCENT = 'border-l-2 pl-[0.5rem]'
+export const ROW_ACCENT = 'border-l-2 pl-2'
 export const STATE_ACCENT: Record<SessionState, string> = {
   alive: 'border-l-(--tone)',
   background: 'border-l-(--tone)',

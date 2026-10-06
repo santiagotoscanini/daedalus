@@ -1,7 +1,7 @@
 // Home › Sign-in's boards: signing in, declared against live, who, the logs.
 
 import { GrafanaLogs, LogDetails } from '../../../components/logs'
-import { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
+import { AXIS, CAPTION, EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
 import { Board, Chip, Columns, Measures } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { IdpData } from '../data/signin'
@@ -10,11 +10,6 @@ import { LIST, MAIN, SIDE } from './shared'
 
 /* An identifier in the side slot: the slot's own size, in monospace. */
 const SIDE_MONO = `${SIDE} font-mono`
-
-/* The ends of a column chart's window. Pulled inside the board body's own gap:
-   the axis belongs to the chart above it. */
-const COLAXIS =
-  'mt-[-0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] tabular-nums text-muted-foreground'
 
 export function SigningInBoard({
   d,
@@ -42,10 +37,10 @@ export function SigningInBoard({
     >
       <Measures
         items={[
-          { k: 'passkey sign-ins', v: num(w.signIns) },
-          { k: 'apps opened', v: num(w.authorizations) },
-          { k: 're-consents', v: num(w.consents) },
-          { k: 'people', v: num(w.people) },
+          { k: 'Passkey sign-ins', v: num(w.signIns) },
+          { k: 'Apps opened', v: num(w.authorizations) },
+          { k: 'Re-consents', v: num(w.consents) },
+          { k: 'People', v: num(w.people) },
         ]}
       />
 
@@ -60,7 +55,7 @@ export function SigningInBoard({
         empty="nothing in the window"
       />
       {d.daily.length > 0 && (
-        <p className={COLAXIS}>
+        <p className={AXIS}>
           <span>{d.daily[0]?.date.slice(5)}</span>
           <span>applications opened per day</span>
           <span>{d.daily[d.daily.length - 1]?.date.slice(5)}</span>
@@ -70,16 +65,22 @@ export function SigningInBoard({
       <AppList clients={d.clients} max={max} />
 
       {shared.length > 0 && (
-        <p className={FOOT}>
-          {/* A declared pair, not a duplicate — see `role` in data/signin.ts. */}
-          <b>{num(shared.length)}</b> registrations answer for one hostname (
-          {[...new Set(shared.map((c) => c.host ?? c.name))].join(', ')}), by design rather than as
-          a leftover: the proxy gate and the app&rsquo;s own login are different consumers with
-          different callbacks, and one client cannot hold both, because the generated one would
-          overwrite the hand-written callbacks on every rebuild. Each of the pair says which it is.
-          What is lost is attribution: both carry the same display name and the audit log records
-          only the name, so one count covers the pair and cannot be split.
-        </p>
+        <>
+          {/* A declared pair, not a duplicate — see `role` in data/signin.ts. The
+              count and the hostnames are a reading; why they pair folds. */}
+          <p className={CAPTION}>
+            <b>{num(shared.length)}</b> registrations answer for one hostname (
+            {[...new Set(shared.map((c) => c.host ?? c.name))].join(', ')}).
+          </p>
+          <p className={FOOT}>
+            By design rather than as a leftover: the proxy gate and the app&rsquo;s own login are
+            different consumers with different callbacks, and one client cannot hold both, because
+            the generated one would overwrite the hand-written callbacks on every rebuild. Each of
+            the pair says which it is. What is lost is attribution: both carry the same display name
+            and the audit log records only the name, so one count covers the pair and cannot be
+            split.
+          </p>
+        </>
       )}
 
       <p className={FOOT}>
@@ -93,8 +94,12 @@ export function SigningInBoard({
         in Pocket ID. A <b>re-consent</b> is not a first use: rewriting a client drops its stored
         consent, and the convergence job rewrites every one of them on every rebuild, so these mark
         where a rebuild made everybody agree again.
-        {d.truncated && ' The window is longer than the pages read, so these are a lower bound.'}
       </p>
+      {d.truncated && (
+        <p className={CAPTION}>
+          The window is longer than the pages read, so these are a lower bound.
+        </p>
+      )}
     </Board>
   )
 }
@@ -223,8 +228,11 @@ export function WhoBoard({ d }: { d: IdpData }) {
       <p className={FOOT}>
         A group is what an application restricts itself to, so an empty one is an application nobody
         can reach through it. A passkey belongs to a device, so the devices are the credentials. One
-        you do not recognise is the thing to notice here. Sign-ups are{' '}
-        <b>{d.signups ?? 'unknown'}</b>, read back from the IdP rather than restated here.
+        you do not recognise is the thing to notice here.
+      </p>
+      <p className={CAPTION}>
+        Sign-ups are <b>{d.signups ?? 'unknown'}</b>, read back from the IdP rather than restated
+        here.
       </p>
     </Board>
   )

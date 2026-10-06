@@ -12,6 +12,7 @@ import { INPUT_FORM } from '../../tokens'
 import { Button } from '../../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../../ui/field'
 import { Input } from '../../ui/input'
+import { GLASS } from '../../viz/board'
 import { GHOST_BTN } from '../shared'
 import { ScheduleField, type ScheduleMode, scheduleModeOf, scheduleOf } from './schedule'
 import type { TaskDraft } from './types'
@@ -98,12 +99,12 @@ export function TaskEditor({
   const commandTouched = args.length > 1 || command.some((a) => a !== '')
 
   return (
-    <li className="rounded-lg border border-primary/40 bg-card px-[1.05rem] py-[0.95rem]">
-      <div className="grid grid-cols-2 gap-x-[1.2rem] gap-y-[0.2rem] max-[46rem]:grid-cols-1">
-        <Field className="gap-[0.3rem] py-2">
+    <li className={cn(GLASS, 'rounded-xl border-foreground/15 px-4 py-4')}>
+      <div className="grid grid-cols-2 gap-x-5 gap-y-1 max-[46rem]:grid-cols-1">
+        <Field className="gap-1.5 py-2">
           <FieldLabel
             htmlFor={idField}
-            className="text-[0.76rem] font-normal text-muted-foreground"
+            className="text-[0.75rem] font-normal text-muted-foreground"
           >
             Id
           </FieldLabel>
@@ -123,9 +124,9 @@ export function TaskEditor({
             }}
           />
           {idErr !== null && id !== '' ? (
-            <FieldError className="text-[0.76rem] leading-[1.45]">{idErr}</FieldError>
+            <FieldError className="text-[0.75rem] leading-[1.5]">{idErr}</FieldError>
           ) : (
-            <FieldDescription className="text-[0.76rem] leading-[1.45]">
+            <FieldDescription className="text-[0.75rem] leading-[1.5]">
               {initial === undefined ? (
                 <>
                   Becomes{' '}
@@ -147,10 +148,10 @@ export function TaskEditor({
           )}
         </Field>
 
-        <Field className="gap-[0.3rem] py-2">
+        <Field className="gap-1.5 py-2">
           <FieldLabel
             htmlFor={timeoutField}
-            className="text-[0.76rem] font-normal text-muted-foreground"
+            className="text-[0.75rem] font-normal text-muted-foreground"
           >
             Timeout
           </FieldLabel>
@@ -167,9 +168,9 @@ export function TaskEditor({
             }}
           />
           {timeoutErr !== null ? (
-            <FieldError className="text-[0.76rem] leading-[1.45]">{timeoutErr}</FieldError>
+            <FieldError className="text-[0.75rem] leading-[1.5]">{timeoutErr}</FieldError>
           ) : (
-            <FieldDescription className="text-[0.76rem] leading-[1.45]">
+            <FieldDescription className="text-[0.75rem] leading-[1.5]">
               Seconds. <code>TimeoutStartSec</code> on the generated unit: a run still going at{' '}
               {timeoutText}s is killed and mailed as a failure.
             </FieldDescription>
@@ -179,13 +180,13 @@ export function TaskEditor({
 
       <ScheduleField app={app} mode={mode} onMode={setMode} custom={custom} onCustom={setCustom} />
 
-      <Field className="gap-[0.35rem] py-2">
-        <FieldLabel className="text-[0.76rem] font-normal text-muted-foreground">
+      <Field className="gap-1.5 py-2">
+        <FieldLabel className="text-[0.75rem] font-normal text-muted-foreground">
           Command (argv)
         </FieldLabel>
-        <ol className="m-0 flex list-none flex-col gap-[0.35rem] p-0">
+        <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
           {args.map((a, i) => (
-            <li key={a.key} className="flex items-center gap-[0.5rem]">
+            <li key={a.key} className="flex items-center gap-2">
               <span className="w-[1.1rem] shrink-0 text-right text-[0.72rem] text-muted-foreground">
                 {i + 1}
               </span>
@@ -221,7 +222,7 @@ export function TaskEditor({
             type="button"
             variant="outline"
             size="sm"
-            className={cn(GHOST_BTN, 'mt-[0.15rem]')}
+            className={cn(GHOST_BTN, 'mt-0.5')}
             onClick={() => {
               setArgs((prev) => [...prev, { key: nextKey, value: '' }])
               setNextKey((k) => k + 1)
@@ -231,9 +232,9 @@ export function TaskEditor({
           </Button>
         </div>
         {commandErr !== null && commandTouched ? (
-          <FieldError className="text-[0.76rem] leading-[1.45]">{commandErr}</FieldError>
+          <FieldError className="text-[0.75rem] leading-[1.5]">{commandErr}</FieldError>
         ) : (
-          <FieldDescription className="text-[0.76rem] leading-[1.45]">
+          <FieldDescription className="text-[0.75rem] leading-[1.5]">
             One argument per box, passed through exactly as typed — no shell, so nothing is split on
             spaces and nothing in an argument is interpreted. Runs as:{' '}
             <code className="[overflow-wrap:anywhere]">
@@ -243,7 +244,7 @@ export function TaskEditor({
         )}
       </Field>
 
-      <div className="mt-[0.7rem] flex flex-wrap items-center gap-[0.6rem]">
+      <div className="mt-3 flex flex-wrap items-center gap-2.5">
         <Button
           type="button"
           size="sm"
@@ -264,7 +265,7 @@ export function TaskEditor({
         >
           Cancel
         </Button>
-        <span className="text-[0.73rem] text-muted-foreground">
+        <span className="text-[0.75rem] text-muted-foreground">
           Saved to the registry; the unit appears on the next Apply.
         </span>
       </div>

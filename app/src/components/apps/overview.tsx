@@ -145,7 +145,7 @@ export function Overview({
               // capture uses (shot-deploy passes --viewport 1280x800), so a
               // fresh shot fits exactly and an older, taller one crops from
               // the top rather than squashing.
-              className="relative mb-[0.6rem] block aspect-16/10 overflow-hidden rounded-lg border bg-raised"
+              className="relative mb-3 block aspect-16/10 overflow-hidden rounded-xl border border-hairline bg-foreground/[0.04]"
               href={`/api/deploy-shot/${app.name}?v=${deployShot.v}`}
               target="_blank"
               rel="noreferrer"
@@ -165,7 +165,7 @@ export function Overview({
                 loading="lazy"
               />
               {!deployShot.ok && (
-                <span className="absolute top-2 right-2 rounded-full bg-danger px-[0.45rem] py-[0.1rem] text-[0.7rem] text-foreground">
+                <span className="absolute top-2 right-2 rounded-full bg-danger px-2 py-0.5 text-[0.72rem] font-[550] text-foreground">
                   page errored
                 </span>
               )}
@@ -316,13 +316,13 @@ export function Overview({
             {/* Columns rather than one stack: these are several short
                 rationales, not one long document, and full-width paragraphs in
                 a 12-span board leave most of the row empty. */}
-            <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-x-[1.8rem] gap-y-[0.9rem]">
+            <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-x-7 gap-y-4">
               {notes.map(([k, v]) => (
                 <div key={k} className="min-w-0">
-                  <dt className="text-[0.66rem] font-semibold tracking-[0.13em] text-muted-foreground uppercase">
-                    {k}
-                  </dt>
-                  <dd className="mt-1 mr-0 mb-0 ml-0 text-[0.88rem] text-subdued">{v}</dd>
+                  <dt className="text-[0.75rem] font-[550] text-muted-foreground">{k}</dt>
+                  <dd className="mt-1 mr-0 mb-0 ml-0 text-[0.875rem] leading-[1.55] text-subdued">
+                    {v}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -348,7 +348,7 @@ function RedeployButton({ name }: { name: string }) {
   })
 
   return (
-    <span className="inline-flex items-center gap-[0.6rem] text-[0.76rem]">
+    <span className="inline-flex items-center gap-2.5 text-[0.75rem]">
       {answer !== null && answer.outcome !== 'done' && (
         <span className="text-danger" title={answer.detail || undefined}>
           {answer.outcome === 'refused' ? answer.detail : 'the deploy failed'}

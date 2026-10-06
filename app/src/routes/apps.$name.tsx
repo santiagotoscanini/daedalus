@@ -1,13 +1,14 @@
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { ApplyBar } from '../components/apply-bar'
 import { SetupLine } from '../components/apps/setup-line'
-import { type AppRecord, CHIP, LEDE } from '../components/apps/shared'
+import { type AppRecord, CHIP, LEDE, SegmentPicker } from '../components/apps/shared'
 import { TabBody } from '../components/apps/tab-views'
-import { AppIcon, type AppState, Segmented, StatePill } from '../components/controls'
+import { AppIcon, type AppState, StatePill } from '../components/controls'
 import { Crumbs, PageHead } from '../components/page'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { useAction } from '../components/use-action'
 import { Chip } from '../components/viz'
+import { GLASS } from '../components/viz/board'
 // lib/access-window, NOT host/access. The window table is a value the picker
 // and validateSearch both need in the browser; host/access talks to Loki and
 // must never follow it there.
@@ -48,23 +49,25 @@ const TABS = APP_TABS
 /* The hero: identity on the left, exposure on the right. Below the rail
    breakpoint exposure becomes a full-width row under the title instead of a
    third column — at that width it was overflowing the card's right edge. */
-const HERO =
-  'mb-6 grid grid-cols-[auto_1fr_auto] items-start gap-5 rounded-xl border border-subtle bg-card px-6 py-[1.35rem] max-rail:grid-cols-[auto_minmax(0,1fr)] max-rail:gap-x-4 max-rail:gap-y-[0.9rem] max-rail:p-[1.1rem]'
+const HERO = cn(
+  GLASS,
+  'mb-6 grid grid-cols-[auto_1fr_auto] items-start gap-5 px-6 py-5 max-rail:grid-cols-[auto_minmax(0,1fr)] max-rail:gap-x-4 max-rail:gap-y-4 max-rail:p-4',
+)
 const HERO_ICON =
-  'grid size-[54px] place-items-center rounded-[12px] border bg-raised text-[1.4rem] text-muted-foreground max-rail:size-[42px] max-rail:text-[1.15rem]'
+  'grid size-[54px] place-items-center rounded-xl border border-hairline bg-foreground/[0.04] text-[1.4rem] text-muted-foreground max-rail:size-[42px] max-rail:text-[1.15rem]'
 const HERO_ICON_TONED =
-  'border-[color-mix(in_srgb,var(--tone)_30%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] text-(--tone)'
+  'border-[color-mix(in_oklch,var(--tone)_30%,transparent)] bg-[color-mix(in_oklch,var(--tone)_8%,transparent)] text-(--tone)'
 /** The two states that are verdicts. The rest get the frame's resting grey. */
 const ICON_TONE: Partial<Record<AppState, Tone>> = { running: 'ok', attention: 'bad' }
 const HERO_LINKS =
-  'mt-[0.65rem] mb-0 flex flex-wrap gap-x-[1.1rem] gap-y-[0.4rem] font-mono text-[0.85rem] max-[34rem]:flex-col max-[34rem]:gap-[0.35rem] max-[34rem]:[&>*]:wrap-anywhere'
-/* `Segmented` (components/controls.tsx) goes full-width below the rail
+  'mt-3 mb-0 flex flex-wrap gap-x-4 gap-y-1.5 font-mono text-[0.8rem] max-[34rem]:flex-col max-[34rem]:gap-1.5 max-[34rem]:[&>*]:wrap-anywhere'
+/* The exposure switch goes full-width below the rail
    breakpoint when it sits here — it sits alone in its own hero column — and
    the descendant rules are what tell it so, since it cannot know on its own. */
 const HERO_EXPOSURE =
   'text-right max-rail:col-span-full max-rail:text-left max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center'
 const EXPOSURE_NOTE =
-  'mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-muted-foreground'
+  'mt-2 mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.75rem] text-muted-foreground max-rail:ml-0 max-rail:text-left'
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
   // it is linkable ("look at argus's settings"), and it renders on the
@@ -174,14 +177,14 @@ function AppDetail() {
       <AppHero app={app} state={state} patch={patch} />
 
       {save.error !== null && (
-        <Alert variant="destructive" className="mb-[1.35rem]">
+        <Alert variant="destructive" className="mb-5">
           <AlertTitle>The change was not saved</AlertTitle>
           <AlertDescription>{save.error}</AlertDescription>
         </Alert>
       )}
 
       {readOnly && (
-        <Alert className="mb-[1.35rem] text-subdued">
+        <Alert className="mb-5 text-subdued">
           <AlertDescription>
             Declared by hand in <code>stacks/daedalus/daedalus.nix</code>, so it is read-only here.
             An Apply that broke this entry would take down the interface you would use to undo it.
@@ -237,7 +240,7 @@ function AppHero({
       </div>
 
       <div>
-        <h1 className="m-0 flex flex-wrap items-center gap-[0.65rem] text-[1.45rem] font-semibold tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
+        <h1 className="m-0 flex flex-wrap items-center gap-2.5 text-[1.5rem] font-[640] tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
           {app.name}
           <StatePill state={state} />
           {readOnly && <Chip className={cn(CHIP, 'text-subdued')}>nix-managed</Chip>}
@@ -268,8 +271,8 @@ function AppHero({
       </div>
 
       <div className={HERO_EXPOSURE}>
-        <span className="mb-[0.4rem] block text-[0.73rem] text-muted-foreground">exposure</span>
-        <Segmented
+        <span className="mb-2 block text-[0.75rem] text-muted-foreground">Exposure</span>
+        <SegmentPicker
           value={app.stage}
           disabled={readOnly}
           // The "exposure" text beside this is a bare span, not a <label>,

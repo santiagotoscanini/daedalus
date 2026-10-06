@@ -3,7 +3,8 @@ import type { NodeRow } from '../../../lib/repo/nodes'
 import { grantSantreeFn } from '../../../server/nodes'
 import { Button } from '../../ui/button'
 import { useAction } from '../../use-action'
-import { ERROR_NOTE, Mono, NOTE, Rows } from '../shared'
+import { INSET, NOTE_SHOWN } from '../form'
+import { ERROR_NOTE, Mono, Rows } from '../shared'
 
 // "Turn on santree": the one way santree is turned on for a machine, from
 // the card's switch or from the machine itself — a Mac's "santree on the box"
@@ -48,13 +49,8 @@ export function SantreeGrant({
   }
 
   return (
-    <div
-      ref={box}
-      role="dialog"
-      aria-labelledby={titleId}
-      className="flex flex-col gap-3 rounded-md border border-subtle p-3"
-    >
-      <h4 id={titleId} className="m-0 font-medium text-[0.92rem]">
+    <div ref={box} role="dialog" aria-labelledby={titleId} className={INSET}>
+      <h4 id={titleId} className="m-0 text-[0.875rem] [font-weight:560]">
         Turn on santree for {n.name}
       </h4>
       <Rows
@@ -65,14 +61,14 @@ export function SantreeGrant({
           { k: 'Node', v: <Mono>{n.id}</Mono> },
         ]}
       />
-      <p className={NOTE}>
+      <p className={NOTE_SHOWN}>
         santree on this machine can then open terminals and run commands on the box: a shell on the
         box, as its operator, who has root through sudo. Confirm only if you just asked for this
         from that machine.
       </p>
       {done !== null ? (
         <div className="flex flex-col gap-2">
-          <p className={NOTE}>{done}</p>
+          <p className={NOTE_SHOWN}>{done}</p>
           <div>
             <Button size="sm" variant="outline" onClick={onClose}>
               Close

@@ -64,7 +64,7 @@ export function RecordList({
         {records.map((r, i) => (
           <li
             key={rowKeys[i]}
-            className={cn(ROW, 'grid grid-cols-[minmax(6rem,16rem)_3.4rem_1fr] gap-[0.4rem]')}
+            className={cn(ROW, 'grid grid-cols-[minmax(6rem,16rem)_3.4rem_1fr] gap-2')}
           >
             <span className={cn(MAIN, MONO)}>{r.short}</span>
             <Chip tone="muted">{r.type}</Chip>

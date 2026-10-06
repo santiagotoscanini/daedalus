@@ -77,9 +77,9 @@ export function OpenWebUiView({ data }: { data: OpenWebUiData }) {
         >
           <Measures
             items={[
-              { k: 'models', v: String(counts.models) },
-              { k: 'tool servers', v: String(counts.tools) },
-              { k: 'knowledge', v: String(counts.knowledge) },
+              { k: 'Models', v: String(counts.models) },
+              { k: 'Tool servers', v: String(counts.tools) },
+              { k: 'Knowledge', v: String(counts.knowledge) },
             ]}
           />
 

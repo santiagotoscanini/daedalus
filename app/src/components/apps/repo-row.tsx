@@ -86,12 +86,10 @@ export function Derivation({
   return (
     // A left rule and an indent rather than another bordered panel: these are
     // consequences of the line above them, not a second thing to read.
-    <dl className="mt-[0.9rem] mr-0 mb-0 ml-0 grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-[0.35rem] border-l border-l-border py-[0.2rem] pr-0 pl-[1.1rem]">
+    <dl className="mt-4 mr-0 mb-0 ml-0 grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 border-hairline border-l py-1 pr-0 pl-4">
       {rows.map((r) => (
         <Fragment key={r.label}>
-          <dt className="text-[0.7rem] tracking-[0.13em] text-muted-foreground uppercase">
-            {r.label}
-          </dt>
+          <dt className="text-[0.75rem] text-muted-foreground">{r.label}</dt>
           <dd className="m-0 font-mono text-[0.86em] text-subdued wrap-anywhere">
             <Threaded value={r.value} token={name} />
           </dd>
@@ -130,10 +128,10 @@ function fmtWhen(iso: string): string {
   return `pushed ${iso.slice(0, 7)}`
 }
 
-export const REPO_CHIPS = 'flex items-baseline gap-[0.35rem]'
+export const REPO_CHIPS = 'flex items-baseline gap-1.5'
 
 export const REPO_DESC = 'min-w-0 truncate text-[0.85rem] text-subdued'
 
 export const REPO_META = 'text-right text-[0.78rem] whitespace-nowrap text-muted-foreground'
 
-export const REPO_NAME = 'min-w-0 truncate font-semibold'
+export const REPO_NAME = 'min-w-0 truncate font-[560]'

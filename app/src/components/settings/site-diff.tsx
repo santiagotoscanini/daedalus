@@ -7,12 +7,13 @@ import {
   type FoldedLine,
   foldUnchanged,
 } from '../../lib/text-diff'
+import { GLASS } from '../viz/board'
 import { Mono } from './shared'
 
 const SUMMARY = cn(
-  'flex min-w-0 cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2',
-  'text-[0.84rem] hover:bg-lifted [&::-webkit-details-marker]:hidden',
-  "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
+  'flex min-w-0 cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5',
+  'text-[0.84rem] transition-colors hover:bg-foreground/[0.04] [&::-webkit-details-marker]:hidden',
+  "before:text-[0.72rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
 )
 
@@ -43,10 +44,10 @@ export function SiteDiff({ edit }: { edit: SiteEdit }) {
   const { added, removed } = diffCounts(full)
   const diff = foldUnchanged(full, 3)
   return (
-    <details className="group overflow-hidden rounded-[9px] border border-subtle bg-card">
+    <details className={cn(GLASS, 'group overflow-hidden')}>
       <summary className={SUMMARY}>
         <span className="[font-weight:550]">Show what will be written</span>
-        <span className="text-[0.76rem] text-muted-foreground">
+        <span className="text-[0.75rem] text-muted-foreground">
           <Mono className="text-[0.74rem]">site/site.json</Mono> · {edit.changes.join(', ')} ·{' '}
           <span className="text-success">+{added}</span>{' '}
           <span className="text-danger">−{removed}</span>
@@ -55,7 +56,7 @@ export function SiteDiff({ edit }: { edit: SiteEdit }) {
           Nothing on the box changes until Apply rebuilds from it.
         </span>
       </summary>
-      <pre className="m-0 max-h-80 overflow-auto border-t border-subtle bg-raised px-3 py-2 font-mono text-[0.74rem] leading-[1.5]">
+      <pre className="m-0 max-h-80 overflow-auto border-hairline border-t bg-foreground/[0.025] px-4 py-2.5 font-mono text-[0.74rem] leading-[1.5]">
         {keyed(diff).map(({ key, line }) =>
           line.kind === 'fold' ? (
             <div key={key} className="-mx-1 flex gap-2 px-1 text-muted-foreground italic">
@@ -68,7 +69,7 @@ export function SiteDiff({ edit }: { edit: SiteEdit }) {
             <div
               key={key}
               className={cn(
-                '-mx-1 flex gap-2 rounded-[3px] px-1',
+                '-mx-1 flex gap-2 rounded-sm px-1',
                 line.kind === 'del' && 'bg-danger/10 text-danger',
                 line.kind === 'add' && 'bg-success/10 text-success',
               )}

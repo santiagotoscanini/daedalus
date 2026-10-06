@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import type { Account } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
 import type { ModuleManifest } from '../../lib/modules/manifest'
@@ -9,6 +9,7 @@ import { AccountMenu } from '../account-menu'
 import { NavIcon, type NavIconName } from '../nav-icon'
 import { Pulse } from '../viz'
 import { AppRail, type AppRailContext } from './app-rail'
+import { PaletteTrigger } from './command-palette'
 import {
   BRAND,
   ICON_BUTTON,
@@ -17,6 +18,7 @@ import {
   NAV_ITEM_ACTIVE,
   NAV_LABEL,
   NAV_LIST,
+  NAV_SECTION,
 } from './styles'
 
 // The rail: one body, two frames.
@@ -45,6 +47,8 @@ export type RailBodyProps = {
   theme: ThemeChoice
   collapsed: boolean
   onToggleCollapse: () => void
+  /** Opens the ⌘K palette (command-palette.tsx), which the shell owns. */
+  onOpenPalette: () => void
   /** The drawer's close button; the desktop column has none. */
   close?: ReactNode
 }
@@ -59,9 +63,10 @@ export function Rail(props: RailBodyProps) {
     // rail vanishing. The grid's first column is the room it takes.
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-20 flex w-(--sidebar-w) flex-col gap-[1.4rem]',
-        'border-r border-r-subtle bg-background px-[0.7rem] pt-[1.1rem] pb-[0.9rem]',
-        'nav-collapsed:px-[0.55rem] max-rail:hidden',
+        // Flush on the canvas, no border of its own: the content panel
+        // beside it is what is drawn, so the rail reads as chrome.
+        'fixed inset-y-0 left-0 z-20 flex w-(--sidebar-w) flex-col gap-2',
+        'px-3 pt-3 pb-3 nav-collapsed:px-2 max-rail:hidden',
       )}
     >
       <RailBody {...props} />
@@ -78,6 +83,7 @@ export function RailBody({
   theme,
   collapsed,
   onToggleCollapse,
+  onOpenPalette,
   close,
 }: RailBodyProps) {
   // Two kinds of entry. The directory is what this box RUNS, one row per
@@ -89,6 +95,7 @@ export function RailBody({
   return (
     <>
       <RailHead collapsed={collapsed} onToggleCollapse={onToggleCollapse} close={close} />
+      <PaletteTrigger onOpen={onOpenPalette} />
       {app !== null ? <AppRail app={app} /> : <DirectoryNav modules={directory} badges={badges} />}
       <FleetNav modules={fleet} badges={badges} path={path} account={account} theme={theme} />
     </>
@@ -110,15 +117,10 @@ function RailHead({
   close: ReactNode
 }) {
   return (
-    <div className="flex items-center gap-1.5 nav-collapsed:flex-col nav-collapsed:gap-2">
+    <div className="flex items-center gap-1 nav-collapsed:flex-col nav-collapsed:gap-2">
       <Link to="/apps" className={BRAND}>
-        <img src="/icon.svg" alt="" width={30} height={30} className="flex-none" />
-        <span className="nav-collapsed:hidden">
-          daedalus
-          <small className="block font-medium text-muted-foreground text-[0.62rem] tracking-[0.2em]">
-            workshop
-          </small>
-        </span>
+        <img src="/icon.svg" alt="" width={22} height={22} className="flex-none rounded-[6px]" />
+        <span className="truncate nav-collapsed:hidden">Daedalus</span>
       </Link>
 
       {/* Desktop only: `<` to collapse, `>` to expand. */}
@@ -157,13 +159,26 @@ function DirectoryNav({ modules, badges }: { modules: ModuleManifest[]; badges: 
         <span className={NAV_LABEL}>Apps</span>
       </Link>
 
-      <span className={NAV_DIVIDER} aria-hidden="true" />
-
-      {modules.map((m) => (
-        <ModuleRow key={m.id} module={m} badge={badges[m.id]} />
+      {sections(modules).map(([name, rows]) => (
+        <Fragment key={name}>
+          <span className={NAV_SECTION}>{name}</span>
+          {rows.map((m) => (
+            <ModuleRow key={m.id} module={m} badge={badges[m.id]} />
+          ))}
+        </Fragment>
       ))}
     </nav>
   )
+}
+
+/** Modules grouped by their manifest `section`, groups in order of first appearance. */
+function sections(modules: ModuleManifest[]): [string, ModuleManifest[]][] {
+  const groups = new Map<string, ModuleManifest[]>()
+  for (const m of modules) {
+    const name = m.section ?? 'Modules'
+    groups.set(name, [...(groups.get(name) ?? []), m])
+  }
+  return [...groups]
 }
 
 /**

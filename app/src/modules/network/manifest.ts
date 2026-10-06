@@ -5,6 +5,7 @@ export const manifest = {
   label: 'Network',
   lede: 'Everything between a packet and this box: the link, the ways in, the proxy, the resolver.',
   order: 50,
+  section: 'Infrastructure',
   boardSpans: [12, 12, 8, 4],
   // No tiles on any tab here: each would restate a number from the board
   // that explains it, one screen further down.

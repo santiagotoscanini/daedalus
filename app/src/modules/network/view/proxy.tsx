@@ -1,6 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Button } from '../../../components/ui/button'
 import type { Tone } from '../../../components/viz'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
@@ -10,7 +11,7 @@ import { stripBaseDomain } from '../../../lib/site'
 import { useSite } from '../../../lib/site-context'
 import type { NetworkData } from '../data'
 import { CertificatesBoard, EntrypointsBoard, TrafficBoard } from './proxy-boards'
-import { ACTION, FOOT, MAIN, MONO, N, NOTE, ROW, SUB } from './shared'
+import { CAPTION, FOOT, MAIN, MONO, N, NOTE, ROW, SUB } from './shared'
 
 // One page, one subject. The protection column is drawn from Pocket ID's
 // client list (see `loadProxy`), but a join is a reason for a column, not for
@@ -90,9 +91,11 @@ export function TraefikView({ data: d }: { data: ProxyData }) {
           </>
         }
         actions={
-          <a className={ACTION} href={d.dashboardUrl} target="_blank" rel="noreferrer">
-            Open the dashboard ↗
-          </a>
+          <Button asChild size="sm">
+            <a href={d.dashboardUrl} target="_blank" rel="noreferrer">
+              Open the dashboard ↗
+            </a>
+          </Button>
         }
       />
       <LinkRow
@@ -157,10 +160,10 @@ function PublishedBoard({
       }
     >
       {groups.map((g) => (
-        <section key={g.p} className="flex flex-col gap-[0.4rem] not-first:mt-[0.9rem]">
+        <section key={g.p} className="flex flex-col gap-1.5 not-first:mt-4">
           {/* The count belongs to the heading, so it sits on the baseline
               with it rather than pushing the row taller. */}
-          <h4 className={cn(SUB, 'flex items-center gap-[0.45rem]')}>
+          <h4 className={cn(SUB, 'flex items-center gap-2')}>
             {PROTECTION[g.p].title}
             <Chip tone={PROTECTION[g.p].tone}>{g.rows.length}</Chip>
           </h4>
@@ -168,7 +171,7 @@ function PublishedBoard({
               table. Columns as wide as the longest name and as many as
               fit, so the whole set is one glance — which is the only
               reading that answers "is anything unprotected". */}
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-2 gap-y-[0.22rem] p-0">
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-2 gap-y-1 p-0">
             {g.rows.map((r) => (
               <li key={r.host} className={ROW} title={r.via ?? undefined}>
                 <span className={cn(MAIN, MONO)}>{stripBaseDomain(site, r.host)}</span>
@@ -193,17 +196,16 @@ function PublishedBoard({
         through the tunnel is two routers for one thing. Read from the configuration traefik built,
         not from what the flake asked for, which is the point of looking. The count on the right is
         requests over {d.windowDays} days.
-        {counts.errors > 0 && (
-          <>
-            {' '}
-            <b>
-              {num(counts.errors)} piece{counts.errors === 1 ? '' : 's'} of configuration failed to
-              build.
-            </b>{' '}
-            A router that does not exist answers nothing, quietly.
-          </>
-        )}
       </p>
+      {counts.errors > 0 && (
+        <p className={CAPTION}>
+          <b>
+            {num(counts.errors)} piece{counts.errors === 1 ? '' : 's'} of configuration failed to
+            build.
+          </b>{' '}
+          A router that does not exist answers nothing, quietly.
+        </p>
+      )}
     </Board>
   )
 }

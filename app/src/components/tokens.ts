@@ -10,15 +10,13 @@
 // 0.76rem note. They stay beside the pages that want them.
 
 /** The small grey reading in a board's header. */
-export const NOTE = 'text-[0.73rem] text-muted-foreground'
+export const NOTE = 'text-[0.75rem] text-muted-foreground'
 
 /** A heading inside a board's body, between two groups of content. */
-export const SUB =
-  'mt-[0.35rem] -mb-[0.2rem] text-[0.73rem] font-[550] tracking-normal text-muted-foreground'
+export const SUB = 'mt-2 -mb-0.5 text-[0.75rem] font-[550] tracking-normal text-muted-foreground'
 
 /** A board header that carries a live dot beside its reading. */
-export const LIVE =
-  'inline-flex items-center gap-[0.35rem] text-[0.73rem] whitespace-nowrap text-subdued'
+export const LIVE = 'inline-flex items-center gap-1.5 text-[0.75rem] whitespace-nowrap text-subdued'
 
 /**
  * The caption under a board's content, without its ink.
@@ -28,14 +26,23 @@ export const LIVE =
  * utilities the winner is decided by source order in the emitted stylesheet,
  * not by the order they appear in the string.
  */
-export const FOOT_BASE = 'm-0 mt-[0.15rem] text-[0.73rem] leading-[1.45] [overflow-wrap:anywhere]'
+export const FOOT_BASE = 'm-0 mt-0.5 text-[0.78rem] leading-[1.55] [overflow-wrap:anywhere]'
 
-/** The caption under a board's content: what the numbers above it mean. */
-export const FOOT = `${FOOT_BASE} text-muted-foreground`
+/**
+ * The caption under a board's content: what the numbers above it mean.
+ *
+ * Prose, so it is folded behind the board's ⓘ (`explain` is the marker
+ * components/explain.tsx reveals). A caption that carries a live FACT — a
+ * time, a count, a state — is not this: use `CAPTION`, which stays visible.
+ */
+export const FOOT = `explain ${FOOT_BASE} max-w-[72ch] text-muted-foreground`
+
+/** A caption that is data rather than explanation: always visible. */
+export const CAPTION = `${FOOT_BASE} text-muted-foreground`
 
 /** "There is nothing to draw here", said out loud. */
 export const EMPTY =
-  'm-0 py-[0.9rem] text-center text-[0.8rem] text-muted-foreground [overflow-wrap:anywhere]'
+  'm-0 py-6 text-center text-[0.82rem] text-muted-foreground [overflow-wrap:anywhere]'
 
 /**
  * Monospace without a size, for slots whose own rule sets one — putting both
@@ -55,18 +62,18 @@ export const MONO = `${MONO_FACE} text-[0.86em]`
 
 /** The two dates under a column chart, and what is being counted. */
 export const AXIS =
-  'm-0 -mt-[0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] text-muted-foreground tabular-nums'
+  'm-0 -mt-1.5 flex justify-between gap-2.5 text-[0.7rem] text-muted-foreground tabular-nums'
 
 /* A flat list of named things: rows of a table, not a stack of pills. The
    hairline is on every row and removed from the first. Read by the System
    tabs, the Claude page and several module views. */
 export const LIST = 'flex flex-col'
 export const ROW =
-  'flex min-w-0 items-center gap-[0.45rem] border-subtle border-t px-[0.1rem] py-[0.34rem] text-[0.77rem] first:border-t-0'
+  'flex min-w-0 items-center gap-2 border-hairline border-t px-0.5 py-2 text-[0.8rem] first:border-t-0'
 /** The name takes the slack, so the detail is pushed right without a spacer. */
 export const ROW_MAIN = 'min-w-0 flex-auto truncate text-foreground'
 export const ROW_SIDE =
-  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
+  'min-w-0 max-w-[60%] flex-initial truncate text-[0.72rem] text-muted-foreground tabular-nums'
 export const ROW_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
 
 /* The three densities of `Input` (ui/input.tsx draws the field itself): a
@@ -76,3 +83,14 @@ export const INPUT_FORM = 'h-auto px-[0.65rem] py-[0.45rem] md:text-[0.87rem]'
 export const INPUT_MONO = 'h-auto px-[0.65rem] py-[0.4rem] font-mono md:text-[0.8rem]'
 export const INPUT_ROW =
   'h-auto rounded-[6px] px-[0.5rem] py-[0.25rem] text-[0.8rem] md:text-[0.8rem]'
+
+/* The segmented control: a glass track holding mutually exclusive options,
+   the chosen one a lit chip. TabBar (tabs.tsx) draws its row with these; a
+   filter row, a machine picker or a scheme switch uses the same three so
+   every "one of these" on the page looks like one control. */
+export const SEGMENT_TRACK =
+  'inline-flex max-w-full items-center gap-0.5 rounded-[12px] border border-hairline bg-surface p-[3px] shadow-[inset_0_1px_0_var(--hairline-hi)]'
+export const SEGMENT_ITEM =
+  'inline-flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-transparent px-3 py-[0.34rem] text-[0.82rem] text-muted-foreground no-underline transition-[background-color,color,box-shadow] duration-150 hover:bg-foreground/[0.04] hover:text-foreground hover:no-underline [&>svg]:opacity-70'
+export const SEGMENT_ITEM_ON =
+  'bg-card text-foreground [font-weight:550] shadow-[inset_0_1px_0_var(--hairline-hi),0_1px_3px_color-mix(in_oklch,var(--overlay)_14%,transparent)] hover:bg-card dark:bg-foreground/[0.09] dark:hover:bg-foreground/[0.09] [&>svg]:opacity-100'

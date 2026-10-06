@@ -37,3 +37,20 @@ export const fetchRailBadgesFn = readFn.handler(async ({ context }) => {
   const { railBadges } = await import('../host/rail-badges')
   return railBadges(await context.ctx())
 })
+
+/**
+ * What the ⌘K palette can jump to beyond the pages the rail already knows:
+ * the apps by name and the approved machines. Names only — the palette is a
+ * way to arrive somewhere, and the page it opens reads the rest.
+ */
+export const fetchPaletteFn = readFn.handler(async ({ context }) => {
+  const [{ listAppNames }, { listNodes }] = await Promise.all([
+    import('../lib/repo/apps'),
+    import('../lib/repo/nodes'),
+  ])
+  const [apps, nodes] = await Promise.all([listAppNames(), listNodes(await context.ctx())])
+  return {
+    apps,
+    machines: nodes.filter((n) => n.state === 'approved').map((n) => ({ id: n.id, name: n.name })),
+  }
+})

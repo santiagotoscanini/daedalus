@@ -1,9 +1,10 @@
 import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { KeyRoundIcon } from 'lucide-react'
 import { useId, useState } from 'react'
-import { PageHead } from '../components/page'
-import { ERROR_NOTE, FIELD_LABEL, Mono, NOTE, PANEL } from '../components/settings/shared'
+import { NOTE_SHOWN } from '../components/settings/form'
+import { ERROR_NOTE, FIELD_LABEL, Mono } from '../components/settings/shared'
 import { Button } from '../components/ui/button'
+import { Card, CardContent, CardHeader } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { useAction } from '../components/use-action'
 import {
@@ -24,6 +25,9 @@ import {
 // setup: the token the server printed to its journal, plus the username and
 // password to create. After that it is a login. The server decides which by
 // its own state, not by anything the page sends.
+
+/** A label above its field. */
+const FIELD = 'flex flex-col gap-1.5'
 
 export const Route = createFileRoute('/login')({
   loader: async () => {
@@ -63,82 +67,107 @@ function LoginPage() {
     run(() => localLogoutFn())
   }
 
+  const setup = state.mode === 'setup'
+
   return (
-    <div className="mx-auto flex max-w-[28rem] flex-col gap-6">
-      <PageHead title={state.mode === 'setup' ? 'Create the first admin' : 'Local sign-in'}>
-        {state.mode === 'setup'
-          ? 'No local admin exists yet. The setup token was printed to the server journal at its last start.'
-          : 'The break-glass door: a password, for when the identity provider is not there.'}
-      </PageHead>
-
-      {state.signedInAs !== null && (
-        <div className={PANEL}>
-          <p className={NOTE}>
-            Signed in as <Mono>local:{state.signedInAs}</Mono>.
-          </p>
-          <div>
-            <Button variant="outline" size="sm" disabled={busy} onClick={signOut}>
-              Sign out
-            </Button>
+    // A card centred on the canvas: the first thing anyone sees, so it is
+    // the one page drawn as a single object — the mark, the title, the form.
+    <div className="flex min-h-[calc(100dvh-10rem)] items-center justify-center py-10">
+      <Card className="w-full max-w-[24rem] gap-6 py-7">
+        <CardHeader className="justify-items-center gap-3 text-center">
+          <img
+            src="/icon.svg"
+            alt=""
+            width={44}
+            height={44}
+            className="size-11 rounded-[11px] shadow-[inset_0_1px_0_var(--hairline-hi)]"
+          />
+          <div className="flex flex-col gap-1.5">
+            <h1 className="m-0 text-[1.25rem] leading-tight tracking-[-0.02em] [font-weight:620]">
+              {setup ? 'Create the first admin' : 'Local sign-in'}
+            </h1>
+            <p className="m-0 text-[0.82rem] text-muted-foreground leading-relaxed">
+              {setup
+                ? 'No local admin exists yet. The setup token was printed to the server journal at its last start.'
+                : 'The break-glass door: a password, for when the identity provider is not there.'}
+            </p>
           </div>
-        </div>
-      )}
+        </CardHeader>
 
-      <form
-        className={PANEL}
-        onSubmit={(e) => {
-          e.preventDefault()
-          submit()
-        }}
-      >
-        <span className="inline-flex items-center gap-2 font-medium text-[0.82rem]">
-          <KeyRoundIcon className="size-4 text-subdued" />
-          {state.mode === 'setup' ? 'Setup' : 'Sign in'}
-        </span>
-        {state.mode === 'setup' && (
-          <>
-            <label className={FIELD_LABEL} htmlFor={ids.token}>
-              Setup token
-            </label>
-            <Input
-              id={ids.token}
-              value={token}
-              autoComplete="off"
-              placeholder="dsetup_…"
-              onChange={(e) => setToken(e.target.value)}
-            />
-          </>
-        )}
-        <label className={FIELD_LABEL} htmlFor={ids.user}>
-          Username
-        </label>
-        <Input
-          id={ids.user}
-          value={username}
-          autoComplete="username"
-          onChange={(e) => setUsername(e.target.value)}
-        />
-        <label className={FIELD_LABEL} htmlFor={ids.pass}>
-          Password
-        </label>
-        <Input
-          id={ids.pass}
-          type="password"
-          value={password}
-          autoComplete={state.mode === 'setup' ? 'new-password' : 'current-password'}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        {error !== null && <p className={ERROR_NOTE}>{error}</p>}
-        <div>
-          <Button type="submit" size="sm" disabled={busy || username === '' || password === ''}>
-            {state.mode === 'setup' ? 'Create admin and sign in' : 'Sign in'}
-          </Button>
-        </div>
-        <p className={NOTE}>
-          Writes made from this session are recorded as <Mono>local:&lt;username&gt;</Mono>, and a
-          local admin is implicitly in <Mono>admins</Mono>.
-        </p>
-      </form>
+        <CardContent className="flex flex-col gap-5">
+          {state.signedInAs !== null && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2.5">
+              <p className={NOTE_SHOWN}>
+                Signed in as <Mono>local:{state.signedInAs}</Mono>.
+              </p>
+              <Button variant="outline" size="sm" disabled={busy} onClick={signOut}>
+                Sign out
+              </Button>
+            </div>
+          )}
+
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submit()
+            }}
+          >
+            {setup && (
+              <div className={FIELD}>
+                <label className={FIELD_LABEL} htmlFor={ids.token}>
+                  Setup token
+                </label>
+                <Input
+                  id={ids.token}
+                  value={token}
+                  autoComplete="off"
+                  placeholder="dsetup_…"
+                  className="font-mono"
+                  onChange={(e) => setToken(e.target.value)}
+                />
+              </div>
+            )}
+            <div className={FIELD}>
+              <label className={FIELD_LABEL} htmlFor={ids.user}>
+                Username
+              </label>
+              <Input
+                id={ids.user}
+                value={username}
+                autoComplete="username"
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+            <div className={FIELD}>
+              <label className={FIELD_LABEL} htmlFor={ids.pass}>
+                Password
+              </label>
+              <Input
+                id={ids.pass}
+                type="password"
+                value={password}
+                autoComplete={setup ? 'new-password' : 'current-password'}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            {error !== null && <p className={ERROR_NOTE}>{error}</p>}
+            <Button
+              type="submit"
+              className="mt-1 w-full"
+              disabled={busy || username === '' || password === ''}
+            >
+              <KeyRoundIcon aria-hidden="true" />
+              {setup ? 'Create admin and sign in' : 'Sign in'}
+            </Button>
+          </form>
+
+          <p className="m-0 border-hairline border-t pt-4 text-center text-[0.75rem] text-muted-foreground leading-relaxed">
+            Writes made from this session are recorded as <Mono>local:&lt;username&gt;</Mono>, and a
+            local admin is implicitly in <Mono>admins</Mono>.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   )
 }

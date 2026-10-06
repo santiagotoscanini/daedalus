@@ -21,18 +21,18 @@ import type { GamingData } from '../data'
 
 type Row = Extract<GamingData, { tab: 'minecraft' }>['roster'][number]
 
-const LIST = 'm-0 flex list-none flex-col gap-[0.3rem] p-0'
+const LIST = 'm-0 flex list-none flex-col p-0'
 const ROW = cn(
-  'grid min-w-0 grid-cols-[2rem_1fr_auto] items-center gap-x-[0.7rem] gap-y-[0.3rem]',
-  'rounded-[8px] bg-raised px-[0.55rem] py-[0.45rem]',
+  'grid min-w-0 grid-cols-[2rem_1fr_auto] items-center gap-x-3 gap-y-1',
+  'border-hairline border-t px-0.5 py-2.5 first:border-t-0',
 )
-const HEAD = 'size-8 rounded-[5px] [image-rendering:pixelated]'
+const HEAD = 'size-8 rounded-md [image-rendering:pixelated]'
 const HEAD_BLANK = cn(
   HEAD,
-  'grid place-items-center bg-card text-[0.8rem] font-semibold text-muted-foreground',
+  'grid place-items-center bg-foreground/[0.06] text-[0.8rem] font-semibold text-muted-foreground',
 )
-const META = `${NOTE} flex flex-wrap gap-x-[0.6rem] gap-y-[0.1rem]`
-const SIDE = 'flex flex-wrap items-center justify-end gap-[0.5rem]'
+const META = `${NOTE} flex flex-wrap gap-x-2.5 gap-y-0.5`
+const SIDE = 'flex flex-wrap items-center justify-end gap-2'
 const INPUT = cn(INPUT_MONO, 'w-[13rem] max-w-full')
 
 export function RosterBoard({ rows }: { rows: Row[] }) {
@@ -84,8 +84,8 @@ function PlayerRow({ r }: { r: Row }) {
       )}
 
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-[0.45rem]">
-          <span className={cn('text-[0.85rem] font-medium', removing && 'line-through')}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cn('text-[0.875rem] font-medium', removing && 'line-through')}>
             {r.name}
           </span>
           {r.state === 'adding' && <Chip tone="info">joins on Apply</Chip>}
@@ -118,7 +118,7 @@ function PlayerRow({ r }: { r: Row }) {
 
       <div className={SIDE}>
         {!removing && (
-          <span className={cn(NOTE, 'flex items-center gap-[0.4rem]')}>
+          <span className={cn(NOTE, 'flex items-center gap-1.5')}>
             op
             <Switch
               aria-label={`${r.name} may run commands`}
@@ -185,7 +185,7 @@ function AddPlayer() {
   }
 
   return (
-    <form onSubmit={submit} className="mt-[0.6rem] flex flex-wrap items-center gap-[0.6rem]">
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-2.5">
       <Input
         className={INPUT}
         value={name}
@@ -198,7 +198,7 @@ function AddPlayer() {
         autoComplete="off"
         onChange={(e) => setName(e.target.value)}
       />
-      <span className={cn(NOTE, 'flex items-center gap-[0.4rem]')}>
+      <span className={cn(NOTE, 'flex items-center gap-1.5')}>
         op
         <Switch aria-label="Add as op" checked={op} disabled={busy} onCheckedChange={setOp} />
       </span>

@@ -7,7 +7,8 @@ import { bytes, duration, since } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
 import { Ago } from '../../ago'
 import { Chip } from '../../viz'
-import { ASIDE, ERROR_NOTE, Line, Mono, NOTE, Section } from '../shared'
+import { NOTE_SHOWN } from '../form'
+import { ASIDE, ERROR_NOTE, Line, Mono, Section } from '../shared'
 import { Decision } from './decision'
 import { Policy } from './policy'
 
@@ -245,7 +246,7 @@ export function MachineSection({
       }
       rows={facts}
     >
-      {s?.hold_error != null && <p className={NOTE}>The hold failed: {s.hold_error}</p>}
+      {s?.hold_error != null && <p className={ERROR_NOTE}>The hold failed: {s.hold_error}</p>}
       <TrustNote link={s?.controller ?? null} />
       <Decision m={m} />
       {n.state === 'approved' && (
@@ -316,7 +317,7 @@ export function PendingSection({
         },
       ]}
     >
-      <p className={NOTE}>
+      <p className={NOTE_SHOWN}>
         The machine's tray and status page show both keys. Approve only if they match what it shows:
         its own, and the controller's it trusts.
       </p>

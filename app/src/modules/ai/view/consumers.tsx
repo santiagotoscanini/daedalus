@@ -1,4 +1,4 @@
-import { FOOT, LIST, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../../../components/tokens'
+import { CAPTION, FOOT, LIST, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
 import { Board, BoardGrid } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { ConsumersData } from '../data/consumers'
@@ -9,6 +9,10 @@ import { OpenWebUiView } from './open-webui'
 // pages they had, one under the other; the apps that hold a key are a
 // list, since each has a page of its own.
 
+/* A heading between the stacked service pages: quiet, with the air of a
+   section break above it. */
+const SECTION = 'm-0 mt-8 mb-3 text-[0.8rem] text-muted-foreground [font-weight:550]'
+
 export function ConsumersView({ data }: { data: ConsumersData }) {
   return (
     <>
@@ -17,10 +21,10 @@ export function ConsumersView({ data }: { data: ConsumersData }) {
           title="Apps holding a gateway key"
           icon="rows"
           span={12}
-          aside={<span className={FOOT}>{num(data.apps.length)} of the box's apps</span>}
+          aside={<span className={NOTE}>{num(data.apps.length)} of the box's apps</span>}
         >
           {data.apps.length === 0 ? (
-            <p className={FOOT}>No app on this box asked for a gateway key.</p>
+            <p className={CAPTION}>No app on this box asked for a gateway key.</p>
           ) : (
             <ul className={LIST}>
               {data.apps.map((a) => (
@@ -40,13 +44,13 @@ export function ConsumersView({ data }: { data: ConsumersData }) {
 
       {data.openWebui !== null && (
         <section>
-          <p className={`${SUB} mt-[1.2rem] mb-[0.6rem]`}>Open WebUI — the chat window</p>
+          <p className={SECTION}>Open WebUI — the chat window</p>
           <OpenWebUiView data={data.openWebui} />
         </section>
       )}
       {data.n8n !== null && (
         <section>
-          <p className={`${SUB} mt-[1.2rem] mb-[0.6rem]`}>
+          <p className={SECTION}>
             n8n — workflows that call a model through the gateway, on the key its own page shows.
           </p>
           <N8nView data={data.n8n} />

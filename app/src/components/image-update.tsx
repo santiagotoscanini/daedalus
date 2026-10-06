@@ -52,13 +52,12 @@ const PHASES = [
   'pushing',
 ] as const
 
-const NOTE = 'text-[0.76rem] text-muted-foreground'
+const NOTE = 'm-0 text-[0.78rem] text-muted-foreground'
 
 /* The confirmation gate, drawn as a warning rather than as a form: its job is
    to interrupt, and the blast radius sentence above the input is the reason it
    exists — the typing is only what makes the interruption deliberate. */
-const CEREMONY =
-  'w-full rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem]'
+const CEREMONY = 'w-full rounded-xl border border-warning/40 bg-warning/8 px-3 py-2.5'
 
 /** Everything the control needs, and nothing a caller cannot already answer. */
 type UpdateTarget = {
@@ -163,7 +162,7 @@ export function UpdateControl({
         {status.commit === null || status.commit === ''
           ? 'Nothing was committed.'
           : 'The change was reverted and the system rebuilt onto the previous pin.'}
-        <pre className="mt-[0.4rem] max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
+        <pre className="mt-1.5 mb-2 max-h-28 overflow-auto whitespace-pre-wrap text-[0.75rem] text-danger">
           {status.error}
         </pre>
         <Button type="button" variant="outline" size="sm" onClick={() => router.invalidate()}>
@@ -179,7 +178,7 @@ export function UpdateControl({
 
   if (mine && status.state === 'done') {
     return (
-      <div className="flex flex-wrap items-center gap-[0.6rem]">
+      <div className="flex flex-wrap items-center gap-2.5">
         <Chip tone="ok">{status.phase === 'no-change' ? 'already there' : 'updated'}</Chip>
         <Moves status={status} />
         {status.commit !== null && status.commit !== '' && (
@@ -194,7 +193,7 @@ export function UpdateControl({
   if (nothingToDo) return <p className={NOTE}>Nothing newer published.</p>
 
   return (
-    <div className="flex flex-col items-start gap-[0.55rem]">
+    <div className="flex flex-col items-start gap-2.5">
       {/* The chain, stated before the button rather than after: a lockstep
           group moves containers the operator did not pick, and finding that
           out from a commit message afterwards is not consent. */}
@@ -211,7 +210,7 @@ export function UpdateControl({
           <Picker
             aria-label="Target tag"
             mono
-            className="w-auto text-[0.76rem] data-[size=default]:h-8"
+            className="w-auto text-[0.78rem] data-[size=default]:h-8"
             value={to ?? ''}
             onChange={(v) => {
               setChosen(v)
@@ -232,14 +231,14 @@ export function UpdateControl({
 
       {ceremony !== null && (
         <div className={CEREMONY}>
-          <p className="mb-2 text-[0.78rem] text-subdued">
+          <p className="mt-0 mb-2 text-[0.78rem] text-foreground">
             <strong>{t.container}</strong> {ceremony}.
           </p>
           <TypedConfirm name={t.container} value={typed} onChange={setTyped} />
         </div>
       )}
 
-      {refusal !== null && <p className="text-danger">{refusal}</p>}
+      {refusal !== null && <p className="m-0 text-[0.8rem] text-danger">{refusal}</p>}
 
       {queue?.blockedBy != null && (
         <p className={NOTE}>
@@ -325,20 +324,20 @@ export function UpdateProgress({ status }: { status: ImageUpdateStatus }) {
   const at = PHASES.indexOf(status.phase as (typeof PHASES)[number])
   return (
     <div>
-      <ol className="inline-flex gap-[0.85rem] text-[0.78rem] text-muted-foreground">
+      <ol className="m-0 inline-flex flex-wrap list-none gap-x-3.5 gap-y-1 p-0 text-[0.78rem] text-muted-foreground">
         {PHASES.map((p, i) => (
           <li
             key={p}
             className={cn(
-              p === status.phase && 'font-semibold text-primary',
-              i < at && 'text-subdued line-through',
+              p === status.phase && 'text-foreground [font-weight:600]',
+              i < at && 'text-muted-foreground/70 line-through',
             )}
           >
             {p}
           </li>
         ))}
         {at === -1 && status.phase !== '' && (
-          <li className="font-semibold text-primary">{status.phase}</li>
+          <li className="text-foreground [font-weight:600]">{status.phase}</li>
         )}
       </ol>
       <Moves status={status} />
@@ -358,13 +357,10 @@ function Moves({ status }: { status: ImageUpdateStatus }) {
   if (status.moves.length === 0) return null
 
   return (
-    <ul className="mt-2 flex flex-col gap-[0.2rem] text-[0.74rem]">
+    <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0 text-[0.75rem]">
       {status.moves.map((m) => (
-        <li
-          key={m.container}
-          className={cn('flex gap-[0.6rem]', !m.changed && 'text-muted-foreground')}
-        >
-          <span className="min-w-[11rem] text-subdued">{m.container}</span>
+        <li key={m.container} className={cn('flex gap-2.5', !m.changed && 'text-muted-foreground')}>
+          <span className="min-w-[11rem] text-foreground">{m.container}</span>
           <span className={MONO}>
             {m.fromTag}
             {m.changed ? ` → ${m.toTag}` : ' — already there'}

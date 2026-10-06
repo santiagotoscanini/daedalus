@@ -2,15 +2,16 @@
 
 import { Link } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
+import { cn } from '../../lib/cn'
 import { PLATFORMS } from '../../lib/external-apps'
 import { APP_STAGES, type AppStage, STAGE_LABEL } from '../../lib/stage'
 import type { fetchAppsTab } from '../../routes/apps.index'
 import { ApplyBar } from '../apply-bar'
-import { AppIcon, type AppState, Segmented, StateDot } from '../controls'
+import { AppIcon, type AppState, StateDot } from '../controls'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { AppRow, ExternalRow, PLATFORM_ICONS } from './app-card'
-import { SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
+import { SECTION_HEAD, SECTION_HEAD_SMALL, SegmentPicker } from './shared'
 
 type ListData = Awaited<ReturnType<typeof fetchAppsTab>>
 export type Row = ListData['apps'][number]
@@ -24,12 +25,15 @@ export type ExternalEntry = ListData['external'][number]
    Exported for `RowsSkeleton`, so the placeholder reserves this grid and not
    an approximation of it. */
 export const APP_LIST =
-  'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-[0.8rem] p-0'
+  'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-4 p-0'
 
 const TALLIES =
-  'mb-[1.1rem] flex flex-wrap items-center gap-x-[1.6rem] gap-y-2 text-[0.88rem] text-subdued max-[34rem]:gap-x-4 max-[34rem]:gap-y-[0.4rem]'
-const TALLY = 'inline-flex items-center gap-[0.45rem]'
-const TALLY_COUNT = 'font-semibold text-foreground'
+  'mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.85rem] text-subdued max-[34rem]:gap-x-4'
+const TALLY = 'inline-flex items-center gap-2'
+const TALLY_COUNT = 'font-[560] text-foreground tabular-nums'
+
+/** The search field and the two filters: one row, one height (the Button's). */
+const FILTERS = 'mb-8 flex flex-wrap items-center gap-2.5'
 
 export function AppsList({ data }: { data: ListData }) {
   const { apps, applyStatus, external, offboxStatus } = data
@@ -126,9 +130,9 @@ export function AppsList({ data }: { data: ListData }) {
         </Button>
       </div>
 
-      <div className="mb-[1.3rem] flex flex-wrap gap-[0.6rem]">
+      <div className={FILTERS}>
         <Input
-          className="flex-[1_1_15rem]"
+          className="h-8.5 flex-[1_1_15rem] md:text-[0.82rem]"
           type="search"
           placeholder="Search apps…"
           value={search}
@@ -136,7 +140,7 @@ export function AppsList({ data }: { data: ListData }) {
             setSearch(e.target.value)
           }}
         />
-        <Segmented
+        <SegmentPicker
           value={state}
           onChange={setState}
           label="Filter by state"
@@ -147,7 +151,7 @@ export function AppsList({ data }: { data: ListData }) {
             { value: 'stopped', label: 'stopped' },
           ]}
         />
-        <Segmented
+        <SegmentPicker
           value={exposure}
           onChange={setExposure}
           label="Filter by exposure"
@@ -161,6 +165,7 @@ export function AppsList({ data }: { data: ListData }) {
       <SectionHead
         icon={<AppIcon name="daedalus" hasIcon={selfHasIcon} size={15} />}
         title="Daedalus"
+        first
         sub="deployed, watched and managed on this box"
       />
       <ul className={APP_LIST}>
@@ -168,7 +173,9 @@ export function AppsList({ data }: { data: ListData }) {
           <AppRow key={r.name} row={r} />
         ))}
         {managed.length === 0 && (
-          <li className="py-10 text-muted-foreground">No apps match that filter.</li>
+          <li className="col-span-full py-10 text-center text-[0.85rem] text-muted-foreground">
+            No apps match that filter.
+          </li>
         )}
       </ul>
 
@@ -203,7 +210,7 @@ export function AppsList({ data }: { data: ListData }) {
           <div key={p.id}>
             <SectionHead icon={PLATFORM_ICONS[p.id]} title={p.id} sub={p.description} />
             {notes.length > 0 && (
-              <ul className="m-0 mb-[0.8rem] list-none p-0 text-[0.82rem] text-subdued">
+              <ul className="m-0 mb-4 flex list-none flex-col gap-1.5 p-0 text-[0.8rem] text-subdued">
                 {notes.map((n) => (
                   <li
                     key={`${n.account ?? ''}:${n.detail ?? ''}`}
@@ -211,7 +218,9 @@ export function AppsList({ data }: { data: ListData }) {
                   >
                     <StateDot state={n.state === 'error' ? 'attention' : 'unknown'} />
                     <span>
-                      {n.account !== null && <b className="font-medium">{n.account}: </b>}
+                      {n.account !== null && (
+                        <b className="font-[560] text-foreground">{n.account}: </b>
+                      )}
                       {n.detail}
                       {n.state !== 'error' && (
                         <>
@@ -242,12 +251,23 @@ export function AppsList({ data }: { data: ListData }) {
   )
 }
 
-function SectionHead({ icon, title, sub }: { icon: ReactNode; title: string; sub: string }) {
+function SectionHead({
+  icon,
+  title,
+  sub,
+  first = false,
+}: {
+  icon: ReactNode
+  title: string
+  sub: string
+  /** The head right under the filters: no rule above it, the filters are the break. */
+  first?: boolean
+}) {
   return (
-    <h2 className={SECTION_HEAD}>
+    <h2 className={cn(SECTION_HEAD, first && 'mt-0 border-t-0 pt-0')}>
       {/* Centred by hand because the head aligns its text on the baseline,
           which an image does not have. */}
-      <span className="inline-flex self-center text-subdued" aria-hidden="true">
+      <span className="inline-flex self-center text-muted-foreground" aria-hidden="true">
         {icon}
       </span>
       {title}

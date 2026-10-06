@@ -5,6 +5,7 @@ import type { SiteEdit } from '../../core/site'
 import { mailAddressError } from '../../lib/site-fields'
 import { Ago, When } from '../ago'
 import { Identified, ReplaceToken, Token } from './cloudflare'
+import { NOTE_SHOWN } from './form'
 import { GithubApp, type GithubAppProps } from './github-app'
 import { Installations } from './installations'
 import { ExtLink, Mono, Pending, Section, Stack, Unset, Value } from './shared'
@@ -47,7 +48,7 @@ export function Integrations({
   const cf = settings.cloudflare
   const gh = settings.github
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <SiteUnwritten edit={edit} />
 
       <Section
@@ -88,7 +89,7 @@ export function Integrations({
         ]}
       >
         <ReplaceToken />
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE_SHOWN}>
           One token does all of it: Zone › Zone › Read and Zone › DNS › Edit for the certificate,
           the tunnel's records, the dynamic address and the domain picker, and Account › Cloudflare
           One Connector: cloudflared › Read for the tunnel. The zone and tunnel names are read with

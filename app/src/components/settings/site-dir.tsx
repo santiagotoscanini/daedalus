@@ -8,7 +8,8 @@ import { Skeleton } from '../ui/skeleton'
 import { Switch } from '../ui/switch'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
-import { Mono, NOTE, Section, Value } from './shared'
+import { NOTE_SHOWN } from './form'
+import { Mono, NOTE, Rows, Section, Value } from './shared'
 import { type SelectGroupSpec, SiteSelect } from './site-fields'
 
 /* ── The site directory ────────────────────────────────────────────────── */
@@ -24,7 +25,7 @@ function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) 
   const versioned = dir.toplevel !== null
 
   return (
-    <div className="flex flex-col gap-3 border-subtle border-t pt-4">
+    <div className="flex flex-col gap-3 border-hairline border-t pt-4">
       <p className="m-0 text-[0.82rem] leading-[1.55]">
         {!dir.exists ? (
           <>
@@ -99,11 +100,15 @@ function CommitAs({ edit, git }: { edit: SiteEdit; git: GitIdentities }) {
     },
   ]
   return (
-    <div className="flex flex-col gap-2 border-subtle border-t pt-4">
-      <div className="flex flex-wrap items-center gap-3 text-[0.82rem]">
-        <span>Commit as</span>
-        <SiteSelect edit={edit} field="commits.author" label="Commit as" groups={groups} />
-      </div>
+    <div className="flex flex-col gap-3 border-hairline border-t pt-4">
+      <Rows
+        rows={[
+          {
+            k: 'Commit as',
+            v: <SiteSelect edit={edit} field="commits.author" label="Commit as" groups={groups} />,
+          },
+        ]}
+      />
       <p className={NOTE}>
         Every commit daedalus makes — an Apply, a secret, an image or engine update — is authored as
         this identity, whoever pressed the button; the person is still named in the commit's body.
@@ -174,28 +179,30 @@ function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
     )
   }
   return (
-    <div className="flex flex-col gap-2">
-      {site.files.map((file) => (
-        <div
-          key={file.name}
-          className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
-        >
-          <Mono>{file.name}</Mono>
-          <span className="inline-flex items-center gap-2">
-            {file.current === false && <Chip tone="warn">differs</Chip>}
-            {file.current === true && <Chip tone="ok">current</Chip>}
-            <Chip tone={STATUS_TONE[file.status]}>{file.status}</Chip>
-          </span>
-        </div>
-      ))}
+    <div className="flex flex-col gap-3">
+      <ul className="m-0 flex list-none flex-col p-0">
+        {site.files.map((file) => (
+          <li
+            key={file.name}
+            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-hairline border-t py-2 first:border-t-0 first:pt-0"
+          >
+            <Mono>{file.name}</Mono>
+            <span className="inline-flex items-center gap-2">
+              {file.current === false && <Chip tone="warn">differs</Chip>}
+              {file.current === true && <Chip tone="ok">current</Chip>}
+              <Chip tone={STATUS_TONE[file.status]}>{file.status}</Chip>
+            </span>
+          </li>
+        ))}
+      </ul>
       {site.files.some((f) => f.status === 'untracked') && (
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE_SHOWN}>
           An untracked file is invisible to a rebuild. This should not happen — daedalus stages what
           it writes — so something else put it there, or a <Mono>git reset</Mono> undid the add.
         </p>
       )}
       {site.files.some((f) => f.current === false) && (
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE_SHOWN}>
           {/* Named, not assumed: two files are compared now, and telling the
               operator site.json differs when it is the README that does sends
               them looking in the wrong file. */}
@@ -210,7 +217,7 @@ function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
         </p>
       )}
       {site.files.find((f) => f.name === 'apps.json')?.status === 'absent' && (
-        <p className="m-0 text-[0.78rem] text-subdued">
+        <p className={NOTE_SHOWN}>
           <Mono>apps.json</Mono> is written only by an Apply, and from here only once nix reads the
           registry from this directory.
         </p>

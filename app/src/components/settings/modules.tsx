@@ -20,11 +20,11 @@ function Row({ m }: { m: ModuleSwitch }) {
       <span className={ROW_MAIN}>
         <span className={MONO}>{m.id}</span>
         {pending && (
-          <span className="ml-[0.5rem]">
+          <span className="ml-2">
             <Chip tone="warn">{m.desired ? 'on after Apply' : 'off after Apply'}</Chip>
           </span>
         )}
-        {refused !== null && <span className="ml-[0.4rem] text-danger">{refused}</span>}
+        {refused !== null && <span className="ml-1.5 text-danger">{refused}</span>}
       </span>
       <span className={ROW_SIDE}>
         {m.hostnames.length > 0
@@ -36,7 +36,7 @@ function Row({ m }: { m: ModuleSwitch }) {
       <ServiceSettingsButton ids={[m.id]} size="xs" />
       {m.structural ? (
         <span
-          className="min-w-[4.5rem] text-right text-[0.7rem] text-muted-foreground"
+          className="min-w-18 text-right text-[0.72rem] text-muted-foreground"
           title={STRUCTURAL_WHY[m.id] ?? 'a running box cannot do without it'}
         >
           always on
