@@ -161,7 +161,7 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
       <span className={cn(CELL_QUIET, N, MID)}>
         {disk.sizeBytes === null ? DASH : bytes(disk.sizeBytes)}
       </span>
-      <span className={cn(N, 'text-[0.8125rem] text-foreground [font-weight:400]')}>
+      <span className={cn(N, 'text-[0.8125rem] text-subdued [font-weight:400]')}>
         {disk.temperature === null ? DASH : `${String(disk.temperature)}°`}
       </span>
       <span className={cn(CELL_QUIET, N, MID)}>{hours(disk.powerOnHours)}</span>

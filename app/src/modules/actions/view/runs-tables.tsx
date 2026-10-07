@@ -34,7 +34,9 @@ const FAIL_GRID =
 /** The machines a run used, as OS words ("Linux, macOS"); the images are on hover. */
 function runnerWord(ranOn: readonly string[]): string {
   if (ranOn.length === 0) return DASH
-  return [...new Set(ranOn.map((l) => imageWord(l).split(' · ')[0] ?? l))].join(', ')
+  return [...new Set(ranOn.map((l) => imageWord(l).split(' · ')[0] ?? l))]
+    .filter((w) => w !== '')
+    .join(', ')
 }
 
 /** One run as a table row; the whole row opens the run on GitHub. */

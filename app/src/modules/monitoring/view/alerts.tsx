@@ -4,7 +4,7 @@ import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/ser
 import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW_DENSE } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { FOOT, MONO, NOTE } from '../../../components/tokens'
-import { BarList, Board, BoardGrid, Chip, Facts } from '../../../components/viz'
+import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, since } from '../../../lib/format'
 import type { MonitoringData } from '../data'
@@ -170,9 +170,14 @@ function Panel2({ f }: { f: AlertsFacts }) {
               // "nothing sent in N days" is a normal state, not a warning.
               k: 'Last successful send',
               v:
-                d.mail.lastSend === null
-                  ? 'nothing in the last 30 days'
-                  : `${since(d.mail.lastSend.agoSeconds)} — from ${d.mail.lastSend.unit}`,
+                d.mail.lastSend === null ? (
+                  'nothing in the last 30 days'
+                ) : (
+                  <>
+                    {since(d.mail.lastSend.agoSeconds)} — from{' '}
+                    <span className="whitespace-nowrap">{d.mail.lastSend.unit}</span>
+                  </>
+                ),
             },
             {
               k: 'Failures, 30d',
