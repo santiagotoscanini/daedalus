@@ -12,16 +12,7 @@ import {
   REPO_ROW,
 } from './apps/repo-picker'
 import { SVC_HEAD, SVC_LOGO } from './service-head'
-import {
-  BOARD,
-  BOARD_BODY,
-  BOARD_GRID,
-  BOARD_HEAD,
-  BOARD_TITLE,
-  GLASS,
-  STAT,
-  STAT_STRIP,
-} from './viz'
+import { BOARD, BOARD_BODY, BOARD_GRID, BOARD_HEAD, BOARD_TITLE, STAT, STAT_STRIP } from './viz'
 
 // Placeholders for content that has not arrived yet.
 //
@@ -168,14 +159,17 @@ export function StripSkeleton({ count = 6 }: { count?: number }) {
 export function RowsSkeleton({ count = 3, height = 58 }: { count?: number; height?: number }) {
   return (
     <ul className={APP_LIST}>
+      <li className="h-9 border-hairline border-b" />
       {Array.from({ length: count }, (_, i) => (
-        <li key={i}>
-          <div className={cn(GLASS, 'flex items-center gap-4 rounded-xl px-4')} style={{ height }}>
-            <Bar w="0.6rem" h={10} />
-            <Bar w="30%" h={14} />
-            <Bar w="22%" h={11} />
-            <Bar w="12%" h={11} />
-          </div>
+        <li
+          key={i}
+          className="flex items-center gap-4 border-hairline border-t px-5 first:border-t-0 [&:nth-child(2)]:border-t-0"
+          style={{ height }}
+        >
+          <Bar w="2rem" h={32} />
+          <Bar w="28%" h={13} />
+          <Bar w="20%" h={11} />
+          <Bar w="12%" h={11} />
         </li>
       ))}
     </ul>

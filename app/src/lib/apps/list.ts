@@ -7,6 +7,7 @@ import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { effectiveHostname } from '../hostname'
 import { listApps } from '../repo/apps'
 import { appReachable } from '../stage'
+import { latestDeploy } from './deployments'
 import { asDeclared, driftOf } from './manifest-map'
 import { appStatuses } from './metrics'
 
@@ -27,7 +28,7 @@ export async function loadAppList(ctx: Ctx) {
   const manifest = new Map(entries.map((m) => [m.name, m]))
   const records = rows.map((r) => asDeclared(r, manifest.get(r.name)))
   const { sites: EXTERNAL_APPS, status: offboxStatus } = await offbox(ctx)
-  const [statuses, applyStatus, icons, externalIcons, workspaces] = await Promise.all([
+  const [statuses, applyStatus, icons, externalIcons, workspaces, deploys] = await Promise.all([
     // Degrades per-app rather than rejecting, so a prometheus outage costs
     // the status column, not the page.
     appStatuses(
@@ -49,6 +50,9 @@ export async function loadAppList(ctx: Ctx) {
     ),
     Promise.all(EXTERNAL_APPS.map(async (e) => (await siteIcon(e.id, e.host)) !== null)),
     readWorkspaces(),
+    // One small file per app (deploy.sh's journal), so the list can say
+    // when each app last changed without a query per row.
+    Promise.all(records.map((r) => latestDeploy(ctx, r.name).catch(() => null))),
   ])
 
   return {
@@ -78,6 +82,7 @@ export async function loadAppList(ctx: Ctx) {
       authMode: r.authMode,
       postgres: r.postgres,
       drift: driftOf(r, manifest.get(r.name)),
+      deployed: deploys[i] ?? null,
       status: statuses[r.name] ?? {
         state: 'unknown' as const,
         containerUp: null,

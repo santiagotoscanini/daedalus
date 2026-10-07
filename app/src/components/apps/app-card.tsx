@@ -1,14 +1,19 @@
-// One card in the apps list: an app on the box, or a project that is not.
+// One row of the apps list: an app on the box, or a project that is not.
+//
+// A table, not a wall of cards. Every row shares one column grid, so the eye
+// runs DOWN a column — every address, every traffic line, every "deployed" —
+// which is how a list of things you run is read. The grid answers to the
+// list's own width (`@container/applist`): columns step away as it narrows;
+// the app and its status never do.
 import { Link } from '@tanstack/react-router'
+import { CircleOffIcon, FlaskConicalIcon, GlobeIcon, LoaderIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import type { Platform, SiteState } from '../../lib/external-apps'
 import { type AppStage, isAppStage } from '../../lib/stage'
-import type { Tone } from '../../lib/tone'
 import { Ago } from '../ago'
 import { AppIcon, type AppState, StateDot } from '../controls'
 import { Chip, Spark } from '../viz'
-import { GLASS } from '../viz/board'
 import { CloneButton } from '../workspace'
 import type { ExternalEntry, Row } from './apps-list'
 import { CHIP } from './shared'
@@ -38,56 +43,241 @@ export const SITE_DOT: Record<SiteState, AppState> = {
   unknown: 'unknown',
 }
 
-export function ExternalRow({ entry }: { entry: ExternalEntry }) {
-  // The card is the link to the site's detail page; the actions live BESIDE
-  // it, not inside — a button in an anchor is one click with two meanings,
-  // and invalid HTML besides. The foot carries the site itself, the repo,
-  // and the one workspace action these projects have. The dot is the
-  // platform's own word on the last publish (nothing on this box probes
-  // these sites), so there is no spark.
+/* ── the table ─────────────────────────────────────────────────────────── */
+
+/** The list's frame: one glass panel, rows inside it. A query container, so
+    the rows lay out from the width the list actually has. */
+export const APP_TABLE =
+  '@container/applist m-0 list-none overflow-hidden rounded-2xl border border-hairline bg-surface p-0 shadow-[inset_0_1px_0_var(--hairline-hi),var(--board-shadow)]'
+
+/** Six columns wide, four in a laptop half-window, two on a phone. */
+export const APP_GRID = cn(
+  'grid items-center gap-x-5 px-5',
+  'grid-cols-[minmax(0,1fr)_minmax(0,12rem)_5.5rem_9rem_6.5rem_8rem]',
+  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_5.5rem_9rem_8rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8rem]',
+)
+const SITE_GRID = cn(
+  'grid items-center gap-x-5 px-5',
+  'grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,14rem)_6.5rem_8rem]',
+  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_8rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8rem]',
+)
+/** A cell that steps away below a laptop half-window, and one below a phone. */
+export const WIDE = '@max-[64rem]/applist:hidden'
+export const MID = '@max-[38rem]/applist:hidden'
+
+const HEAD =
+  'h-9 border-hairline border-b text-[0.72rem] text-muted-foreground [font-weight:500] [&>span:last-child]:text-right'
+
+/** A row: the whole of it is the link (`after:` stretches the name's anchor). */
+export const ROW =
+  'relative min-h-[3.75rem] border-hairline border-t py-2.5 transition-colors duration-100 [&:nth-child(2)]:border-t-0 hover:bg-foreground/[0.025] has-[a:focus-visible]:bg-foreground/[0.04]'
+const STRETCH =
+  'text-inherit no-underline outline-none after:absolute after:inset-0 hover:no-underline'
+
+const NAME = 'flex min-w-0 items-center gap-2 text-[0.875rem] text-foreground [font-weight:560]'
+const DESC = 'm-0 truncate text-[0.78rem] text-muted-foreground'
+const MONO_CELL = 'min-w-0 truncate font-mono text-[0.75rem] text-muted-foreground'
+const QUIET = 'text-[0.78rem] text-muted-foreground tabular-nums'
+
+/** The first column: icon, name (with its badges), description. */
+function Identity({
+  icon,
+  link,
+  badges,
+  desc,
+}: {
+  icon: ReactNode
+  link: ReactNode
+  badges?: ReactNode
+  desc: string | null
+}) {
   return (
-    <li className={cn(CARD, CARD_ASIDE)}>
-      <Link to="/apps/offbox/$id" params={{ id: entry.id }} className={CARD_LINK}>
-        <div className={CARD_HEAD}>
-          <span className={CARD_ICON}>
-            <AppIcon name={entry.id} hasIcon={entry.hasIcon} size={36} />
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="inline-flex size-8 flex-none overflow-hidden rounded-[9px] shadow-[0_0_0_1px_var(--hairline)]">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <div className={NAME}>
+          {link}
+          {badges}
+        </div>
+        {desc !== null && desc !== '' && <p className={DESC}>{desc}</p>}
+      </div>
+    </div>
+  )
+}
+
+const STATE_LABEL: Record<AppState, string> = {
+  running: 'Running',
+  attention: 'Needs attention',
+  stopped: 'Stopped',
+  unknown: 'Unknown',
+}
+
+/** Status, at the row's end: the dot and its word. */
+function Status({ state, label }: { state: AppState; label?: string }) {
+  const word = label ?? STATE_LABEL[state]
+  return (
+    <span className="flex min-w-0 items-center justify-end gap-2 text-[0.78rem] text-subdued">
+      <StateDot state={state} label={word} />
+      <span className="truncate">{word}</span>
+    </span>
+  )
+}
+
+const EXPOSURE: Record<AppStage, { icon: ReactNode; label: string; title: string }> = {
+  live: { icon: <GlobeIcon />, label: 'Public', title: 'Reachable from the internet' },
+  lab: { icon: <FlaskConicalIcon />, label: 'Lab', title: 'Reachable on the LAN and VPN only' },
+  off: { icon: <CircleOffIcon />, label: 'Off', title: 'Not published' },
+}
+
+export function AppTableHead() {
+  return (
+    <li aria-hidden="true" className={cn(APP_GRID, HEAD)}>
+      <span>App</span>
+      <span className={WIDE}>Address</span>
+      <span className={MID}>Exposure</span>
+      <span className={MID}>Traffic</span>
+      <span className={WIDE}>Deployed</span>
+      <span>Status</span>
+    </li>
+  )
+}
+
+export function SiteTableHead() {
+  return (
+    <li aria-hidden="true" className={cn(SITE_GRID, HEAD)}>
+      <span>Site</span>
+      <span className={MID}>Address</span>
+      <span className={WIDE}>Repository</span>
+      <span className={WIDE}>Deployed</span>
+      <span>Status</span>
+    </li>
+  )
+}
+
+export function AppRow({ row }: { row: Row }) {
+  // The column is text, so a value the ladder does not know is possible in
+  // principle; it reads as the platform's own default rather than as nothing.
+  const exposure = EXPOSURE[isAppStage(row.stage) ? row.stage : 'lab']
+  return (
+    <li className={cn(APP_GRID, ROW)}>
+      <Identity
+        icon={<AppIcon name={row.name} hasIcon={row.hasIcon} size={32} />}
+        desc={row.description}
+        link={
+          // `tab` is a required search param on the detail route, so the list
+          // names the landing tab explicitly.
+          <Link
+            to="/apps/$name"
+            params={{ name: row.name }}
+            search={{ tab: 'overview' as const }}
+            className={cn(STRETCH, 'truncate')}
+          >
+            {row.name}
+          </Link>
+        }
+        badges={
+          <>
+            {row.managedInNix && (
+              <Chip tone="muted" className={CHIP} title="Declared by hand in Nix, read-only here">
+                nix
+              </Chip>
+            )}
+            {!row.managedInNix && row.drift.length > 0 && (
+              <Chip tone="warn" className={CHIP} title={`Changed: ${row.drift.join(', ')}`}>
+                unapplied
+              </Chip>
+            )}
+          </>
+        }
+      />
+
+      <code className={cn(MONO_CELL, WIDE)}>{row.hostname}</code>
+
+      <span
+        className={cn(
+          MID,
+          'inline-flex items-center gap-1.5 text-[0.78rem] text-subdued [&>svg]:size-3.5 [&>svg]:opacity-60',
+        )}
+        title={row.isNew ? 'Setting up: this is where it will run' : exposure.title}
+      >
+        {row.isNew ? <LoaderIcon /> : exposure.icon}
+        {row.isNew ? 'Setting up' : exposure.label}
+      </span>
+
+      {/* Neutral unless the app is in trouble: the status column carries
+          state, and a coloured line on every healthy app would make the one
+          red line harder to find, not easier. */}
+      <span className={cn(MID, 'flex min-w-0 items-center gap-2.5')}>
+        <Spark
+          values={row.status.spark}
+          tone={row.status.state === 'attention' ? 'bad' : 'muted'}
+          width={56}
+          height={16}
+        />
+        <span className={cn(QUIET, 'ml-auto whitespace-nowrap')}>
+          {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)}/min`}
+        </span>
+      </span>
+
+      <span className={cn(QUIET, WIDE)} title={row.deployed?.digest}>
+        {row.deployed === null ? (
+          '—'
+        ) : row.deployed.result === 'failed' ? (
+          <span className="text-danger">
+            failed <Ago at={row.deployed.at} />
           </span>
-          <div className="min-w-0 flex-1">
-            <div className={APP_NAME}>
-              {entry.name}
-              <StateDot state={SITE_DOT[entry.state]} label={entry.state} />
-            </div>
-            <code className={APP_HOST}>{entry.host}</code>
-          </div>
-        </div>
-        {entry.description !== null && <p className={APP_DESC}>{entry.description}</p>}
-        <div className="mt-auto flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.75rem] text-muted-foreground">
-          {entry.deployed !== null && (
-            <span>
-              deployed <Ago at={entry.deployed.at} />
-              {entry.deployed.sha !== null && <code> · {entry.deployed.sha.slice(0, 7)}</code>}
-            </span>
-          )}
-          {entry.warnings.map((w) => (
-            <Chip key={w} tone="warn" className={CHIP}>
-              {w}
-            </Chip>
-          ))}
-        </div>
-      </Link>
-      <div className="flex min-w-0 items-center justify-between gap-3 border-hairline border-t px-4 py-2.5 text-[0.8rem]">
-        <a
-          className="shrink-0 text-subdued"
-          href={`https://${entry.host}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          ↗ site
-        </a>
-        {entry.repo !== null && (
+        ) : (
+          <Ago at={row.deployed.at} />
+        )}
+      </span>
+
+      <Status state={row.status.state} />
+    </li>
+  )
+}
+
+export function ExternalRow({ entry }: { entry: ExternalEntry }) {
+  // The name stretches to the detail page; the address, the repo link and
+  // the clone button sit above that link (`relative z-10`), each its own
+  // click. The dot is the platform's own word on the last publish — nothing
+  // on this box probes these sites.
+  return (
+    <li className={cn(SITE_GRID, ROW)}>
+      <Identity
+        icon={<AppIcon name={entry.id} hasIcon={entry.hasIcon} size={32} />}
+        desc={entry.description}
+        link={
+          <Link to="/apps/offbox/$id" params={{ id: entry.id }} className={cn(STRETCH, 'truncate')}>
+            {entry.name}
+          </Link>
+        }
+        badges={entry.warnings.map((w) => (
+          <Chip key={w} tone="warn" className={CHIP}>
+            {w}
+          </Chip>
+        ))}
+      />
+
+      <a
+        className={cn(MONO_CELL, MID, 'relative z-10 hover:text-foreground')}
+        href={`https://${entry.host}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {entry.host}
+      </a>
+
+      <span className={cn(WIDE, 'relative z-10 flex min-w-0 items-center gap-2')}>
+        {entry.repo === null ? (
+          <span className={QUIET}>—</span>
+        ) : (
           <>
             <a
-              className="min-w-0 flex-1 truncate text-subdued"
+              className={cn(MONO_CELL, 'min-w-0 flex-1 hover:text-foreground')}
               href={`https://github.com/${entry.repo}`}
               target="_blank"
               rel="noreferrer"
@@ -97,131 +287,18 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
                   : 'not cloned on this box'
               }
             >
-              ⎇ {entry.repo}
+              {entry.repo}
             </a>
             <CloneButton repo={entry.repo} cloned={entry.workspace !== null} />
           </>
         )}
-      </div>
-    </li>
-  )
-}
+      </span>
 
-export const CARD = cn(
-  GLASS,
-  'flex min-w-0 flex-col transition-[background-color,border-color,translate] duration-150 hover:-translate-y-px hover:border-foreground/15 hover:bg-surface-hover motion-reduce:hover:translate-y-0',
-)
+      <span className={cn(QUIET, WIDE)} title={entry.deployed?.sha ?? undefined}>
+        {entry.deployed === null ? '—' : <Ago at={entry.deployed.at} />}
+      </span>
 
-/** Off-box and control-plane cards: dashed, the visual for "listed here, not
-    one of the things being managed". */
-export const CARD_ASIDE = 'border-dashed bg-transparent shadow-none'
-
-/* The whole card is the link; the foot rides inside it so one hover means
-   one destination. External cards keep their outbound links in a foot beside it (see ExternalRow). */
-export const CARD_LINK =
-  'flex min-w-0 flex-1 flex-col gap-3 px-4 pt-4 pb-4 text-inherit hover:no-underline'
-
-export const CARD_HEAD = 'flex min-w-0 items-center gap-3'
-
-/** AppIcon draws a 5px corner for its small uses; at card size it is clipped to the
-    control radius so the icon reads as a tile, not a stamp. */
-export const CARD_ICON = 'inline-flex flex-none overflow-hidden rounded-[10px]'
-
-export const APP_NAME =
-  'flex min-w-0 items-center gap-2 text-[0.9rem] [font-weight:560] text-foreground'
-
-export const APP_HOST = 'block truncate font-mono text-[0.75rem] text-muted-foreground'
-
-/** Two lines, then quiet: a card column where one long description makes one
-    row twice as tall reads as a layout accident. */
-export const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.5] text-subdued'
-
-/** The spark sizes itself from its height and is pushed to the right edge. */
-export const CARD_FOOT = 'mt-auto flex items-center gap-2.5 pt-0.5 [&>svg]:ml-auto'
-
-/** The exposure chip, by stage — the label included, so the row has nothing
-    left to decide. Neutral on every stage: where an app is reachable is a
-    fact, not a verdict, and green beside the health dot read as a second
-    "healthy". A new app's chip is dashed, the same
-    visual the aside cards use for "listed here, not one of the things being
-    run": it is where the app WILL run. */
-export const STAGE_CHIP: Record<AppStage, { tone: Tone; className: string; label: string }> = {
-  live: { tone: 'muted', className: CHIP, label: 'public' },
-  lab: {
-    tone: 'muted',
-    className: CHIP,
-    label: 'lab',
-  },
-  off: { tone: 'muted', className: CHIP, label: 'off' },
-}
-
-export function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
-  // The column is text, so a value the ladder does not know is possible in
-  // principle; it reads as the platform's own default rather than as nothing.
-  const stage = STAGE_CHIP[isAppStage(row.stage) ? row.stage : 'lab']
-  return (
-    <li className={cn(CARD, aside && CARD_ASIDE)}>
-      {/* `tab` is a required search param on the detail route (it is what
-          makes the tab linkable and server-rendered), so the list has to name
-          the landing tab explicitly. */}
-      <Link
-        to="/apps/$name"
-        params={{ name: row.name }}
-        search={{ tab: 'overview' as const }}
-        className={CARD_LINK}
-      >
-        <div className={CARD_HEAD}>
-          <span className={CARD_ICON}>
-            <AppIcon name={row.name} hasIcon={row.hasIcon} size={36} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className={APP_NAME}>
-              {row.name}
-              {row.managedInNix && (
-                <Chip
-                  tone="muted"
-                  className={cn(CHIP, 'text-subdued')}
-                  title="Declared by hand in Nix, read-only here"
-                >
-                  nix
-                </Chip>
-              )}
-              {!row.managedInNix && row.drift.length > 0 && (
-                <Chip tone="warn" className={CHIP} title={`Changed: ${row.drift.join(', ')}`}>
-                  unapplied
-                </Chip>
-              )}
-            </div>
-            <code className={APP_HOST}>{row.hostname}</code>
-          </div>
-          <StateDot state={row.status.state} />
-        </div>
-
-        <p className={APP_DESC}>{row.description || '—'}</p>
-
-        <div className={CARD_FOOT}>
-          <Chip
-            tone={row.isNew ? 'muted' : stage.tone}
-            className={row.isNew ? cn(CHIP, 'border border-dashed ring-0') : stage.className}
-            title={row.isNew ? 'Setting up: this is where it will run' : undefined}
-          >
-            {stage.label}
-          </Chip>
-
-          {/* Neutral unless the app is in trouble: the dot in the head
-              already carries state, and a green line on every healthy app
-              would make the one red line harder to find, not easier. */}
-          <Spark
-            values={row.status.spark}
-            tone={row.status.state === 'attention' ? 'bad' : 'muted'}
-            width={72}
-            height={18}
-          />
-          <span className="text-[0.75rem] text-muted-foreground tabular-nums">
-            {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)} rpm`}
-          </span>
-        </div>
-      </Link>
+      <Status state={SITE_DOT[entry.state]} label={entry.state === 'live' ? 'Live' : undefined} />
     </li>
   )
 }

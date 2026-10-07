@@ -102,3 +102,36 @@ export async function ingestDeployments(
     }),
   )
 }
+
+/**
+ * The newest line of an app's deploy journal — when it last actually
+ * changed, and whether that landed. The journal gets a line only on a real
+ * deploy, unlike `<app>.json`, which a no-op tick rewrites; so this, not the
+ * state file, answers "deployed when". Null when nothing was ever deployed.
+ */
+export async function latestDeploy(
+  ctx: Pick<Ctx, 'env'>,
+  appName: string,
+): Promise<{ at: string; result: JournalLine['result']; digest: string } | null> {
+  let raw: string
+  try {
+    raw = await readFile(join(ctx.env('DEPLOY_STATE_DIR') ?? '', `${appName}.log`), 'utf8')
+  } catch {
+    return null
+  }
+  const lines = raw.split('\n').filter((l) => l.trim() !== '')
+  // Newest first, skipping a torn last line.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const line = decode(journalLine, JSON.parse(lines[i] ?? ''))
+      return {
+        at: line.finishedAt || line.startedAt,
+        result: line.result,
+        digest: line.digest.replace(/^sha256:/, '').slice(0, 7),
+      }
+    } catch {
+      // A torn line (appended while we read): try the one before it.
+    }
+  }
+  return null
+}

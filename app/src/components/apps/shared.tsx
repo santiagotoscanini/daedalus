@@ -53,7 +53,15 @@ export function SegmentPicker<T extends string>({
   value: T
   onChange: (v: T) => void
   label: string
-  options: { value: T; label: string; icon?: string; disabled?: boolean; reason?: string }[]
+  options: {
+    value: T
+    label: string
+    icon?: string
+    /** A count beside the label: the filter IS the tally. */
+    count?: number
+    disabled?: boolean
+    reason?: string
+  }[]
   disabled?: boolean
   className?: string
 }) {
@@ -83,6 +91,9 @@ export function SegmentPicker<T extends string>({
           >
             {o.icon !== undefined && <span aria-hidden="true">{o.icon}</span>}
             {o.label}
+            {o.count !== undefined && (
+              <span className="text-[0.75rem] text-muted-foreground tabular-nums">{o.count}</span>
+            )}
           </button>
         )
       })}
