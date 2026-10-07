@@ -46,10 +46,8 @@ export function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
         ]}
         lede={
           <>
-            An <b>outbound</b> connection cloudflared holds open to Cloudflare, which the edge then
-            reaches this box through. So the router never accepts an inbound connection for it: no
-            forwarded port, nothing to scan. Everything it carries is HTTP, terminated at traefik’s{' '}
-            <code>cfweb</code> entrypoint on plain HTTP because the edge already did TLS.
+            An <b>outbound</b> connection cloudflared holds open, so the edge reaches this box with
+            no forwarded port. It carries HTTP only, into traefik’s <code>cfweb</code> entrypoint.
           </>
         }
         actions={

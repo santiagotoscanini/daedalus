@@ -159,18 +159,13 @@ export function DhcpView({ data }: { data: Dhcp }) {
         // page cannot support.
         lede={
           <>
-            The same process that answers names hands out the addresses. Every device in the house
-            asks this box for one and gets it from a pool this box decides.{' '}
+            The same process hands out the addresses, from a pool this box decides.{' '}
             {dhcp.reservationsKnown ? (
               <>
-                {dhcp.reservations.length} of them are pinned by hardware address, so the rest of
-                the machine can name them.
+                {dhcp.reservations.length} are pinned by hardware address so the box can name them.
               </>
             ) : (
-              <>
-                Some are pinned by hardware address in a hostsfile this page could not read just
-                now.
-              </>
+              <>Some are pinned in a hostsfile this page could not read just now.</>
             )}
           </>
         }

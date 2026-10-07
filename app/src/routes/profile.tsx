@@ -25,19 +25,21 @@ export const Route = createFileRoute('/profile')({
 function Page() {
   const { operator, profile } = Route.useLoaderData()
   return (
-    <Measure>
+    <>
       <PageHead fold title="Profile">
         Who you are to every app on this box. Saved to your Pocket ID account as you go — nothing
         here rebuilds.
       </PageHead>
 
-      <GuardedAwait
-        resetKey="profile"
-        promise={profile}
-        fallback={<ProfilePage operator={operator} profile={null} />}
-      >
-        {(p) => <ProfilePage operator={operator} profile={p} />}
-      </GuardedAwait>
-    </Measure>
+      <Measure>
+        <GuardedAwait
+          resetKey="profile"
+          promise={profile}
+          fallback={<ProfilePage operator={operator} profile={null} />}
+        >
+          {(p) => <ProfilePage operator={operator} profile={p} />}
+        </GuardedAwait>
+      </Measure>
+    </>
   )
 }

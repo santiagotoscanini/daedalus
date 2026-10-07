@@ -35,10 +35,8 @@ export function ProbesView({ data: d }: { data: Probes }) {
         compare={compareOf(d.gap, 'the image tag — gatus publishes no version of its own')}
         lede={
           <>
-            The only watcher that looks at this box from OUTSIDE it: every check here is a real
-            HTTPS request through traefik and the forward-auth gate, on the same path a browser
-            takes. So it is the one system that can notice a certificate, a router or an IdP
-            failing. None of those is visible from a metric scraped on the inside.
+            The one watcher that looks from OUTSIDE: every check is a real HTTPS request through
+            traefik and the gate, so it alone can notice a certificate, router or IdP failing.
           </>
         }
         // `status`, not `gatus`: the published label differs from the attribute

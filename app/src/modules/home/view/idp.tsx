@@ -50,9 +50,8 @@ export function IdpView({ data: d }: { data: IdpData }) {
         ]}
         lede={
           <>
-            Passkeys only. There is no password on this box to guess, phish or reuse. Every admin UI
-            either sits behind it at the proxy or signs in against it directly, so a single
-            authentication here is what opens all of them for the day.
+            Passkeys only, so there is no password here to guess, phish or reuse. Every admin UI
+            sits behind it, so one sign-in opens all of them for the day.
           </>
         }
         actions={

@@ -2,6 +2,7 @@
 
 import { LogBoard, type LogNeighbour } from '../../../../components/logs'
 import { HeadStrip, OS_MARK } from '../../../../components/machine-head'
+import { BOX_MARK } from '../../../../components/machine-picker'
 import { CAPTION, FOOT, MONO } from '../../../../components/tokens'
 import { Button } from '../../../../components/ui/button'
 import { BoardGrid } from '../../../../components/viz'
@@ -128,19 +129,31 @@ export function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersDa
   )
 }
 
-/** The strip above the boards: the machine, its provider and how it stands. */
-function MachineHead({ m }: { m: ProviderMachine }) {
-  // A machine nothing offers and no agent has seen is not a fault: it is a
-  // provider not installed yet, and the line says what installing it does.
+/**
+ * How a machine's provider stands, for its head chip and its picker dot.
+ *
+ * A machine nothing offers and no agent has seen is not a fault: it is a
+ * provider not installed yet, and the head's line says what installing it does.
+ */
+export function standingOf(m: ProviderMachine): {
+  label: string
+  tone: 'ok' | 'muted' | 'bad'
+  absent: boolean
+} {
   const absent =
     m.reported && !m.reachable && !m.offered && m.presence === null && m.machine !== 'box'
-  const chip = m.reachable
-    ? { label: 'answering', tone: 'ok' as const }
-    : !m.reported
-      ? { label: 'no report yet', tone: 'muted' as const }
-      : absent
-        ? { label: 'not installed', tone: 'muted' as const }
-        : { label: 'not answering', tone: 'bad' as const }
+  if (m.reachable) return { label: 'answering', tone: 'ok', absent }
+  if (!m.reported) return { label: 'no report yet', tone: 'muted', absent }
+  if (absent) return { label: 'not installed', tone: 'muted', absent }
+  return { label: 'not answering', tone: 'bad', absent }
+}
+
+/** The strip above the boards: the machine, its provider and how it stands. */
+function MachineHead({ m }: { m: ProviderMachine }) {
+  const { absent, ...chip } = standingOf(m)
+  // The version is said once on this page: in the Lemonade board's Version row
+  // when there is one, here when there is not (this box's own provider).
+  const board = m.machine !== 'box' && m.kind === 'lemonade'
   const presence =
     m.presence === null
       ? m.machine === 'box'
@@ -149,14 +162,14 @@ function MachineHead({ m }: { m: ProviderMachine }) {
           ? 'the agent finds none'
           : 'the gateway keeps the routes it has'
       : m.presence.running
-        ? `the agent sees it running${m.presence.version === null ? '' : ` · v${m.presence.version}`}`
+        ? 'the agent sees it running'
         : 'the agent sees it installed but not running'
   return (
     <HeadStrip
       mark={m.machine === 'box' ? BOX_MARK : OS_MARK[m.os]}
       name={m.name}
       chip={chip}
-      aside={`${m.kindName}${m.version === null ? '' : ` ${m.version}`}`}
+      aside={`${m.kindName}${board || m.version === null ? '' : ` ${m.version}`}`}
       line={
         <>
           <span className={MONO}>{m.base}</span> · {presence} ·{' '}
@@ -169,5 +182,3 @@ function MachineHead({ m }: { m: ProviderMachine }) {
     />
   )
 }
-
-export const BOX_MARK = { src: '/icon-nixos.webp', invert: false }

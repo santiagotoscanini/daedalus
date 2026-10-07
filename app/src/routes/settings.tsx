@@ -190,7 +190,7 @@ function SettingsPage() {
   const github = useGithubLanding(search, githubApp)
 
   return (
-    <Measure>
+    <>
       <PageHead fold title="Settings">
         How this box is configured, and how it looks. What nix builds from is edited here and
         applied as a rebuild; Machines and Appearance save to this control plane at once.
@@ -202,14 +202,16 @@ function SettingsPage() {
         linkTo={(id) => ({ to: '/settings', search: { tab: id } })}
       />
 
-      <div className="flex flex-col gap-5 pb-24">
+      {/* The head and the tabs span the content width like every page; the
+          form keeps a reading measure. */}
+      <Measure className="flex flex-col gap-5 pb-24">
         {/* One place for the bytes an Apply would write, whichever tab the
             edit was made on — the tabs show fields, this shows the file. */}
         <SiteDiff edit={edit} />
         <SettingsTabBody tab={tab} data={data} github={github} />
-      </div>
+      </Measure>
 
       <ApplyBar changed={changed} initialStatus={applyStatus} />
-    </Measure>
+    </>
   )
 }

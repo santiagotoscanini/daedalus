@@ -29,11 +29,9 @@ export function AlertsView({ data: d }: { data: Alerts }) {
         compare={compareOf(d.gap, 'from /api/health — what the running process says')}
         lede={
           <>
-            Every alert rule on this box is Grafana-managed and provisioned from files, so this both
-            draws the graphs and decides when one of them is worth an email. Its own state — users,
-            service accounts, alert history — lives in the <span className={MONO}>grafana</span>{' '}
-            database on the shared cluster, which is the half of it that is not in the rebuild
-            trail.
+            Every alert rule here is Grafana-managed and provisioned from files. Its own state
+            (users, alert history) lives in the <span className={MONO}>grafana</span> database,
+            outside the rebuild trail.
           </>
         }
         actions={<Open name="Grafana" host="grafana" />}
@@ -41,20 +39,6 @@ export function AlertsView({ data: d }: { data: Alerts }) {
 
       <BoardGrid>
         <Panel f={f} />
-
-        <Board title="Rules by folder" icon="rows" span={6}>
-          <BarList items={d.byFolder} empty="no rules" />
-          <p className={FOOT}>
-            Folders are the provisioning files in{' '}
-            <span className={MONO}>assets/provisioning/alerting/</span>. UI edits do not survive.
-            The files are source of truth.
-          </p>
-          <p className={FOOT}>
-            These are Grafana&rsquo;s rules, not prometheus&rsquo;s. Prometheus&rsquo;s own{' '}
-            <span className={MONO}>/rules</span> endpoint is empty and would report zero on a box
-            with {num(d.rules)}.
-          </p>
-        </Board>
 
         <WhereAnAlertGoesBoard f={f} />
 
@@ -72,6 +56,12 @@ export function AlertsView({ data: d }: { data: Alerts }) {
 
 /** What the page's boards read. */
 function alertsFacts({ data: d }: { data: Alerts }) {
+  // The rules, by provisioning folder, as one phrase ("34 rules · System 34"):
+  // a bar list of one folder was a board of dead space.
+  const ruleLine = [
+    `${num(d.rules)} rules`,
+    ...d.byFolder.map((x) => `${x.label} ${num(x.value)}`),
+  ].join(' · ')
   // Present tense only when it is true in the present: a failure NEWER than
   // the newest success means the relay may be broken right now; failures the
   // relay has since recovered from are history, worth listing but not a
@@ -80,29 +70,25 @@ function alertsFacts({ data: d }: { data: Alerts }) {
   const mailFailing =
     newestFailure !== undefined &&
     (d.mail.lastSend === null || newestFailure.agoSeconds < d.mail.lastSend.agoSeconds)
-  return { d, newestFailure, mailFailing }
+  return { d, newestFailure, mailFailing, ruleLine }
 }
 
 type AlertsFacts = NonNullable<ReturnType<typeof alertsFacts>>
 
 function Panel({ f }: { f: AlertsFacts }) {
-  const { d } = f
+  const { d, ruleLine } = f
   if (d.active.length === 0) {
     return (
       <AllClear
         title="Nothing firing"
         detail={`No rule is firing or pending. All ${num(d.rules)} are evaluating and quiet.`}
-        aside={`${num(d.rules)} rules`}
+        aside={ruleLine}
+        note="Grafana's rules, provisioned from files in assets/provisioning/alerting/ (one folder per file; UI edits do not survive). Prometheus's own /rules endpoint is empty and would report zero."
       />
     )
   }
   return (
-    <Board
-      title="Firing now"
-      icon="⚑"
-      span={12}
-      aside={<span className={NOTE}>{num(d.rules)} rules</span>}
-    >
+    <Board title="Firing now" icon="⚑" span={12} aside={<span className={NOTE}>{ruleLine}</span>}>
       <ul className={LIST}>
         {d.active.map((a) => (
           <li key={`${a.folder}-${a.name}`}>
@@ -127,7 +113,7 @@ function Panel({ f }: { f: AlertsFacts }) {
 function WhereAnAlertGoesBoard({ f }: { f: AlertsFacts }) {
   const { d } = f
   return (
-    <Board title="Where an alert goes" icon="✉" span={6}>
+    <Board title="Where an alert goes" icon="✉" span={12}>
       <Facts
         rows={[
           { k: 'Contact points', v: num(d.delivery.contactPoints) },
@@ -158,10 +144,15 @@ function Panel2({ f }: { f: AlertsFacts }) {
             <span className={NOTE}>
               {d.mail.sent30d === null ? DASH : num(d.mail.sent30d)} sent in 30 days
             </span>
-          ) : (
-            <Chip tone={mailFailing ? 'bad' : 'warn'}>
+          ) : mailFailing ? (
+            <Chip tone="bad">
               {num(d.mail.failed30d)} failed send{d.mail.failed30d === 1 ? '' : 's'} in 30 days
             </Chip>
+          ) : (
+            // Recovered since: history, not attention — neutral text.
+            <span className={NOTE}>
+              {num(d.mail.failed30d)} failed send{d.mail.failed30d === 1 ? '' : 's'} in 30 days
+            </span>
           )
         }
       >
@@ -278,7 +269,7 @@ function DeliberatelySilentNote() {
     // Not a fault, and the page has to say so — a muted alert path and an
     // alert path that was never built look identical from here.
     <p
-      className="col-span-12 m-0 max-w-[40rem] px-1 text-[0.8rem] leading-[1.55] text-muted-foreground"
+      className="col-span-12 m-0 max-w-[40rem] text-[0.8rem] leading-[1.55] text-muted-foreground"
       title="The one that used to fire was the television being turned off, so media_player and remote are excluded. The 25 Tuya lights sitting unavailable are genuinely not healthy, which is why the entity-count rule could not be re-armed with a higher threshold. Grep HA-MUTED in the configuration checkout to find every switch."
     >
       <span className="text-subdued [font-weight:560]">Deliberately silent.</span> Every Home

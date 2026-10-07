@@ -81,7 +81,7 @@ export function ModuleBoards({
 /**
  * A tab whose stack is switched off. No loader ran (host/modules.ts), so
  * there are no boards to draw; what the page owes the operator is the fact,
- * and the one control that changes it — the same cog every service wears.
+ * and the one control that changes it, labelled and pinned to the card's right edge.
  */
 function OffPanel({ module, tab }: { module: string; tab: string }) {
   const spec = moduleById(module)?.tabs.find((t) => t.id === tab)
@@ -101,9 +101,11 @@ function OffPanel({ module, tab }: { module: string; tab: string }) {
           </span>
         ))}{' '}
         {ids.length === 1 ? 'is' : 'are'} switched off on this box: nothing runs, nothing answers,
-        and the data stays where it is. Switch it on from the cog, then Apply.
+        and the data stays where it is. Turn it on in settings, then Apply.
       </p>
-      <ServiceSettingsButton ids={ids} label="Turn on in settings" />
+      <div className="ml-auto flex-none max-[44rem]:ml-0">
+        <ServiceSettingsButton ids={ids} label="Turn on in settings" />
+      </div>
     </div>
   )
 }

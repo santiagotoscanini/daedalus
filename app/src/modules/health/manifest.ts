@@ -7,7 +7,7 @@ export const manifest = {
   order: 35,
   section: 'Services',
   // Shaped to Record, which opens by default.
-  boardSpans: [12, 4, 4, 4],
+  boardSpans: [12, 12, 12, 12],
   // A tab per subject, in the order a body is read: the record that holds
   // everything measured, then the three inputs to it — food in the house,
   // food eaten, training done.
@@ -24,7 +24,7 @@ export const manifest = {
       // and its library manager (the context gateway and the MCP server have
       // no webApp of their own).
       probes: ['getbased', 'getbased-relay', 'getbased-rag', 'getbased-library'],
-      boardSpans: [12, 4, 4, 4],
+      boardSpans: [12, 12, 12, 12],
       nix: 'getbased',
     },
     // Grocy and the MCP server that puts it on the gateway: one subject, so

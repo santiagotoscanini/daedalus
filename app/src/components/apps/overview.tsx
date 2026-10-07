@@ -72,7 +72,7 @@ export function Overview({
         <Stat
           label="Health"
           value={healthy === null ? 'not probed' : healthy ? 'ok' : 'failing'}
-          tone={healthy === false ? 'bad' : undefined}
+          tone={healthy === false ? 'bad' : healthy === null ? 'muted' : undefined}
           sub={status?.containerUp === false ? 'container down' : 'probed every 60s'}
           title={`gatus probes ${app.authHealthPath ?? '/'} from outside every 60s. Container liveness: ${fmtBool(status?.containerUp)}.`}
         />
@@ -80,6 +80,7 @@ export function Overview({
           label="Requests"
           value={status?.rpm === null || !status ? DASH : status.rpm.toFixed(1)}
           unit="/min"
+          tone={status?.rpm === null || !status ? 'muted' : undefined}
           spark={status?.spark ?? []}
           sub="last hour"
         />
@@ -88,6 +89,7 @@ export function Overview({
           value={d.resources.cpu.used === null ? DASH : d.resources.cpu.used.toFixed(2)}
           unit={d.resources.cpu.limit === null ? 'cores' : `of ${String(d.resources.cpu.limit)}`}
           spark={d.resources.cpu.spark}
+          tone={d.resources.cpu.used === null ? 'muted' : undefined}
           title="cgroup v2, 60-second resolution"
         />
         <Stat
@@ -95,6 +97,7 @@ export function Overview({
           value={d.resources.memory.used === null ? DASH : fmtMb(d.resources.memory.used)}
           unit={d.resources.memory.limit === null ? 'MB' : `of ${fmtMb(d.resources.memory.limit)}`}
           spark={d.resources.memory.spark}
+          tone={d.resources.memory.used === null ? 'muted' : undefined}
           title="memory.current counts page cache: an app doing file I/O sits at its limit and is fine"
         />
         <Stat
@@ -105,12 +108,13 @@ export function Overview({
           // so it is the one allowed to take a colour — and it replaces
           // the caption rather than sitting beside it, because "no OOM
           // kills" is not news and "3 OOM kills" is.
-          tone={oom ? 'bad' : undefined}
+          tone={oom ? 'bad' : d.resources.pids.used === null ? 'muted' : undefined}
           sub={oom ? `${String(oomKills)} OOM kill${oomKills === 1 ? '' : 's'}` : 'no OOM kills'}
         />
         <Stat
           label="Logs"
           value={d.logs1h === null ? DASH : d.logs1h.toLocaleString('en-US')}
+          tone={d.logs1h === null ? 'muted' : undefined}
           unit="/hour"
           sub="shipped to Loki"
         />

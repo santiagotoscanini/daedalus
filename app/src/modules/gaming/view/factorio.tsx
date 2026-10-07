@@ -12,9 +12,9 @@ import {
   TABLE_ROW_LINK,
 } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
-import { FOOT, MONO, NOTE } from '../../../components/tokens'
+import { FOOT, MONO } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
-import { Board, BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
+import { BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import type { GamingData } from '../data'
 import { EventsSection, Unknown } from './shared'
@@ -135,14 +135,14 @@ type FactorioFacts = NonNullable<ReturnType<typeof factorioFacts>>
 function Panel({ f }: { f: FactorioFacts }) {
   const { data, factorio, behind, current } = f
   return (
-    <Board
+    <TableSection
       title={current ? 'Release notes' : `${String(behind)} to apply`}
-      icon="logs"
-      span={12}
-      aside={<span className={NOTE}>wiki.factorio.com</span>}
+      aside="wiki.factorio.com"
+      className={cn(SECTION_SPAN[12], 'mt-0')}
     >
-      {/* The chain lives here rather than in a panel of its own, which
-          would sit empty beside this one whenever nothing is pending. */}
+      {/* A section rather than a card: with nothing pending it holds one row,
+          and a card round one row is mostly frame. The chain lives here
+          rather than in a panel of its own for the same reason. */}
       <UpgradeChain behind={factorio.behind} />
       <ReleaseNotes releases={data.changelog} running={factorio.installed} />
       {/* These two captions sit side by side, so each says what it is
@@ -155,7 +155,7 @@ function Panel({ f }: { f: FactorioFacts }) {
         parsed from the wiki’s page source. Open one for the fixes; the link inside goes to the full
         section.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 

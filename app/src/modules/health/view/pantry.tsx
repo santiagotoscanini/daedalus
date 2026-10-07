@@ -28,8 +28,7 @@ export function PantryView({ data: d }: { data: Pantry }) {
         lede={
           <>
             Household stock, chores and tasks: what food is in the house, and what is about to go
-            off. A PHP-FPM image, so it is one of the containers that refuse to run as container
-            root and keep the linuxserver default uid instead.
+            off.
           </>
         }
         actions={<Open name="Grocy" host="grocy" />}
@@ -64,6 +63,10 @@ export function PantryView({ data: d }: { data: Pantry }) {
                 from.
               </>
             )}
+          </p>
+          <p className={FOOT}>
+            A PHP-FPM image, so it is one of the containers that refuse to run as container root and
+            keep the linuxserver default uid instead.
           </p>
         </Board>
 

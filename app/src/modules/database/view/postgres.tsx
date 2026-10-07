@@ -35,10 +35,8 @@ export function PostgresView({ d }: { d: Postgres }) {
         compare={compareOf(d.gap, 'from pg_static, via the exporter')}
         lede={
           <>
-            One cluster, every app a tenant with its own role and database. That consolidation
-            replaced a postgres container per stack, and it makes this the single process most of
-            this box depends on. Its minor releases are worth reading: they are almost entirely
-            security and data-corruption fixes, and applying one is a restart every tenant feels.
+            One cluster, every app a tenant with its own role and database: the process most of this
+            box depends on. Its minors are security fixes, and each is a restart every tenant feels.
           </>
         }
       />

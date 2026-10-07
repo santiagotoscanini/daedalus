@@ -25,9 +25,8 @@ export function FilesView({ data: d }: { data: Files }) {
         compare={compareOf(d.gap, 'from the serverinfo app — four segments to GitHub’s three')}
         lede={
           <>
-            File sync, calendar and contacts. Its database lives on the shared Postgres cluster and
-            its image is built locally with ffmpeg baked in, which the preview generator and the
-            recognize app both want.
+            File sync, calendar and contacts. Its database is on the shared Postgres cluster, and
+            its image is built locally with ffmpeg for previews and the recognize app.
           </>
         }
         actions={<Open name="Nextcloud" host="nextcloud" />}

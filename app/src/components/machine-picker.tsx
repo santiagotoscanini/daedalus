@@ -22,9 +22,9 @@ import { SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from './tokens'
 //   `MachinePicker` — System's use of it: this box, then every approved node,
 //   each keeping the open tab.
 //
-// `identity` puts the picked machine's one-line description on the same row,
-// to the right of the control, so the picker and the line naming what it
-// picked are one level of navigation rather than two stacked rows.
+// `identity` puts the picked machine's one-line description directly under the
+// control, as its caption: the picker and the line naming what it picked are
+// one level of navigation, not a picker, a header and then the tabs.
 
 /** The box's own mark: it runs NixOS whatever the node OS table says. */
 export const BOX_MARK = { src: '/icon-nixos.webp', invert: false }
@@ -54,7 +54,9 @@ export type MachineItem = {
   title?: string
 }
 
-const ROW = 'mb-4 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2'
+// The control, then — under it, never crammed beside it — the picked machine's
+// one muted line, which wraps safely at any width.
+const ROW = 'mb-4 flex min-w-0 flex-col items-start gap-2'
 const COUNT = 'text-[0.72rem] text-muted-foreground tabular-nums'
 const DOT = 'inline-block size-1.5 flex-none rounded-full bg-(--tone)'
 
@@ -67,7 +69,7 @@ export function MachineSwitcher({
   items: MachineItem[]
   /** The nav's accessible name. */
   label?: string
-  /** The picked machine's one-line description, beside the control. */
+  /** The picked machine's one-line description, under the control. */
   identity?: ReactNode
   className?: string
 }) {
@@ -106,9 +108,7 @@ export function MachineSwitcher({
         })}
       </div>
       {identity !== undefined && (
-        <div className="min-w-0 flex-[1_1_18rem] text-[0.8rem] text-muted-foreground">
-          {identity}
-        </div>
+        <div className="min-h-5 w-full min-w-0 text-[0.8rem] text-muted-foreground">{identity}</div>
       )}
     </nav>
   )
@@ -138,7 +138,7 @@ export function MachinePicker({
   dots?: Record<string, Tone | null>
   /** A figure per machine id ('' for this box), in place of the session count. */
   counts?: Record<string, number | null>
-  /** The picked machine's one-line description, beside the control. */
+  /** The picked machine's one-line description, under the control. */
   identity?: ReactNode
 }) {
   if (nodes.length === 0) return null

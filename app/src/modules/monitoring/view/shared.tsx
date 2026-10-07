@@ -72,7 +72,7 @@ export function AllClear({
   return (
     <p
       title={note}
-      className="col-span-12 m-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1 text-[0.84rem] text-muted-foreground"
+      className="col-span-12 m-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.84rem] text-muted-foreground"
     >
       <Pulse on={false} tone="ok" />
       <span className="text-foreground [font-weight:560]">{title}</span>

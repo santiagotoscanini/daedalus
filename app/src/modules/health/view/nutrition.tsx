@@ -3,7 +3,7 @@ import { Changelog } from '../../../components/release-notes'
 import { compareOf, ServiceHead, verdictOf } from '../../../components/service-head'
 import { BoardGrid } from '../../../components/viz'
 import type { HealthData } from '../data'
-import { gapTitle, VersionAside } from './shared'
+import { gapTitle, LogFoot, VersionAside } from './shared'
 
 // Health › Nutrition: the Yazio MCP server — the food diary, weight and water
 // that Yazio holds, as tools on the LLM gateway.
@@ -23,9 +23,7 @@ export function NutritionView({ data: d }: { data: Nutrition }) {
         lede={
           <>
             Meals, water, weight and goals from Yazio, readable and writable by a model through the
-            gateway. A stdio-only server, so supergateway sits in front of it and spawns one per
-            session: each is a fresh Yazio login, and a wrong password shows in the log below as
-            &ldquo;Failed to authenticate&rdquo; on every call while the container itself stays up.
+            gateway.
           </>
         }
       />
@@ -51,7 +49,17 @@ export function NutritionView({ data: d }: { data: Nutrition }) {
             />
           }
         />
-        <LogBoard source={{ container: 'mcp-yazio' }} title="Yazio MCP logs" />
+        <LogBoard
+          source={{ container: 'mcp-yazio' }}
+          title="Yazio MCP logs"
+          foot={
+            <LogFoot container="mcp-yazio">
+              A stdio-only server, so supergateway sits in front of it and spawns one per session:
+              each is a fresh Yazio login, and a wrong password shows here as &ldquo;Failed to
+              authenticate&rdquo; on every call while the container itself stays up.
+            </LogFoot>
+          }
+        />
       </BoardGrid>
     </>
   )

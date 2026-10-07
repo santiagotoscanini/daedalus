@@ -1,8 +1,9 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { ServiceHead } from '../../../components/service-head'
+import { CAPTION, FOOT } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
-import { BoardGrid } from '../../../components/viz'
+import { Board, BoardGrid } from '../../../components/viz'
 import type { Tone } from '../../../lib/tone'
 import type { HealthData } from '../data'
 import { PiecesBoard } from './record-pieces'
@@ -34,9 +35,8 @@ export function RecordView({ data: d }: { data: Record_ }) {
         verdict={commitVerdict(d.build)}
         lede={
           <>
-            Lab reports, DNA, wearables and medical history in one record, with lab PDFs read by the
-            local model and reviewed before they are saved. Static files on the server: the record
-            itself lives in each browser that opens it.
+            Labs, DNA, wearables and medical history in one record, with lab PDFs read by the local
+            model and reviewed before saving. The record itself lives in each browser.
           </>
         }
         actions={
@@ -52,30 +52,50 @@ export function RecordView({ data: d }: { data: Record_ }) {
         <PiecesBoard d={d} />
 
         {/* Three projects, three release cycles: each says what it would
-            bring rather than one changelog speaking for all. */}
+            bring rather than one changelog speaking for all. Full width, so
+            no release's section list is cut short. The app's verdict is the
+            header's, so its corner carries the version alone. */}
         <Changelog
           build={d.build}
-          span={4}
+          span={12}
           title="getbased"
-          aside={<VersionAside version={short(d.build.running)} behind={d.build.behind.length} />}
+          aside={<VersionAside version={short(d.build.running)} />}
         />
         <Changelog
           gap={d.relay.gap}
-          span={4}
+          span={12}
           title="Relay"
           aside={<VersionAside version={d.relay.version} behind={d.relay.gap.behind.length} />}
         />
-        <Changelog
-          build={d.agents.build}
-          span={4}
-          title="Agents"
-          aside={
-            <VersionAside
-              version={short(d.agents.build.running)}
-              behind={d.agents.build.behind.length}
-            />
-          }
-        />
+        {d.agents.build.behind.length === 0 ? (
+          // Nothing to list: one left-aligned line, not a centred empty card.
+          <Board
+            title="Agents"
+            icon="logs"
+            span={12}
+            aside={<VersionAside version={short(d.agents.build.running)} behind={0} />}
+          >
+            <p className={CAPTION}>
+              {d.agents.build.note ?? 'Nothing new on the branch since this image was built.'}
+            </p>
+            <p className={FOOT}>
+              Commits rather than releases, because this image tracks a branch instead of a tag, so
+              this is what a re-pull would actually bring.
+            </p>
+          </Board>
+        ) : (
+          <Changelog
+            build={d.agents.build}
+            span={12}
+            title="Agents"
+            aside={
+              <VersionAside
+                version={short(d.agents.build.running)}
+                behind={d.agents.build.behind.length}
+              />
+            }
+          />
+        )}
 
         <LogBoard
           source={{ container: 'getbased' }}

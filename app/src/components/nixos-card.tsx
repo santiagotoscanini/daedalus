@@ -102,13 +102,8 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
                 facts.revision === null ? (
                   <span className={NOTE}>not a git input</span>
                 ) : (
-                  // Two tokens that wrap as tokens: the date never splits mid-string.
-                  <span
-                    className={cn(
-                      MONO,
-                      'inline-flex flex-wrap items-baseline [overflow-wrap:normal] [&>*]:whitespace-nowrap',
-                    )}
-                  >
+                  // Hash and date on one line, never split.
+                  <span className={cn(MONO, 'whitespace-nowrap [overflow-wrap:normal]')}>
                     <a
                       href={`https://github.com/NixOS/nixpkgs/commit/${facts.revision}`}
                       target="_blank"
@@ -197,7 +192,8 @@ function ChannelLead({ live }: { live: Live }) {
   const n = live.release.channel.newer
   if (n === null) return <span>channel not compared</span>
   if (n === 0) return <span>no newer commits</span>
-  return <Chip tone="warn">{num(n)} newer</Chip>
+  // A stable channel moving is routine: neutral words, not an amber pill.
+  return <span>{num(n)} newer commits</span>
 }
 
 function Latest({ facts, live }: { facts: NixosFacts; live: Live }) {

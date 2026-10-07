@@ -18,7 +18,7 @@ export const OS_MARK: Record<string, { src: string; invert: boolean }> = {
 /* The compact strip: a caption that hugs the picker above it, and sits flush
    when the picker draws it in its own identity slot (`nav` ancestor). */
 const COMPACT =
-  'm-0 -mt-2 mb-4 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8rem] text-muted-foreground leading-snug [nav_&]:m-0'
+  'm-0 -mt-2 mb-4 flex min-h-5 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8rem] text-muted-foreground leading-snug [nav_&]:m-0'
 
 /**
  * The strip above every System tab: the machine, its OS, and how it is.

@@ -25,11 +25,8 @@ export function LogsView({ data: d }: { data: Logs }) {
         compare={compareOf(d.loki.gap, 'from /loki/api/v1/status/buildinfo')}
         lede={
           <>
-            Where every log panel on this dashboard gets its lines, including the one at the bottom
-            of this page. Alloy tails journald and ships here; this stores and answers. It publishes
-            no hostname of its own and is reached over the monitoring bridge, which is why this
-            tab&rsquo;s dot is the one grey circle on the row: there is nothing here for gatus to
-            probe from outside, which is a different claim from down.
+            Where every log panel on this dashboard gets its lines: alloy tails journald and ships
+            here, and this stores and answers. It has no hostname; it is reached over the bridge.
           </>
         }
       />

@@ -22,9 +22,8 @@ export function QbtPage({ d }: { d: Downloaders }) {
         compare={compareOf(qbt.gap, 'from /api/v2/app/version')}
         lede={
           <>
-            The torrent half, and what the *arrs reach for first. Runs inside gluetun&rsquo;s
-            network namespace, so the forwarded port matters: without one it can download and never
-            seed.
+            The torrent half, and what the *arrs reach for first. It runs in gluetun&rsquo;s
+            namespace: without a forwarded port it downloads and never seeds.
           </>
         }
         actions={<Open name="qBittorrent" host="qbittorrent" />}

@@ -33,9 +33,8 @@ export function HouseView({ data: d }: { data: House }) {
         compare={compareOf(d.gap, 'from /api/config — what it says about itself')}
         lede={
           <>
-            The automation hub, and the only container on this box in the host network namespace.
-            mDNS and SSDP discovery do not cross a bridge, so every IoT integration would otherwise
-            need hand-typed addresses.
+            The automation hub, and the only container here in the host network namespace: mDNS and
+            SSDP discovery do not cross a bridge, so integrations would need hand-typed addresses.
           </>
         }
         actions={<Open name="Home Assistant" host="homeassistant" />}

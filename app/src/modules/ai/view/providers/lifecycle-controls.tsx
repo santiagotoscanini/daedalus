@@ -159,7 +159,7 @@ function InstallControl({ m }: { m: ProviderMachine }) {
       {installed && (
         <p className="m-0 text-[0.8rem] text-subdued">
           {behind === 0
-            ? `${m.version ?? 'This version'} is the newest release.`
+            ? 'This is the newest release.'
             : `v${latest} is out — ${String(behind)} release${behind === 1 ? '' : 's'} newer than ${m.version ?? 'what runs'}.`}
         </p>
       )}

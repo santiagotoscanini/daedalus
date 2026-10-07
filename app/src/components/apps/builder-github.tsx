@@ -63,6 +63,7 @@ export function GithubSection({ g }: { g: Github }) {
           <Stat
             label="API budget"
             value={g.rateLimit === null ? DASH : g.rateLimit.remaining.toLocaleString('en-US')}
+            tone={g.rateLimit === null ? 'muted' : undefined}
             sub={
               g.rateLimit === null
                 ? undefined
@@ -72,7 +73,7 @@ export function GithubSection({ g }: { g: Github }) {
           <Stat
             label="Bad signatures"
             value={g.rejected24h === null ? DASH : String(g.rejected24h)}
-            tone={g.rejected24h !== null && g.rejected24h > 0 ? 'bad' : undefined}
+            tone={g.rejected24h === null ? 'muted' : g.rejected24h > 0 ? 'bad' : undefined}
             sub="last 24 h"
           />
         </StatStrip>

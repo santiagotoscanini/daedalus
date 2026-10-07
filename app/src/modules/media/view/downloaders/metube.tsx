@@ -31,9 +31,8 @@ export function MetubePage({ d }: { d: Downloaders['metube'] }) {
         compare={compareOf(d.gap, 'the image tag, since MeTube serves no version')}
         lede={
           <>
-            yt-dlp with a web form in front of it, and the only downloader here that nothing else
-            drives: you point it at a URL yourself. Also inside the VPN namespace, which is
-            occasionally why a site refuses it.
+            yt-dlp behind a web form, and the one downloader nothing else drives: you give it a URL.
+            Inside the VPN namespace, which is occasionally why a site refuses it.
           </>
         }
         actions={<Open name="MeTube" host="metube" />}

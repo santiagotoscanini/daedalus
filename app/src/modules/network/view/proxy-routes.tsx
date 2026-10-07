@@ -166,7 +166,7 @@ function Group({ title, rows, site }: { title: string; rows: ProxyData['routes']
             )}
           </span>
           <span className={cn(CELL_MONO, 'via')} title={r.via ?? undefined}>
-            {r.via ?? <span className="text-muted-foreground/50">—</span>}
+            {r.via ?? <span className="font-sans text-muted-foreground/50">{DASH}</span>}
           </span>
           {/* An em dash is not zero: traefik labels no request counters for
               its own dashboard's router, and a 0 there would read as "nobody

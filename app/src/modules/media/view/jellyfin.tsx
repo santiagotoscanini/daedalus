@@ -49,9 +49,8 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
         compare={compareOf(d.gap, 'from /System/Info')}
         lede={
           <>
-            Where everything on this page ends up. Streams from <span className={MONO}>/s2/tv</span>{' '}
-            and transcodes on the iGPU. The one media container deliberately outside the VPN, so
-            playing something at home does not go out through Switzerland and back.
+            Where everything on this page ends up. Streams from <span className={MONO}>/s2/tv</span>
+            , transcodes on the iGPU, and sits outside the VPN so home playback stays at home.
           </>
         }
         actions={<Open name="Jellyfin" host="jellyfin" />}
@@ -118,7 +117,8 @@ function PlayingNow({ f }: { f: JellyfinFacts }) {
         <p className={FOOT}>
           Only sessions actually playing something. Every poller that has ever asked Jellyfin a
           question holds an idle session for a while afterwards, so the raw list reports an audience
-          that is not in the room.
+          that is not in the room. Jellyfin is the one media container deliberately outside the VPN,
+          so playing something at home does not go out through Switzerland and back.
         </p>
       }
     >

@@ -300,7 +300,7 @@ function AppHero({
 
       <div className={HERO_EXPOSURE}>
         <div className="flex items-center gap-2.5 max-rail:flex-col max-rail:items-stretch max-rail:gap-1.5">
-          <span className="text-[0.75rem] text-muted-foreground">Exposure</span>
+          <span className="translate-y-px text-[0.75rem] text-muted-foreground">Exposure</span>
           <SegmentPicker
             value={app.stage}
             disabled={readOnly}

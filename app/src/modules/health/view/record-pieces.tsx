@@ -22,12 +22,12 @@ import type { HealthData } from '../data'
 
 type Record_ = Extract<HealthData, { tab: 'record' }>
 
-/* The piece, the version it runs, where it answers, and the one state worth a
-   look. The address gives way first. */
+/* The piece, the version it runs (with its state beside it when there is
+   one), and where it answers. The address gives way first. */
 const GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[minmax(0,1fr)_9rem_minmax(0,1.6fr)_9rem]',
-  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_7rem_8rem]',
+  'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]',
 )
 const HIDE_NARROW = '@max-[44rem]/table:hidden'
 
@@ -56,11 +56,15 @@ function PieceRow({ p }: { p: Piece }) {
           </p>
         )}
       </div>
-      <span className={cn(CELL_MONO, 'text-[0.78rem] whitespace-nowrap text-foreground')}>
-        {p.version ?? DASH}
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span
+          className={cn(CELL_MONO, 'flex-none text-[0.78rem] whitespace-nowrap text-foreground')}
+        >
+          {p.version ?? DASH}
+        </span>
+        {p.state}
       </span>
       <span className={cn('min-w-0 truncate', HIDE_NARROW)}>{p.where}</span>
-      <span className="flex min-w-0 justify-end">{p.state}</span>
     </li>
   )
 }
@@ -80,9 +84,7 @@ export function PiecesBoard({ d }: { d: Record_ }) {
       version: d.relay.version,
       where: <span className={CELL_MONO}>{d.relayUrl}</span>,
       state:
-        relay.latest === null ? (
-          <span className={CELL_QUIET}>{DASH}</span>
-        ) : relay.behind.length === 0 ? (
+        relay.latest === null ? undefined : relay.behind.length === 0 ? (
           <QuietState>up to date</QuietState>
         ) : (
           <Chip tone="warn">{relay.latest} available</Chip>
@@ -133,7 +135,6 @@ export function PiecesBoard({ d }: { d: Record_ }) {
           <span>Piece</span>
           <span>Version</span>
           <span className={HIDE_NARROW}>Address</span>
-          <span className="text-right">State</span>
         </li>
         <TableGroup title="The record" note="its app and the relay" className="border-t-0" />
         {record.map((p) => (

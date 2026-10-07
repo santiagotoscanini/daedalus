@@ -161,7 +161,7 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
       <span className={cn(CELL_QUIET, N, MID)}>
         {disk.sizeBytes === null ? DASH : bytes(disk.sizeBytes)}
       </span>
-      <span className={cn(N, 'text-[0.8125rem] text-foreground')}>
+      <span className={cn(N, 'text-[0.8125rem] text-foreground [font-weight:400]')}>
         {disk.temperature === null ? DASH : `${String(disk.temperature)}°`}
       </span>
       <span className={cn(CELL_QUIET, N, MID)}>{hours(disk.powerOnHours)}</span>
@@ -172,7 +172,7 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
         {nvme ? DASH : num(disk.reallocated)}
       </span>
       <span className={cn(N, MID, nvme && worn ? 'text-warning' : CELL_QUIET)}>
-        {nvme ? (disk.percentageUsed === null ? DASH : num(disk.percentageUsed)) : DASH}
+        {nvme ? (disk.percentageUsed === null ? DASH : pct(disk.percentageUsed)) : DASH}
       </span>
       <span className={cn(CELL_QUIET, N, WIDE)}>
         {stats?.readBytes == null ? DASH : `${bytes(stats.readBytes)}/s`}
@@ -300,18 +300,24 @@ function DiskBoard({ disk }: { disk: Disk }) {
         {disk.selfTests.slice(0, 5).map((t, i) => (
           <li
             key={`${t.type ?? '?'}-${String(t.hours ?? i)}-${String(i)}`}
-            className={cn(ROW, 'grid grid-cols-[minmax(0,1fr)_2.5rem_4rem] gap-x-3')}
+            className={cn(ROW, 'grid grid-cols-[minmax(0,1fr)_auto_4rem] gap-x-3')}
           >
-            {/* A pass is the norm and reads as a word in its own column; the
-                test that did not finish carries its chip under its name, so a
-                long status never squeezes the name to an ellipsis. */}
-            <span className="flex min-w-0 flex-col items-start gap-1">
-              <span className={cn(ROW_MAIN, t.type === null && 'text-muted-foreground')}>
-                {t.type ?? 'unnamed test'}
-              </span>
-              {!t.passed && <Chip tone="warn">{t.status ?? 'failed'}</Chip>}
+            {/* An NVMe log carries no test type here, so it reads as a
+                self-test rather than as an unknown. */}
+            <span className={cn(ROW_MAIN, t.type === null && 'text-muted-foreground')}>
+              {t.type ?? (nvme ? 'Self-test' : 'unnamed test')}
             </span>
-            <span className={cn(ROW_SIDE, 'max-w-none text-right')}>{t.passed ? 'ok' : ''}</span>
+            <span className={cn(ROW_SIDE, 'max-w-none text-right')}>
+              {/* The result, in its column: a pass is a word, an unfinished test a
+                  chip with the short reason; the full status is its hover. */}
+              {t.passed ? (
+                'ok'
+              ) : (
+                <span title={t.status ?? undefined}>
+                  <Chip tone="warn">{shortStatus(t.status)}</Chip>
+                </span>
+              )}
+            </span>
             <span className={cn(ROW_SIDE, 'max-w-none text-right')}>
               {/* Against the drive's CURRENT hours, because the drive has
                   no calendar — it counts hours, not dates. */}
@@ -333,4 +339,11 @@ function DiskBoard({ disk }: { disk: Disk }) {
       )}
     </Board>
   )
+}
+
+/** "Interrupted (host reset)" → "interrupted": the chip says what happened, the hover why. */
+function shortStatus(s: string | null): string {
+  if (s === null) return 'failed'
+  const open = s.indexOf('(')
+  return (open > 0 ? s.slice(0, open) : s).trim().toLowerCase()
 }

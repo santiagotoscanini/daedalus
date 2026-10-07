@@ -54,9 +54,8 @@ export function DdnsView({ d }: { d: Inbound['ddns'] }) {
         ]}
         lede={
           <>
-            No proxy at all. The house’s own address. The tunnel carries HTTP and nothing else, so
-            anything speaking another protocol has to be dialled directly, and a home connection’s
-            address moves. ddclient is what keeps <code>{d.host}</code> pointed at it.
+            No proxy: the house’s own address, for anything that is not HTTP. A home connection’s
+            address moves, and ddclient keeps <code>{d.host}</code> pointed at it.
           </>
         }
       />

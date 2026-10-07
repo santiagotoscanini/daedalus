@@ -48,9 +48,8 @@ export function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
         compare={compareOf(d.gap, 'from /api/system/status')}
         lede={
           <>
-            Subtitles for what the others already downloaded. It reads Sonarr&rsquo;s and
-            Radarr&rsquo;s libraries directly, so nothing here decides what exists, only what is
-            missing words.
+            Subtitles for what the others downloaded. It reads Sonarr&rsquo;s and Radarr&rsquo;s
+            libraries directly: it decides only what is missing words, never what exists.
           </>
         }
         actions={<Open name="Bazarr" host="bazarr" />}

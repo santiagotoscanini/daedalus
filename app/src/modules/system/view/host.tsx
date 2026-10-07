@@ -227,7 +227,7 @@ function TheBoxBoard({ d }: { d: Host }) {
     <Board title="The box" icon="▣" span={4}>
       {/* Recognition, not a catalogue plate: the photo is held small so the
           board stands at the height of the two fact boards beside it. */}
-      <div className={cn(PART, '[&>img]:w-[clamp(64px,28%,96px)]')}>
+      <div className={cn(PART, 'pb-0 [&>img]:w-16')}>
         <PartPhoto part={PARTS.case} />
         <div className={PART_ID}>
           <strong className={PART_NAME}>{PARTS.case.name}</strong>

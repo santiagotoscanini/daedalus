@@ -1,8 +1,10 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, ServiceHead, verdictOf } from '../../../components/service-head'
+import { MONO } from '../../../components/tokens'
 import { BoardGrid } from '../../../components/viz'
 import type { HealthData } from '../data'
+import { LogFoot } from './shared'
 
 // Health › Training: the Hevy MCP server — workouts, routines and body
 // measurements from Hevy, as tools on the LLM gateway.
@@ -22,16 +24,25 @@ export function TrainingView({ data: d }: { data: Training }) {
         lede={
           <>
             Workouts, routines, exercise templates and body measurements over Hevy&rsquo;s public
-            API: read, create and update, with no delete tools. It speaks streamable HTTP itself, so
-            there is no wrapper, and its sessions idle out after thirty minutes. Upstream exports
-            telemetry to its author&rsquo;s collector unless HEVY_MCP_TELEMETRY=0 is set.
+            API: read, create and update, with no delete tools.
           </>
         }
       />
 
       <BoardGrid>
         <Changelog gap={d.gap} span={12} />
-        <LogBoard source={{ container: 'mcp-hevy' }} title="Hevy MCP logs" />
+        <LogBoard
+          source={{ container: 'mcp-hevy' }}
+          title="Hevy MCP logs"
+          foot={
+            <LogFoot container="mcp-hevy">
+              It speaks streamable HTTP itself, so there is no wrapper, and its sessions idle out
+              after thirty minutes. Upstream exports telemetry to its author&rsquo;s collector
+              unless
+              <span className={MONO}>HEVY_MCP_TELEMETRY=0</span> is set.
+            </LogFoot>
+          }
+        />
       </BoardGrid>
     </>
   )

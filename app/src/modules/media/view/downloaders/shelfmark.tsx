@@ -35,9 +35,9 @@ export function ShelfmarkPage({ d }: { d: Downloaders }) {
         )}
         lede={
           <>
-            The half that goes and gets things: searches Anna&rsquo;s Archive through the downloads
-            stack&rsquo;s VPN and drops finished files where Calibre-Web ingests them. A book that
-            never appeared usually failed here, not on the shelf.
+            Fetches books from Anna&rsquo;s Archive through the downloads stack&rsquo;s VPN and
+            drops them where Calibre-Web ingests them. A book that never arrived usually failed
+            here.
           </>
         }
         actions={<Open name="Shelfmark" host="shelfmark" />}

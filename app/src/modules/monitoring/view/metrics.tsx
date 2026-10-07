@@ -24,12 +24,9 @@ export function MetricsView({ data: d }: { data: Metrics }) {
         compare={compareOf(d.gap, 'from /api/v1/status/buildinfo')}
         lede={
           <>
-            Every number on this dashboard that is a rate, a trend or a seven-day anything came from
-            here. It publishes no host port and runs without{' '}
-            <span className={MONO}>--web.enable-lifecycle</span>, and its scrape list is generated
-            from nix. Each stack contributes its own{' '}
-            <span className={MONO}>fleet.prometheusScrapes</span>, so a target that is missing is a
-            stack that never declared one rather than a file somebody forgot to edit.
+            Every rate, trend and seven-day figure on this dashboard comes from here. Its scrape
+            list is generated from each stack’s{' '}
+            <span className={MONO}>fleet.prometheusScrapes</span>.
           </>
         }
         actions={<Open name="Prometheus" host="prometheus" />}

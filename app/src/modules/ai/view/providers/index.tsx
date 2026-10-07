@@ -1,16 +1,9 @@
-import { Link, useSearch } from '@tanstack/react-router'
-import { OS_MARK } from '../../../../components/machine-head'
-import {
-  CAPTION,
-  SEGMENT_ITEM,
-  SEGMENT_ITEM_ON,
-  SEGMENT_TRACK,
-} from '../../../../components/tokens'
-import { Pulse } from '../../../../components/viz'
-import { cn } from '../../../../lib/cn'
+import { useSearch } from '@tanstack/react-router'
+import { type MachineItem, MachineSwitcher } from '../../../../components/machine-picker'
+import { CAPTION } from '../../../../components/tokens'
 import type { ProviderMachine, ProvidersData } from '../../data/providers'
 import { ChainBoard } from './chain'
-import { BOX_MARK, MachineView } from './machine'
+import { MachineView, standingOf } from './machine'
 
 // The Providers tab: the chain once, then the picked machine in full.
 //
@@ -27,51 +20,31 @@ import { BOX_MARK, MachineView } from './machine'
 
 /* ── the picker ───────────────────────────────────────────────────────── */
 
-/* Its own band, with air above and below: flush under the chain board it
-   reads as a caption on it rather than as the control that decides
-   everything below. The label earns its line for the same reason: a bare row
-   of machine names does not say what picking one does. */
-const PICKER = 'mt-6 mb-5 flex flex-wrap items-center gap-3'
-const PICKER_LABEL = 'text-[0.75rem] text-muted-foreground'
-
+/* THE machine picker (components/machine-picker.tsx), the same control System
+   draws. A dot only where a machine's provider differs from the norm — not
+   answering, not installed, no report yet — never a row of green. */
 function MachinePills({ machines, active }: { machines: ProviderMachine[]; active: string }) {
-  return (
-    <nav aria-label="Provider machine" className={PICKER}>
-      <span className={PICKER_LABEL}>Machine</span>
-      <div className={cn(SEGMENT_TRACK, 'overflow-x-auto')}>
-        {machines.map((m) => {
-          const mark = m.machine === 'box' ? BOX_MARK : OS_MARK[m.os]
-          // Only when one machine runs more than one model server does the
-          // kind belong in its name; otherwise it is a word repeated down the
-          // row that distinguishes nothing.
-          const ambiguous = machines.filter((o) => o.machine === m.machine).length > 1
-          return (
-            <Link
-              key={m.id}
-              to="/c/$category"
-              params={{ category: 'ai' }}
-              search={{ tab: 'providers', machine: m.id }}
-              className={cn(SEGMENT_ITEM, active === m.id && SEGMENT_ITEM_ON)}
-              aria-current={active === m.id ? 'page' : undefined}
-            >
-              {mark !== undefined && (
-                <img
-                  src={mark.src}
-                  alt=""
-                  width={14}
-                  height={14}
-                  className={cn('size-3.5', mark.invert && 'dark:invert')}
-                />
-              )}
-              {m.name}
-              {ambiguous && <span className="text-muted-foreground">· {m.kindName}</span>}
-              <Pulse on={m.reachable} tone={m.reachable ? 'ok' : 'muted'} />
-            </Link>
-          )
-        })}
-      </div>
-    </nav>
-  )
+  const items: MachineItem[] = machines.map((m) => {
+    const standing = standingOf(m)
+    // Only when one machine runs more than one model server does the kind
+    // belong in its name; otherwise it is a word repeated down the row.
+    const ambiguous = machines.filter((o) => o.machine === m.machine).length > 1
+    return {
+      key: m.id,
+      label: m.name,
+      os: m.machine === 'box' ? 'box' : m.os,
+      selected: active === m.id,
+      link: {
+        to: '/c/$category',
+        params: { category: 'ai' },
+        search: { tab: 'providers', machine: m.id },
+      },
+      sub: ambiguous ? m.kindName : undefined,
+      dot: standing.tone === 'ok' ? null : standing.tone,
+      title: `${m.kindName}: ${standing.label}`,
+    }
+  })
+  return <MachineSwitcher items={items} label="Provider machine" className="mt-6 mb-5" />
 }
 
 /* ── the tab ──────────────────────────────────────────────────────────── */

@@ -78,9 +78,9 @@ export function ServiceHead({
           {verdict !== undefined && <VersionCompare verdict={verdict} rows={compare ?? []} />}
         </p>
         {/* A 640px measure, two lines: a head that reads as a paragraph is a
-            page that has not decided what it is about. The rest of the
-            sentence is one hover away rather than cut. */}
-        <p className="m-0 mt-0.5 line-clamp-2 max-w-[40rem] text-[0.84rem] leading-[1.5] text-muted-foreground hover:line-clamp-none">
+            page that has not decided what it is about. Never clamped: each
+            page keeps its own copy short instead. */}
+        <p className="m-0 mt-0.5 max-w-[40rem] text-[0.84rem] leading-[1.5] text-muted-foreground">
           {lede}
         </p>
       </div>

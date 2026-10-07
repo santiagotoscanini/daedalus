@@ -11,10 +11,18 @@ export const manifest = {
   boardSpans: [12, 12, 12, 12],
   // Three tabs in the order a prompt travels backwards: where the weights
   // are, the gateway in front of them, the callers. Providers has no
-  // ServiceHead and no dot — its subject is several machines, drawn from
+  // ServiceHead — its subject is several machines, drawn from
   // its own picker; the other two are services on this box.
   tabs: [
-    { id: 'providers', label: 'Providers', boardSpans: [12, 12, 12, 12], head: false },
+    {
+      id: 'providers',
+      label: 'Providers',
+      // The published model server's probe — every tab in this row wears a
+      // dot or none does, and the rail rolls them up.
+      probe: 'lemonade',
+      boardSpans: [12, 12, 12, 12],
+      head: false,
+    },
     {
       id: 'gateway',
       label: 'Gateway',
@@ -27,6 +35,8 @@ export const manifest = {
     {
       id: 'consumers',
       label: 'Consumers',
+      // The chat window: the one consumer on this box with a probe.
+      probe: 'open-webui',
       boardSpans: [12, 12, 12],
       head: false,
       nix: ['open-webui', 'n8n'],

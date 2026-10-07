@@ -54,9 +54,8 @@ export function WireguardView({ data }: { data: Inbound['wireguard'] }) {
         ]}
         lede={
           <>
-            The one service the router forwards a port for, and the only way back into this house
-            from outside it. UDP 51820. A WireGuard socket does not answer an unauthenticated packet
-            at all, which is why a forwarded port is acceptable here.
+            The one port the router forwards (UDP 51820), and the only way back into the house from
+            outside. WireGuard ignores unauthenticated packets, which is why that is acceptable.
           </>
         }
         actions={
@@ -167,7 +166,7 @@ function PeersTable({ f }: { f: WireguardFacts }) {
               {!p.enabled && <Chip tone="muted">disabled</Chip>}
               {p.handshakeAgo === null && <Chip tone="warn">never used</Chip>}
             </span>
-            <span className={CELL_MONO}>{p.ipv4 ?? DASH}</span>
+            <span className={cn(CELL_MONO, p.ipv4 === null && 'font-sans')}>{p.ipv4 ?? DASH}</span>
             <span className={cn(CELL_QUIET, 'dir text-right')}>{bytes(p.rx)}</span>
             <span className={cn(CELL_QUIET, 'dir text-right')}>{bytes(p.tx)}</span>
             <span className={cn(CELL_QUIET, p.handshakeAgo === null && 'text-warning')}>

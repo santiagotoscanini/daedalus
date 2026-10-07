@@ -15,13 +15,10 @@ const EVENTS_GRID =
 
 type GameEvent = { at: number; who: string; kind: 'join' | 'leave' }
 
-/** A KPI with nothing behind it: a muted word, not a large dash. */
+/** A KPI with nothing behind it: a muted word at the same size as every
+    other value in the strip — only the colour says it is not a reading. */
 export function Unknown() {
-  return (
-    <span className="text-[0.95rem] tracking-normal text-muted-foreground [font-weight:450]">
-      unknown
-    </span>
-  )
+  return <span className="text-muted-foreground">unknown</span>
 }
 
 /**

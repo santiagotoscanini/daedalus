@@ -27,21 +27,25 @@ type Runs = Extract<ActionsData, { tab: 'runs' }>
 const RUN_GRID =
   'grid items-center gap-x-6 px-5 grid-cols-[6rem_minmax(12rem,1.6fr)_6.5rem_minmax(7rem,1fr)_4.5rem_6rem] @max-[52rem]/table:grid-cols-[6rem_minmax(10rem,1fr)_4.5rem_6rem] @max-[52rem]/table:[&>.side]:hidden'
 
+/** The failures table: every row failed, so it has no state column. */
+const FAIL_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(14rem,2fr)_6.5rem_minmax(6rem,0.8fr)_4.5rem_6rem] @max-[52rem]/table:grid-cols-[minmax(10rem,1fr)_4.5rem_6rem] @max-[52rem]/table:[&>.side]:hidden'
+
+/** The machines a run used, as OS words ("Linux, macOS"); the images are on hover. */
+function runnerWord(ranOn: readonly string[]): string {
+  if (ranOn.length === 0) return DASH
+  return [...new Set(ranOn.map((l) => imageWord(l).split(' · ')[0] ?? l))].join(', ')
+}
+
 /** One run as a table row; the whole row opens the run on GitHub. */
 function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boolean }) {
   return (
-    <li className={cn(RUN_GRID, TABLE_ROW_DENSE, TABLE_ROW_LINK)}>
-      <span>
-        {/* In the failures table every row failed, so the state is a quiet
-            word there; the step name below carries the one red. */}
-        {showFailure ? (
-          <span className="text-[0.75rem] text-muted-foreground">
-            {r.conclusion?.replace(/_/g, ' ') ?? 'failed'}
-          </span>
-        ) : (
+    <li className={cn(showFailure ? FAIL_GRID : RUN_GRID, TABLE_ROW_DENSE, TABLE_ROW_LINK)}>
+      {!showFailure && (
+        <span>
           <RunChip status={r.status} conclusion={r.conclusion} />
-        )}
-      </span>
+        </span>
+      )}
       <span className="min-w-0">
         <a
           href={r.url}
@@ -58,13 +62,21 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
             </span>
           )}
         </a>
+        {/* The job path gives way, never the failing step: the job truncates
+            and the step (the one red) is always whole. */}
         {showFailure && r.failed !== null && (
-          <p className={CELL_SUB}>
+          <p className={cn(CELL_SUB, 'flex min-w-0 items-baseline gap-1')}>
             {r.failed.step === null ? (
-              <span className="text-danger">{r.failed.job}</span>
+              <span className="truncate text-danger">{r.failed.job}</span>
             ) : (
               <>
-                {r.failed.job} › <span className="text-danger">{r.failed.step}</span>
+                <span className="min-w-0 truncate" title={r.failed.job}>
+                  {r.failed.job}
+                </span>
+                <span className="flex-none">›</span>
+                <span className="max-w-[60%] flex-none truncate text-danger" title={r.failed.step}>
+                  {r.failed.step}
+                </span>
               </>
             )}
           </p>
@@ -72,7 +84,7 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
       </span>
       <span className={cn(CELL_QUIET, 'side truncate')}>{r.event.replace(/_/g, ' ')}</span>
       <span className={cn(CELL_QUIET, 'side truncate')} title={r.ranOn.join(', ')}>
-        {r.ranOn.length > 0 ? r.ranOn.map(imageWord).join(', ') : DASH}
+        {runnerWord(r.ranOn)}
       </span>
       <span className={cn(CELL_QUIET, 'text-right')}>{took(r.seconds)}</span>
       <span className={cn(CELL_QUIET, 'text-right')}>
@@ -82,10 +94,10 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
   )
 }
 
-function RunHead() {
+function RunHead({ failures = false }: { failures?: boolean }) {
   return (
-    <li className={cn(RUN_GRID, TABLE_HEAD)}>
-      <span>State</span>
+    <li className={cn(failures ? FAIL_GRID : RUN_GRID, TABLE_HEAD)}>
+      {!failures && <span>State</span>}
       <span>Repository · workflow</span>
       <span className="side">Event</span>
       <span className="side">Runner</span>
@@ -143,7 +155,7 @@ export function FailuresTable({ d }: { d: Runs }) {
         <p className={CAPTION}>Nothing failed in the window.</p>
       ) : (
         <ul className={TABLE} aria-label="Failed runs">
-          <RunHead />
+          <RunHead failures />
           {d.failures.map((r) => (
             <RunRowLine key={r.id} r={r} showFailure />
           ))}

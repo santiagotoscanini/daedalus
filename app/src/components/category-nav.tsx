@@ -33,7 +33,7 @@ export function TabNav({
   status: TabStatus | null
 }) {
   // isDotted, not `probe` alone — the loader's tabStatus comment says why.
-  const dotted = spec.tabs.some(isDotted)
+  const probed = spec.tabs.some(isDotted)
   // Which tabs are switched off on this box: the server marks them on the
   // rail's copy of the manifest (lib/modules/active.ts), read here from the
   // root loader so the tabs say it before their boards — which an off tab
@@ -47,6 +47,9 @@ export function TabNav({
           .map((t) => t.id),
       ),
   })
+  // All or none: a row where one tab wears a dot and its neighbours do not
+  // reads as a mistake, so an off tab (grey dot) dots the whole row.
+  const dotted = probed || off.size > 0
   const current = spec.tabs.find((t) => t.id === tab)
   const fronts = current === undefined ? [] : nixModulesOf(current)
 
@@ -63,19 +66,22 @@ export function TabNav({
           // No icons in a tab row: the label names the tab. An off tab wears a
           // grey dot titled "switched off" — the tab is dimmed too, so the
           // dot and the dimming say it together without a pill in the label.
-          // A tab nothing probes gets no dot at all rather than a grey claim.
           extra: isOff ? (
             <StateDot state="stopped" label="off" title="switched off on this box" />
-          ) : dotted && isDotted(t) ? (
+          ) : dotted ? (
+            // Every tab in a dotted row wears one, so the row reads as one
+            // column of state; a tab nothing probes is the grey one.
             <StateDot
               state={up === null ? 'unknown' : up ? 'running' : 'attention'}
               label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
               title={
-                up === null
-                  ? 'no reading from gatus'
-                  : up
-                    ? 'answering'
-                    : 'nothing has answered in the last few minutes'
+                !isDotted(t)
+                  ? 'nothing probes this yet'
+                  : up === null
+                    ? 'no reading from gatus'
+                    : up
+                      ? 'answering'
+                      : 'nothing has answered in the last few minutes'
               }
             />
           ) : undefined,

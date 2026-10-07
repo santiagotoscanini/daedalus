@@ -58,7 +58,7 @@ const ARR_COPY = {
     name: 'Sonarr',
     logo: '/icon-sonarr.svg',
     unit: 'Series',
-    lede: 'Watches series for new episodes, asks Prowlarr where to find them, and hands what it finds to a downloader. What arrives is renamed into /s2/tv and Jellyfin picks it up.',
+    lede: 'Watches series for new episodes, asks Prowlarr where to find them and hands them to a downloader. Arrivals are renamed into /s2/tv for Jellyfin.',
     upcoming: 'Airing next',
   },
   radarr: {

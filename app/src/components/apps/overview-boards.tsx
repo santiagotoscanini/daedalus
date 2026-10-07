@@ -188,7 +188,7 @@ export function DeploymentBoard({
       {/* What the last box build found in the repo. Nothing at all for an
           app that has never built here. */}
       {build !== null && (
-        <div className="mt-auto border-hairline border-t pt-3">
+        <div className="border-hairline border-t pt-3">
           <DetectionLine app={app.name} build={build} />
         </div>
       )}

@@ -55,9 +55,8 @@ export function ZoneView({ d }: { d: Zone }) {
         ]}
         lede={
           <>
-            One domain name, and every hostname on this box is a label under it. That means one
-            wildcard certificate, one tunnel, one set of OIDC redirect URIs and one expiry date. The
-            zone lives at Cloudflare; the registration does not.
+            One domain, every hostname a label under it: one wildcard certificate, one tunnel, one
+            expiry date. The zone lives at Cloudflare; the registration does not.
           </>
         }
         actions={

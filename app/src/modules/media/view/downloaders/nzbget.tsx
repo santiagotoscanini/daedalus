@@ -25,9 +25,8 @@ export function NzbPage({ d }: { d: Downloaders }) {
         compare={compareOf(nzb.gap, 'from /jsonrpc/version')}
         lede={
           <>
-            The usenet half. Faster than a torrent when the post is fully retained and useless when
-            it is not. Retention is a property of the provider rather than the release, which is why
-            the news-server list is on this page.
+            The usenet half: faster than a torrent when the post is fully retained, useless when it
+            is not. Retention belongs to the provider, so the news servers are listed here.
           </>
         }
         actions={<Open name="NZBGet" host="nzbget" />}

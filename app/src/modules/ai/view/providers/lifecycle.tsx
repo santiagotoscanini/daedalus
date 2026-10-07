@@ -46,6 +46,10 @@ function KeyValues({ rows }: { rows: { k: string; v: ReactNode }[] }) {
   )
 }
 
+/** Two spellings of one release ("v2026.40.0", "2026.40.0") are the same release. */
+const sameVersion = (a: string | null | undefined, b: string | null | undefined) =>
+  a != null && b != null && a.replace(/^v/, '') === b.replace(/^v/, '')
+
 const STARTUP = { enabled: 'yes', disabled: 'no', missing: 'no entry' } as const
 
 const PHASE: Record<LifecyclePhase, { label: string; tone: Tone }> = {
@@ -110,10 +114,25 @@ export function LifecycleBoard({ m }: { m: ProviderMachine }) {
                 ),
             },
             { k: 'Version', v: m.version ?? DASH },
-            { k: 'Installer', v: g?.install?.installer_version ?? DASH },
+            // The installer and the pin only in their own words when they differ
+            // from what runs: the same number four times down a board says it once.
+            {
+              k: 'Installer',
+              v: sameVersion(g?.install?.installer_version, m.version)
+                ? 'the same release'
+                : (g?.install?.installer_version ?? DASH),
+            },
             { k: 'Starts on its own', v: g?.startup == null ? DASH : STARTUP[g.startup] },
             { k: 'Process', v: processText(facts) },
-            { k: 'Pinned release', v: m.asked?.pin ?? 'none' },
+            {
+              k: 'Pinned release',
+              v:
+                m.asked?.pin == null
+                  ? 'none'
+                  : sameVersion(m.asked.pin, m.version)
+                    ? 'this release'
+                    : m.asked.pin,
+            },
           ]}
         />
         <div className="flex min-w-0 flex-col gap-4">
@@ -195,7 +214,11 @@ function LastInstall({ m }: { m: ProviderMachine }) {
           <Ago at={l.at} />
         </span>
       </div>
-      {l.message !== '' && <p className="m-0 mt-1 text-[0.8rem] text-subdued">{l.message}</p>}
+      {/* "v2026.40.0 is running" after a done install restates the line above. */}
+      {l.message !== '' &&
+        !(l.phase === 'done' && sameVersion(l.message.split(' ')[0], m.version)) && (
+          <p className="m-0 mt-1 text-[0.8rem] text-subdued">{l.message}</p>
+        )}
       {l.vanished.length > 0 && (
         <Alert variant="warning" className="mt-2">
           <CircleAlertIcon />

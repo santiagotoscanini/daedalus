@@ -59,9 +59,8 @@ export function TraefikView({ data: d }: { data: ProxyData }) {
         ]}
         lede={
           <>
-            Every hostname on this box resolves to one process, and this is it. It terminates the
-            TLS, picks a container by the name in the request, and — for about half of them — asks
-            Pocket ID whether the request should go any further.
+            Every hostname on this box resolves to this one process. It terminates TLS, picks a
+            container by name and, for about half of them, asks Pocket ID first.
           </>
         }
         actions={

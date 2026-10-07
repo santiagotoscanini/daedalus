@@ -73,10 +73,9 @@ export function ResolverView({
         ]}
         lede={
           <>
-            Every device in the house resolves through this, including this box. It answers for the{' '}
-            {d.clients.total === null ? 'LAN' : `${num(d.clients.total)} clients`} it has seen, and
-            forwards whatever it cannot answer itself. The addresses those clients hold are the{' '}
-            <b>DHCP</b> tab.
+            Every device in the house resolves through this, this box included: the{' '}
+            {d.clients.total === null ? 'LAN' : `${num(d.clients.total)} clients`} it has seen. What
+            it cannot answer it forwards. Their addresses are the <b>DHCP</b> tab.
           </>
         }
         actions={

@@ -294,7 +294,7 @@ export function GrafanaLogs({
         />
         <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
           <a href={grafanaLogsFull(site, source, from)} target="_blank" rel="noreferrer">
-            ↗ Search
+            Search ↗
           </a>
         </Button>
       </div>

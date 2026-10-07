@@ -54,9 +54,8 @@ export function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'mine
         ]}
         lede={
           <>
-            Paper, near-vanilla. Everyone connects to <span className={MONO}>{mc.connect}</span>.
-            That works at home and away because pi-hole answers the name with the LAN address and
-            Cloudflare with the public one.
+            Paper, near-vanilla. Everyone connects to <span className={MONO}>{mc.connect}</span>, at
+            home or away: pi-hole answers with the LAN address, Cloudflare with the public one.
           </>
         }
         actions={

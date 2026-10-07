@@ -175,7 +175,12 @@ export function Changelog({
     >
       {gap !== null ? (
         <>
-          <UpgradeChain behind={gap.behind} />
+          {/* The chain only when it says something the rows below do not: a
+              step with no release row of its own. When every step IS a row,
+              a chip and a row would name the same version twice. */}
+          {gap.behind.some((v) => !gap.releases.some((r) => r.version === v)) && (
+            <UpgradeChain behind={gap.behind} />
+          )}
           <ReleaseNotes
             releases={gap.releases}
             running={gap.installed}

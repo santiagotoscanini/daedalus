@@ -43,9 +43,8 @@ export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
         )}
         lede={
           <>
-            Syncs the TRaSH Guides into Sonarr and Radarr every night: custom formats, their scores,
-            and the quality-definition sizes. When a profile changes back after you edited it by
-            hand, this is what did it.
+            Syncs the TRaSH Guides into Sonarr and Radarr nightly: custom formats, their scores and
+            the quality sizes. A profile that reverts after a hand edit was this.
           </>
         }
         actions={

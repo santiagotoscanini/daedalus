@@ -41,10 +41,8 @@ export function JobsView({ data: d }: { data: Jobs }) {
         compare={compareOf(d.gap, 'the image tag — its API is about checks, not about itself')}
         lede={
           <>
-            The only watcher here that reports the ABSENCE of an event. Everything else on this box
-            notices something going wrong; this notices something that stopped happening, which is
-            the failure a scheduled job has: a timer that was disabled, never fired, or whose
-            service was renamed.
+            The one watcher that reports an ABSENCE: not something going wrong, but a scheduled job
+            that stopped happening — disabled, never fired, or renamed.
           </>
         }
         // `hc`, not `healthchecks` — see the note on Gatus in probes.tsx.

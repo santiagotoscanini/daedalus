@@ -87,10 +87,8 @@ export function OutboundView({ data }: { data: Outbound }) {
         ]}
         lede={
           <>
-            gluetun holds a WireGuard tunnel and owns a network namespace; the containers behind one
-            borrow it outright rather than having interfaces of their own. It is fail-closed, so a
-            tunnel that drops takes their internet with it. That is the point, and the reason this
-            page exists.
+            gluetun holds a WireGuard tunnel and owns a network namespace the containers behind it
+            borrow. It fails closed: a tunnel that drops takes their internet with it.
           </>
         }
       />

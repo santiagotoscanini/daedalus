@@ -59,9 +59,8 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
         )}
         lede={
           <>
-            Unsticks the download queues: strikes items that stop progressing, blocks the ones that
-            keep coming back, and asks the *arr for a replacement. It is why the queues on the
-            Wanted tab are usually empty.
+            Unsticks the download queues: strikes items that stop moving, blocks the ones that keep
+            returning, and asks the *arr for another. Why Wanted&rsquo;s queues are usually empty.
           </>
         }
         actions={<Open name="Cleanuparr" host="cleanuparr" />}

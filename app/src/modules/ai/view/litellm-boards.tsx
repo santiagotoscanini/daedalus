@@ -81,12 +81,15 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
         <p
           className={cn(
             CAPTION,
-            'flex flex-wrap gap-x-4 gap-y-0.5 [&_b]:font-semibold [&_b]:text-subdued [&_b]:tabular-nums',
+            // An even grid rather than a wrapping line: a wrap left one endpoint
+            // alone on a second row.
+            'grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-4 gap-y-1 [&_b]:font-semibold [&_b]:text-subdued [&_b]:tabular-nums',
           )}
         >
           {data.endpoints.map((e) => (
-            <span key={e.label}>
-              {e.label} <b>{num(e.value)}</b>
+            <span key={e.label} className="flex justify-between gap-3">
+              <span className="truncate">{e.label}</span>
+              <b>{num(e.value)}</b>
             </span>
           ))}
         </p>

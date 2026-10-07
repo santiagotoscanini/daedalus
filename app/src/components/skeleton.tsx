@@ -243,8 +243,8 @@ export function BlockSkeleton({ h = 240 }: { h?: number }) {
  */
 export function HeadStripSkeleton() {
   return (
-    // One short bar: the identity is a single muted line beside the picker now.
-    <span className="inline-flex h-5 w-[min(28rem,60%)] items-center">
+    // One short bar, the height of the single muted line under the picker.
+    <span className="flex h-5 w-[min(28rem,60%)] items-center">
       <Bar w="100%" h={10} />
     </span>
   )
