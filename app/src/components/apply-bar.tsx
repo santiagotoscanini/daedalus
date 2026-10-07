@@ -1,4 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
+import { useEffect, useRef, useState } from 'react'
 import type { ApplyStatus } from '../host/apply'
 import { cn } from '../lib/cn'
 import { REBOOT_REQUIRED } from '../lib/reboot-required'
@@ -83,6 +84,19 @@ export function ApplyBar({
     status.phase === REBOOT_REQUIRED &&
     status.rebootPending === true
 
+  // The room the floating bar covers, measured: the bar wraps to two or three
+  // lines on a phone, so a fixed spacer either hid the page's end under it or
+  // left a gap on a desktop.
+  const bar = useRef<HTMLDivElement>(null)
+  const [room, setRoom] = useState(96)
+  useEffect(() => {
+    const el = bar.current
+    if (el === null) return
+    const ro = new ResizeObserver(() => setRoom(el.offsetHeight + 24))
+    ro.observe(el)
+    return () => ro.disconnect()
+  })
+
   if (changed.length === 0 && !running && status.state !== 'failed' && !rebootPending) return null
 
   // The phase vocabulary lives in nix/stacks/daedalus/host/apply.sh; a phase this list has not
@@ -100,8 +114,9 @@ export function ApplyBar({
     <>
       {/* The room the floating bar covers, reserved only while it is shown,
           so the end of the page is never hidden under it. */}
-      <div aria-hidden="true" className="h-20" />
+      <div aria-hidden="true" style={{ height: room }} />
       <div
+        ref={bar}
         className={cn(
           // `left` is the sidebar's width, not a copy of it: the bar is fixed,
           // so it cannot inherit the grid column, and the collapsed rail moves
@@ -109,8 +124,10 @@ export function ApplyBar({
           // A dock floating over the page's foot, inset like the rail.
           'fixed right-[clamp(0.75rem,2.5vw,2.5rem)] bottom-4 left-[calc(var(--sidebar-w)+clamp(0.75rem,2.5vw,2.5rem))] z-20',
           'max-rail:right-3 max-rail:left-3',
-          'flex items-center justify-between gap-6',
-          'rounded-2xl px-5 py-3',
+          // One line on a desktop; on a phone the words take the full width
+          // and the buttons a row of their own, right-aligned.
+          'flex flex-wrap items-center justify-between gap-x-6 gap-y-2.5',
+          'rounded-2xl px-5 py-3 max-[40rem]:px-4',
           // Glass rather than opaque: the bar sits over the end of a scrolling
           // page, and content disappearing under a hard edge reads as the page
           // having ended. The edge carries the state; a glow under it, the urgency.
@@ -121,11 +138,11 @@ export function ApplyBar({
             : 'border-primary/35 shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow),0_0_40px_-14px_var(--primary)]',
         )}
       >
-        <div className="min-w-0 text-[0.87rem]">
+        <div className="min-w-0 flex-[1_1_20rem] text-[0.87rem] max-[40rem]:basis-full">
           {running ? (
             <>
               <strong>Applying…</strong>
-              <ol className="ml-3.5 inline-flex list-none gap-3.5 p-0 text-muted-foreground text-xs">
+              <ol className="ml-3.5 inline-flex max-w-full list-none flex-wrap gap-x-3.5 gap-y-1 p-0 text-muted-foreground text-xs max-[40rem]:mt-1 max-[40rem]:ml-0 max-[40rem]:flex">
                 {phases.map((p, i) => (
                   <li
                     key={p}
@@ -159,8 +176,12 @@ export function ApplyBar({
             </>
           ) : (
             <>
-              <strong>{heading(changed)}</strong>
-              <span className="ml-2.5 text-muted-foreground">
+              <strong className="mr-2.5">{heading(changed)}</strong>
+              {/* One line on a phone, the whole list on hover. */}
+              <span
+                className="text-muted-foreground max-[40rem]:block max-[40rem]:truncate"
+                title={changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
+              >
                 {changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
               </span>
               {refusal !== null && <span className="ml-2.5 text-danger">{refusal}</span>}
@@ -174,7 +195,7 @@ export function ApplyBar({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
           {!running && changed.length > 0 && armed && (
             <>
               <span className="text-muted-foreground text-xs">
