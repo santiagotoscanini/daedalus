@@ -12,7 +12,10 @@ function inventory(): Plugin {
   return {
     name: "daedalus-inventory",
     async buildStart() {
-      const { SERVICES } = await import("./src/data/services.ts");
+      const { SERVICES, SHOWN } = await import("./src/data/services.ts");
+      const icons = readdirSync(new URL("./src/assets/icons", import.meta.url)).map((f) => f.replace(/\.[^.]+$/, ""));
+      const noIcon = SHOWN.filter((x) => !icons.includes(x.id)).map((x) => x.id);
+      if (noIcon.length > 0) throw new Error(`no vendored icon for: ${noIcon.join(", ")}`);
       const dirs = readdirSync(new URL("../nix/modules", import.meta.url), { withFileTypes: true })
         .filter((d) => d.isDirectory())
         .map((d) => d.name);
@@ -40,6 +43,7 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   // Plugin order matters: tailwind → tanstackStart → viteReact (Start must
   // run before the React plugin).
+  build: { assetsInlineLimit: 0 },
   plugins: [
     inventory(),
     tailwindcss(),

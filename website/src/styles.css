@@ -685,6 +685,7 @@ html {
   }
 }
 
+
 /* ---------------------------------------------------------------- *
  * The universe: everything it touches (components/universe)
  * ---------------------------------------------------------------- */
@@ -693,128 +694,57 @@ html {
     background: var(--color-app);
   }
   .uv-stage {
-    position: sticky;
-    top: 0;
+    position: relative;
     height: 100svh;
     overflow: hidden;
-    background: radial-gradient(ellipse 60% 55% at 50% 56%, rgba(226, 121, 90, 0.07), transparent 70%);
+    display: none;
+  }
+  .uv[data-mode="pinned"] .uv-stage {
+    display: block;
+    position: sticky;
+    top: 0;
+  }
+  .uv[data-mode="still"] .uv-stage {
+    display: block;
+    height: min(82svh, 760px);
+  }
+  .uv-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 1.1s ease;
+  }
+  .uv[data-ready] .uv-canvas {
+    opacity: 1;
   }
   .uv-vignette {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: 3000;
     background:
-      linear-gradient(180deg, var(--color-app) 0%, rgba(8, 8, 10, 0.6) 14%, transparent 34%),
-      linear-gradient(0deg, var(--color-app) 0%, rgba(8, 8, 10, 0.7) 12%, transparent 30%),
-      radial-gradient(ellipse 90% 85% at 50% 54%, transparent 58%, rgba(8, 8, 10, 0.75) 100%);
+      radial-gradient(ellipse 34rem 15rem at max(14rem, calc((100vw - 72rem) / 2 + 14rem)) 9rem, rgba(8, 8, 10, 0.8), transparent 75%),
+      linear-gradient(180deg, var(--color-app) 0%, rgba(8, 8, 10, 0.55) 10%, transparent 26%),
+      linear-gradient(0deg, var(--color-app) 0%, rgba(8, 8, 10, 0.6) 9%, transparent 24%),
+      radial-gradient(ellipse 80% 75% at 50% 50%, transparent 55%, rgba(8, 8, 10, 0.7) 100%);
   }
-  .uv-lines {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-  .uv-lines path {
-    stroke: rgba(255, 255, 255, 0.16);
-    stroke-width: 1;
-  }
-  .uv-lines path[data-ring="1"] {
-    stroke: rgba(226, 121, 90, 0.4);
-    stroke-dasharray: 3 6;
-  }
-  .uv-lines line {
-    stroke: rgba(226, 121, 90, 0.9);
-    stroke-width: 0.75;
-    stroke-dasharray: 2 5;
-  }
-  .uv-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  .uv-tile,
-  .uv-center {
+  .uv-label {
     position: absolute;
     left: 0;
     top: 0;
     opacity: 0;
+    translate: -50% 0;
+    font: 500 12px/1 var(--font-mono);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    color: #e6e6ec;
+    text-shadow: 0 0 12px rgba(8, 8, 10, 1), 0 0 3px rgba(8, 8, 10, 1);
+    pointer-events: none;
     will-change: transform, opacity;
   }
-  .uv-box,
-  .uv-center-box {
-    position: absolute;
-    left: -32px;
-    top: -32px;
-    width: 64px;
-    height: 64px;
-    display: grid;
-    place-items: center;
-    border-radius: 19px;
-    background: rgba(13, 13, 17, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #e8e8ee;
-    will-change: scale;
-  }
-  .uv-center {
-    opacity: 1;
-  }
-  .uv-center-box {
-    border-color: rgba(226, 121, 90, 0.7);
-    box-shadow:
-      0 0 0 10px rgba(226, 121, 90, 0.06),
-      0 0 70px -6px rgba(226, 121, 90, 0.55);
-  }
-  .uv-tile[data-tier="catalog"] .uv-box,
-  .uv-chip[data-tier="catalog"] {
-    border-color: rgba(226, 121, 90, 0.5);
-    color: #f6d6ca;
-    box-shadow: 0 0 32px -10px rgba(226, 121, 90, 0.55);
-  }
-  .uv-tile[data-tier="beside"] .uv-box,
-  .uv-chip[data-tier="beside"] {
-    border-color: rgba(255, 255, 255, 0.22);
-    color: #ececf1;
-    box-shadow: 0 0 28px -12px rgba(255, 255, 255, 0.3);
-  }
-  .uv-tile[data-tier="connects"] .uv-box,
-  .uv-chip[data-tier="connects"] {
-    border: 1px dashed rgba(255, 255, 255, 0.32);
-    color: #bfbfca;
-    background: rgba(13, 13, 17, 0.7);
-  }
-  .uv-mono {
-    font: 600 17px/1 var(--font-mono);
-    letter-spacing: -0.03em;
-  }
-  .uv-name {
-    position: absolute;
-    left: 0;
-    top: 0;
-    font: 500 11.5px/1 var(--font-mono);
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    color: #cfcfd8;
-    text-shadow: 0 0 10px rgba(8, 8, 10, 1), 0 0 3px rgba(8, 8, 10, 1);
-    transition: opacity 0.3s ease;
-  }
-  .uv-chip {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    background: rgba(13, 13, 17, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  .uv-chip .uv-mono {
-    font-size: 13px;
-  }
-
   .uv-head {
     position: absolute;
-    z-index: 4000;
     top: 5.2rem;
     left: max(1.5rem, calc((100vw - 72rem) / 2 + 1.5rem));
     width: min(27rem, calc(100% - 3rem));
@@ -832,93 +762,40 @@ html {
     line-height: 1.04;
     letter-spacing: -0.04em;
   }
-  .uv-beats {
-    display: grid;
+  .uv-line {
     margin-top: 1rem;
-  }
-  .uv-beat {
-    grid-area: 1 / 1;
-    opacity: 0;
-    transition:
-      opacity 0.5s ease,
-      transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
     font-size: 14.5px;
     line-height: 1.55;
     color: #aeaeb9;
-    text-wrap: pretty;
-  }
-  .uv-legend {
-    position: absolute;
-    z-index: 4000;
-    left: 50%;
-    bottom: 3.4rem;
-    translate: -50% 0;
-    display: flex;
-    gap: 1.8rem;
-    white-space: nowrap;
-  }
-  .uv-key {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.6rem;
-    font: 500 11px/1 var(--font-mono);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--color-dim);
-    transition: color 0.4s ease;
-  }
-  .uv-key[data-on] {
-    color: var(--color-fg);
-  }
-  .uv-key i {
-    width: 12px;
-    height: 12px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-  }
-  .uv-key[data-tier="catalog"] i {
-    border-color: rgba(226, 121, 90, 0.8);
-  }
-  .uv-key[data-tier="connects"] i {
-    border-style: dashed;
-  }
-  .uv-key b {
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    text-transform: none;
-    color: var(--color-muted);
   }
   .uv-legal {
     position: absolute;
-    z-index: 4000;
     left: 0;
     right: 0;
-    bottom: 1.2rem;
+    bottom: 1.3rem;
+    padding: 0 1.5rem;
     text-align: center;
     font-size: 11px;
     color: var(--color-dim);
   }
+  .uv-chip {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .uv-chip img {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+  }
   @media (max-width: 767px) {
     .uv-head {
       top: 4.6rem;
-    }
-    .uv-beat {
-      font-size: 13.5px;
-    }
-    .uv-legend {
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 0.7rem 1.3rem;
-      bottom: 3.6rem;
-      width: calc(100% - 2rem);
-    }
-    .uv-key {
-      font-size: 10px;
-      letter-spacing: 0.08em;
-    }
-    .uv-legal {
-      padding: 0 1.5rem;
-      font-size: 10.5px;
     }
   }
 }

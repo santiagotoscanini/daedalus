@@ -12,12 +12,14 @@ path-scoped rules load as you touch files.
   operator's external setup — keep it honest about what this repo
   contains). Public: `santiagotoscanini/daedalus`.
   The landing's services field ("Everything it touches") reads ONE file,
-  `website/src/data/services.ts`: every name, its tier (`catalog`, `beside`,
-  `connects`) and, for a catalog tile, its `module` id. Flipping an item's
-  tier there is how it graduates (a service that becomes `nix/modules/<id>`
-  gets `tier: "catalog"` and `module: "<id>"`). The site build compares the
-  module ids with `nix/modules/` and fails on a mismatch, and the counts the
-  page prints are computed from the list, never typed.
+  `website/src/data/services.ts`. An entry means the engine or the reference
+  box really runs or reaches that service; add or remove one by editing the
+  file, and nothing on the page prints a count. Each entry names its vendored
+  official mark (`website/src/assets/icons/<id>.*`) and where it came from
+  (the credits table); a service with no official mark is left out, never
+  given a monogram, and the Daedalus mark never appears in that section. The
+  site build fails if a `nix/modules/<id>` has no entry (give a module with no
+  mark of its own `hidden: true`) or an entry has no icon file.
 - **The app builder.** The box's GitHub App takes the push webhook; the
   queue and the build verb's app half are `app/src/lib/` (`builds.ts`,
   `build-queue.ts`), `app/src/host/build-verb.ts` and
