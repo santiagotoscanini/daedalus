@@ -52,7 +52,15 @@ export function ConnectionBoard({ events }: { events: RcEvent[] }) {
 
 function EventRow({ event }: { event: RcEvent }) {
   return (
-    <li className={cn(ROW, 'grid min-h-11 grid-cols-[4.75rem_minmax(0,1fr)_4.5rem] gap-x-4 px-5')}>
+    <li
+      className={cn(
+        ROW,
+        // A phone: the kind and the time share the first line, the message
+        // gets the full width underneath and wraps instead of being cut.
+        'grid min-h-11 grid-cols-[4.75rem_minmax(0,1fr)_4.5rem] items-baseline gap-x-4 px-5 py-2.5',
+        'max-[40rem]:grid-cols-[minmax(0,1fr)_auto] max-[40rem]:gap-y-1',
+      )}
+    >
       {/* A drop is the one kind worth a colour; the rest are the link's normal
           life and read as a quiet word in their column. */}
       <span className="flex">
@@ -62,7 +70,13 @@ function EventRow({ event }: { event: RcEvent }) {
           <span className="text-[0.75rem] text-muted-foreground">{EVENT_LABEL[event.kind]}</span>
         )}
       </span>
-      <span className={ROW_MAIN} title={event.text}>
+      <span
+        className={cn(
+          ROW_MAIN,
+          'whitespace-normal! [overflow-wrap:anywhere] max-[40rem]:col-span-2 max-[40rem]:row-start-2',
+        )}
+        title={event.text}
+      >
         {event.text}
       </span>
       <span className={cn(ROW_SIDE, 'max-w-none text-right whitespace-nowrap')}>

@@ -227,7 +227,7 @@ function TheAddressOverTimeBoard({ f }: { f: DdnsFacts }) {
                 {h.ip}
               </span>
               {/* On a phone "held for" is this second line. */}
-              <span className="hidden text-[0.72rem] text-muted-foreground @max-[30rem]/table:block">
+              <span className="hidden text-[0.75rem] text-muted-foreground @max-[30rem]/table:block">
                 {h.heldDays === null ? 'current' : `held ${String(h.heldDays)}d`}
               </span>
             </span>

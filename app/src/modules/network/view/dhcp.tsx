@@ -104,7 +104,7 @@ function DeviceRow({ d }: { d: Device }) {
           {d.name ?? 'unnamed'}
         </span>
         {/* On a phone the address and hardware address are this second line. */}
-        <span className="hidden truncate font-mono text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+        <span className="hidden truncate font-mono text-[0.75rem] text-muted-foreground @max-[38rem]/table:block">
           {d.ip} · {d.mac}
         </span>
       </span>

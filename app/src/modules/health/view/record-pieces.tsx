@@ -26,7 +26,7 @@ type Record_ = Extract<HealthData, { tab: 'record' }>
 const GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]',
-  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[44rem]/table:gap-y-1',
 )
 const HIDE_NARROW = '@max-[44rem]/table:hidden'
 
@@ -75,6 +75,18 @@ function PieceRow({ p }: { p: Piece }) {
         {p.state}
       </span>
       <span className={cn('min-w-0 truncate', HIDE_NARROW)}>{p.where}</span>
+      {/* The Address column steps away on a phone; its value takes a full row
+          under the piece, wide enough to keep a hostname in one piece. */}
+      {p.addr !== undefined && (
+        <p
+          className={cn(
+            CELL_MONO,
+            'hidden whitespace-normal [overflow-wrap:anywhere] @max-[44rem]/table:col-span-full @max-[44rem]/table:block',
+          )}
+        >
+          {p.addr}
+        </p>
+      )}
     </li>
   )
 }

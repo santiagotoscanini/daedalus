@@ -1,7 +1,14 @@
+import { useState } from 'react'
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW_DENSE } from '../../../components/table'
+import {
+  CELL_QUIET,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW_DENSE,
+  TableMore,
+} from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
@@ -227,6 +234,9 @@ function GrafanaLogsBoard() {
   )
 }
 
+/** How many units the failed-sends table shows before the rest fold. */
+const SEND_CAP = 5
+
 /** Unit · error · when. The error steps away first. */
 const SEND_GRID =
   'grid items-start gap-x-6 px-5 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[40rem]/table:gap-x-3 @max-[40rem]/table:[&>.err]:hidden'
@@ -237,7 +247,18 @@ const SEND_GRID =
  */
 function FailedSendsTable({ f }: { f: AlertsFacts }) {
   const { d, mailFailing } = f
+  const [all, setAll] = useState(false)
   if (d.mail.failures.length === 0) return null
+  // One row per sending unit: the same unit failing twelve times is one fact
+  // ("x12, last 7h ago"), not twelve rows. Newest first, as the log arrives.
+  const byUnit = new Map<string, { latest: (typeof d.mail.failures)[number]; n: number }>()
+  for (const x of d.mail.failures) {
+    const g = byUnit.get(x.unit)
+    if (g === undefined) byUnit.set(x.unit, { latest: x, n: 1 })
+    else g.n += 1
+  }
+  const groups = [...byUnit.values()]
+  const shown = all ? groups : groups.slice(0, SEND_CAP)
   return (
     <TableSection
       title="Failed sends"
@@ -249,16 +270,19 @@ function FailedSendsTable({ f }: { f: AlertsFacts }) {
           <span className="err">Error</span>
           <span className="text-right">When</span>
         </li>
-        {d.mail.failures.map((x) => (
-          <li key={`${x.unit}-${String(x.agoSeconds)}`} className={cn(SEND_GRID, TABLE_ROW_DENSE)}>
+        {shown.map(({ latest: x, n }) => (
+          <li key={x.unit} className={cn(SEND_GRID, TABLE_ROW_DENSE)}>
             <span className="flex min-w-0 flex-col py-1">
               <span className="font-mono text-[0.76rem] text-foreground [overflow-wrap:anywhere]">
                 {x.unit}
+                {n > 1 && (
+                  <span className="ml-2 font-sans text-[0.75rem] text-muted-foreground">×{n}</span>
+                )}
               </span>
               {/* On a phone the error is this line, wrapping rather than cut. */}
               <span
                 className={cn(
-                  'hidden text-[0.72rem] text-muted-foreground @max-[40rem]/table:block',
+                  'hidden text-[0.75rem] text-muted-foreground @max-[40rem]/table:block',
                   mailFailing && 'text-danger/90',
                 )}
               >
@@ -277,6 +301,16 @@ function FailedSendsTable({ f }: { f: AlertsFacts }) {
             <span className={cn(CELL_QUIET, 'py-1 text-right')}>{since(x.agoSeconds)}</span>
           </li>
         ))}
+        {groups.length > SEND_CAP && (
+          <TableMore
+            open={all}
+            onToggle={() => {
+              setAll((v) => !v)
+            }}
+            more={`${String(groups.length - SEND_CAP)} more units`}
+            less={`Show the first ${String(SEND_CAP)}`}
+          />
+        )}
       </ul>
     </TableSection>
   )
@@ -290,13 +324,17 @@ function DeliberatelySilentNote() {
   return (
     // Not a fault, and the page has to say so — a muted alert path and an
     // alert path that was never built look identical from here.
-    <p
-      className="col-span-12 m-0 max-w-[40rem] text-[0.8rem] leading-[1.55] text-muted-foreground"
-      title="The one that used to fire was the television being turned off, so media_player and remote are excluded. The 25 Tuya lights sitting unavailable are genuinely not healthy, which is why the entity-count rule could not be re-armed with a higher threshold. Grep HA-MUTED in the configuration checkout to find every switch."
-    >
+    <p className="col-span-12 m-0 max-w-[40rem] text-[0.8rem] leading-[1.55] text-muted-foreground">
       <span className="text-subdued [font-weight:560]">Deliberately silent.</span> Every Home
       Assistant alert path on this box is switched off on purpose, indefinitely. Nothing here will
       mention Home Assistant while that holds, and a quiet page is not evidence that it is well.
+      <span className="mt-1 block text-[0.78rem]">
+        The one that used to fire was the television being turned off, so{' '}
+        <span className={MONO}>media_player</span> and <span className={MONO}>remote</span> are
+        excluded. The 25 Tuya lights sitting unavailable are genuinely not healthy, which is why the
+        entity-count rule could not be re-armed with a higher threshold. Grep{' '}
+        <span className={MONO}>HA-MUTED</span> in the configuration checkout to find every switch.
+      </span>
     </p>
   )
 }

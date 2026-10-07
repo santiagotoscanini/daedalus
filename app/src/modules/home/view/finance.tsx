@@ -44,7 +44,7 @@ export function FinanceView({ data: d }: { data: Finance }) {
       />
 
       <BoardGrid>
-        <Board title="Build" icon="◔" span={4}>
+        <Board title="Build" icon="◔" span={4} spanMd={12}>
           <Facts
             list
             rows={[

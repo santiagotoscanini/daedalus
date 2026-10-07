@@ -114,7 +114,13 @@ export function TrafficBoard({
 
 export function CertificatesBoard({ d }: { d: ProxyData }) {
   return (
-    <Board title="Certificates" icon="⌸" span={4} aside={<span className={NOTE}>the store</span>}>
+    <Board
+      title="Certificates"
+      icon="⌸"
+      span={4}
+      spanMd={12}
+      aside={<span className={NOTE}>the store</span>}
+    >
       <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {d.certs.map((c) => (
           <li
@@ -181,6 +187,7 @@ export function EntrypointsBoard({ traffic }: { traffic: ProxyData['traffic'] })
       title="Where it goes"
       icon="hash"
       span={4}
+      spanMd={12}
       aside={<span className={NOTE}>req/min, 1h</span>}
     >
       <BarList

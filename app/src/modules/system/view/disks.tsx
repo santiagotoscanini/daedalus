@@ -26,7 +26,7 @@ import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, num, pct } from '../../../lib/format'
 import type { SystemData } from '../data'
-import { decodeSeagate, diskPhoto, ModelDecode, PHOTO_W } from './disk-model'
+import { decodeSeagate, diskPhoto, ModelDecode, PHOTO_W, shortStatus } from './disk-model'
 import { hours, SYSTEM_SNAPSHOT } from './shared'
 
 /* ── Disks ────────────────────────────────────────────────────────────── */
@@ -47,7 +47,8 @@ const GRID = cn(
   // The drive keeps 16rem: a device, its family, never an ellipsis.
   'grid-cols-[minmax(16rem,1fr)_4rem_3rem_4.5rem_3.5rem_4rem_4rem_5rem_5rem_3rem_3.5rem]',
   '@max-[64rem]/table:grid-cols-[minmax(12rem,1fr)_4rem_3rem_4.5rem_4rem_4rem_3.5rem]',
-  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem]',
+  // A phone: the drive and ONE status column (temperature and SMART together).
+  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_auto]',
 )
 /** Steps away below a laptop half-window, and below a phone. */
 const WIDE = '@max-[64rem]/table:hidden'
@@ -64,7 +65,7 @@ export function DisksView({ d }: { d: Disks }) {
           <li aria-hidden="true" className={cn(GRID, TABLE_HEAD)}>
             <span>Drive</span>
             <span className={cn(N, MID)}>Size</span>
-            <span className={N}>Temp</span>
+            <span className={cn(N, MID)}>Temp</span>
             <span className={cn(N, MID)}>Powered on</span>
             <span className={cn(N, WIDE)}>Cycles</span>
             <span className={cn(N, MID)} title="Reallocated sectors, on a spinning disk">
@@ -76,7 +77,10 @@ export function DisksView({ d }: { d: Disks }) {
             <span className={cn(N, WIDE)}>Read</span>
             <span className={cn(N, WIDE)}>Written</span>
             <span className={cn(N, WIDE)}>Busy</span>
-            <span className="text-right">SMART</span>
+            <span className="text-right">
+              <span className="@max-[36rem]/table:hidden">SMART</span>
+              <span className="hidden @max-[36rem]/table:inline">Temp · SMART</span>
+            </span>
           </li>
           {d.disks.length === 0 && (
             <li className={TABLE_EMPTY}>
@@ -95,8 +99,13 @@ export function DisksView({ d }: { d: Disks }) {
       </TableSection>
 
       <BoardGrid>
-        {d.disks.map((disk) => (
-          <DiskBoard key={disk.device} disk={disk} />
+        {d.disks.map((disk, i) => (
+          // An odd last card would sit alone beside nothing at tablet width.
+          <DiskBoard
+            key={disk.device}
+            disk={disk}
+            lone={i === d.disks.length - 1 && d.disks.length % 2 === 1}
+          />
         ))}
 
         <Board title="How these are tested" icon="✓" span={12}>
@@ -152,14 +161,15 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
     <li className={cn(GRID, TABLE_ROW)}>
       <span className="flex min-w-0 flex-col">
         <span className={cn(CELL_NAME, MONO_FACE)}>{disk.device}</span>
-        {/* The family alone: the rpm is the detail board's, and two facts here
-            truncated at a laptop width. */}
         <span className={CELL_SUB} title={disk.model ?? undefined}>
           {kind}
         </span>
-        {/* Where columns step away their readings move here, muted: nothing a
-            wide row shows is missing from a narrow one. */}
-        <span className={cn(CELL_SUB, 'hidden @max-[64rem]/table:block @max-[36rem]/table:hidden')}>
+        <span
+          className={cn(
+            CELL_SUB,
+            'hidden whitespace-normal! overflow-visible! text-clip! @max-[64rem]/table:block @max-[36rem]/table:hidden',
+          )}
+        >
           {[
             `${num(disk.powerCycles)} cycles`,
             stats?.readBytes == null ? null : `read ${bytes(stats.readBytes)}/s`,
@@ -193,7 +203,7 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
       <span className={cn(CELL_QUIET, N, MID)}>
         {disk.sizeBytes === null ? DASH : bytes(disk.sizeBytes)}
       </span>
-      <span className={cn(N, 'text-[0.8125rem] text-subdued [font-weight:400]')}>
+      <span className={cn(N, MID, 'text-[0.8125rem] text-subdued [font-weight:400]')}>
         {disk.temperature === null ? DASH : `${String(disk.temperature)}°`}
       </span>
       <span className={cn(CELL_QUIET, N, MID)}>{hours(disk.powerOnHours)}</span>
@@ -213,7 +223,11 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
         {stats?.writtenBytes == null ? DASH : `${bytes(stats.writtenBytes)}/s`}
       </span>
       <span className={cn(CELL_QUIET, N, WIDE)}>{pct(stats?.utilPct ?? null, 1)}</span>
-      <span className="flex justify-end">
+      <span className="flex items-baseline justify-end gap-1.5">
+        {/* The phone's one status cell leads with the temperature. */}
+        <span className="hidden text-[0.8125rem] text-subdued tabular-nums @max-[36rem]/table:inline">
+          {disk.temperature === null ? DASH : `${String(disk.temperature)}°`} ·
+        </span>
         {disk.passed === null ? (
           <span className={CELL_QUIET}>no SMART</span>
         ) : disk.passed ? (
@@ -227,7 +241,7 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
 }
 
 /** One drive's detail: what it is, what would fail first, its last tests. */
-function DiskBoard({ disk }: { disk: Disk }) {
+function DiskBoard({ disk, lone }: { disk: Disk; lone: boolean }) {
   const nvme = disk.percentageUsed !== null
   const failedTest = disk.selfTests.find((t) => !t.passed)
   const photo = diskPhoto(disk.model)
@@ -242,6 +256,7 @@ function DiskBoard({ disk }: { disk: Disk }) {
          stretch to a shared bottom edge, so the row is as tall as the drive
          with the most to say. */
       span={4}
+      spanMd={lone ? 12 : 6}
       // The table says ok for every healthy drive; the board speaks only when
       // its drive is the exception.
       aside={disk.passed === false ? <Chip tone="bad">SMART failing</Chip> : undefined}
@@ -377,11 +392,4 @@ function DiskBoard({ disk }: { disk: Disk }) {
       )}
     </Board>
   )
-}
-
-/** "Interrupted (host reset)" → "interrupted": the chip says what happened, the hover why. */
-function shortStatus(s: string | null): string {
-  if (s === null) return 'failed'
-  const open = s.indexOf('(')
-  return (open > 0 ? s.slice(0, open) : s).trim().toLowerCase()
 }

@@ -12,10 +12,9 @@ import { cn } from '../../../lib/cn'
 import { DASH } from '../../../lib/format'
 import { GHOST_BTN } from '../../apps/shared'
 import { ArmedConfirm } from '../../armed-confirm'
-import { MONO, MONO_FACE, ROW, ROW_MAIN, ROW_SIDE } from '../../tokens'
+import { MONO, ROW, ROW_MAIN, ROW_SIDE } from '../../tokens'
 import { Button } from '../../ui/button'
 import { Chip } from '../../viz'
-import { NARROW_HIDE } from '../shared'
 import { working } from '../verdicts'
 import { STATE_LABEL, STATE_TONE } from './tones'
 
@@ -44,7 +43,8 @@ const SIDE_LINE =
 /* The last prompt. One line, clipped, and in the muted ink the board uses for
    anything that is not a measurement, so it reads as context under the title
    rather than as a second title. */
-const PROMPT = 'm-0 mt-1 truncate text-[0.75rem] leading-[1.45] text-muted-foreground'
+const PROMPT =
+  'm-0 mt-1 truncate text-[0.75rem] leading-[1.45] text-muted-foreground max-[40rem]:line-clamp-2 max-[40rem]:whitespace-normal!'
 
 /* The metadata line. Wraps rather than scrolls — a row here is already a
    block, and a horizontal scrollbar inside one would be the third scroll axis
@@ -133,13 +133,16 @@ export function RosterRow({
           {row.state === 'orphan' && (
             <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
           )}
+          {/* A transcript with no name is titled by what was first asked of it,
+              the raw id demoted to the ids line below. */}
           <span
             className={cn(
               ROW_MAIN,
               'text-[0.84rem] [font-weight:520] max-[40rem]:whitespace-normal! max-[40rem]:[text-overflow:clip]',
             )}
+            title={row.label}
           >
-            {row.label}
+            {preview(row) ?? row.label}
           </span>
         </div>
 
@@ -149,13 +152,14 @@ export function RosterRow({
             title above it, not a heading of its own. Redacted twice —
             host-side before it was written to a 0600 file, and again by
             `promptLine` on the way here. */}
-        {prompt !== null && (
+        {prompt !== null && preview(row) === null && (
           <p className={PROMPT} title={prompt}>
             {prompt}
           </p>
         )}
 
         <RowMetaLine row={row} />
+        <RowIds row={row} />
       </div>
 
       <RowSideFacts row={row} control={control} />
@@ -214,21 +218,11 @@ export function RosterRow({
 
 /** The first line's side slots, after the name and before the verb. */
 function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl }) {
-  // A row with no title falls back to its own short id for a label, and the
-  // id slot then printed the same eight characters a second time, on the same
-  // line. One of them is enough: the slot is for the case where the NAME does
-  // not identify the row, which is exactly the case where they differ.
-  const idCandidate = row.shortId ?? (row.id === null ? null : row.id.slice(0, 8))
-  const shownId = idCandidate === row.label ? null : (idCandidate ?? DASH)
   // `busy` is the CLI saying it is mid-turn, which no clock can infer. The
   // fallback is "touched within the last minute" (`working`, verdicts.ts), the
   // honest reading of active for a session being driven from a phone. Only
   // ever shown for a row with a process.
   const lifecycle = row.lifecycle ?? (row.live !== null && working(row.live) ? 'working' : null)
-  // The name claude.ai shows. When it IS the label there is nothing to add;
-  // when a title outranks it, this is the only place it survives, and the
-  // board's whole job is matching a row here to a session over there.
-  const cliName = row.live?.name != null && row.live.name !== row.label ? row.live.name : null
 
   return (
     <div className={SIDE}>
@@ -240,11 +234,11 @@ function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl 
           whether or not its process is still there, so `dormant` is exempt
           for exactly the reason `background` is. */}
         {row.labelSource === 'agent' && row.state !== 'background' && row.state !== 'dormant' && (
-          <span className={cn(ROW_SIDE, NARROW_HIDE)}>cli name</span>
+          <span className={ROW_SIDE}>cli name</span>
         )}
         {/* A session this box started says so: it is the only live population
           with a kill, and the row is where that difference is decided. */}
-        {row.managed && <span className={cn(ROW_SIDE, NARROW_HIDE)}>ours</span>}
+        {row.managed && <span className={ROW_SIDE}>ours</span>}
         {/* Idle is the resting word; a session mid-turn is the one to see. */}
         {lifecycle !== null && (
           <span className={cn(ROW_SIDE, lifecycle !== 'idle' && 'text-foreground')}>
@@ -259,25 +253,43 @@ function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl 
           <span className={ROW_SIDE}>ends with the server</span>
         )}
       </div>
-      <div className={cn(SIDE_LINE, MONO_FACE)}>
-        {/* The ids stay on the top line and only there: they are what the CLI
-          verbs and claude.ai go by, so they belong beside the name they label
-          rather than down among the measurements on the metadata line. */}
-        {cliName !== null && (
-          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{cliName}</span>
-        )}
-        {/* The id claude.ai shows, which is NOT the transcript uuid beside
-          it — the thing you match a row here against a session over there
-          by. */}
-        {row.live?.remote_id != null && (
-          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{row.live.remote_id}</span>
-        )}
-        {shownId !== null && (
-          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{shownId}</span>
-        )}
-      </div>
     </div>
   )
+}
+
+/**
+ * The ids a row goes by — the CLI's name, the id claude.ai shows (which is NOT
+ * the transcript uuid), the short id — on a line of their own under the facts.
+ * Each id is a single unbreakable token, so a session id never splits across
+ * two lines; the line itself wraps between ids.
+ */
+function RowIds({ row }: { row: RosterEntry }) {
+  // A row with no title falls back to its own short id for a label, and the
+  // id slot then printed the same eight characters a second time. One of them
+  // is enough: the slot is for the case where the NAME does not identify the
+  // row, which is exactly the case where they differ.
+  const idCandidate = row.shortId ?? (row.id === null ? null : row.id.slice(0, 8))
+  const shownId = preview(row) === null && idCandidate === row.label ? null : (idCandidate ?? DASH)
+  // The name claude.ai shows. When it IS the label there is nothing to add;
+  // when a title outranks it, this is the only place it survives.
+  const cliName = row.live?.name != null && row.live.name !== row.label ? row.live.name : null
+  const ids = [cliName, row.live?.remote_id ?? null, shownId].filter((x) => x !== null)
+  if (ids.length === 0) return null
+  return (
+    <div className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 font-mono text-[0.72rem] text-muted-foreground">
+      {ids.map((id) => (
+        <span key={id} className="whitespace-nowrap">
+          {id}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** Whether this row is titled by its first message rather than by a name: a
+    transcript with no title and no agent name, which would read as a raw id. */
+function preview(row: RosterEntry): string | null {
+  return row.labelSource === 'id' ? promptLine(row.meta) : null
 }
 
 /* One line, grouped. Each span answers one question; the three that always
@@ -300,13 +312,11 @@ function RowMetaLine({ row }: { row: RosterEntry }) {
   return (
     <div className={META}>
       {groups.map((g) => (
-        <span
-          key={g.key}
-          className={cn(META_ITEM, g.secondary && NARROW_HIDE)}
-          title={g.detail ?? undefined}
-        >
+        <span key={g.key} className={META_ITEM} title={g.detail ?? undefined}>
           {g.icon !== null && <FactIconFor name={g.icon} />}
-          <span className="truncate">{g.text}</span>
+          <span className="truncate max-[40rem]:whitespace-normal! max-[40rem]:[overflow-wrap:anywhere]">
+            {g.text}
+          </span>
         </span>
       ))}
     </div>

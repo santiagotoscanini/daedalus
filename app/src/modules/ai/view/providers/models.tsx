@@ -105,7 +105,7 @@ function ModelKind({ group, m }: { group: Group; m: ProviderMachine }) {
 /** The labels row; numeric columns right-aligned, units in the label. */
 function ModelHead() {
   return (
-    <li aria-hidden="true" className={cn(MODEL_GRID, TABLE_HEAD)}>
+    <li aria-hidden="true" className={cn(MODEL_GRID, TABLE_HEAD, '@max-[38rem]/table:hidden')}>
       <span>Model</span>
       <span className={NARROWEST}>Gateway name</span>
       <span className={cn(NARROWEST, 'text-right')}>Size, GB</span>

@@ -229,7 +229,7 @@ function ByRepositoryTable({ f }: { f: MinutesFacts }) {
                 {r.repo}
               </Ext>
               {/* On a phone the per-image minutes are this second line. */}
-              <span className="hidden text-[0.72rem] text-muted-foreground tabular-nums @max-[38rem]/table:block">
+              <span className="hidden text-[0.75rem] text-muted-foreground tabular-nums @max-[38rem]/table:block">
                 {[
                   r.raw.linux > 0 && `Linux ${num(r.raw.linux)}`,
                   r.raw.windows > 0 && `Win ${num(r.raw.windows)}`,
@@ -289,7 +289,7 @@ function CostPerWorkflowTable({ f }: { f: MinutesFacts }) {
           <li key={w.label} className={cn(WF_COST_GRID, TABLE_ROW_DENSE)}>
             <span className="flex min-w-0 flex-col">
               <span className="text-foreground [overflow-wrap:anywhere]">{w.label}</span>
-              <span className="hidden truncate text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+              <span className="hidden truncate text-[0.75rem] text-muted-foreground @max-[38rem]/table:block">
                 {w.topJob === null ? DASH : `${w.topJob} · ${num(w.topJobBilled)}`}
               </span>
             </span>

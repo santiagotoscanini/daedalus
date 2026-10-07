@@ -18,7 +18,7 @@ const PANEL = cn(
   '@container/board flex flex-col gap-3 px-5 py-4',
   // Six facts: two abreast on a phone, three in a tablet column, six at a
   // laptop — never four and an orphan pair.
-  '[&>dl]:grid-cols-2 @[40rem]/board:[&>dl]:grid-cols-3 @[70rem]/board:[&>dl]:grid-cols-6',
+  '[&>dl]:grid-cols-1 @[28rem]/board:[&>dl]:grid-cols-2 @[40rem]/board:[&>dl]:grid-cols-3 @[70rem]/board:[&>dl]:grid-cols-6',
 )
 
 // The NixOS release this generation was built with — on System › Updates

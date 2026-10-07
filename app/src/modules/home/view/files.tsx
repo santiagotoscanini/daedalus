@@ -96,7 +96,7 @@ export function FilesView({ data: d }: { data: Files }) {
           />
         </Board>
 
-        <Board title="Underneath" icon="⚙" span={4}>
+        <Board title="Underneath" icon="⚙" span={4} spanMd={12}>
           <Facts
             list
             rows={[

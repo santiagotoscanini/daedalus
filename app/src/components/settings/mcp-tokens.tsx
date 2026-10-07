@@ -163,7 +163,7 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
                 <span>Label</span>
                 <span>Scope</span>
                 <span className={STEP}>Minted</span>
-                <span>Last used</span>
+                <span className={PHONE_HIDE}>Last used</span>
                 <span />
               </li>
               {tokens.map((t) => (
@@ -185,9 +185,11 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
 
 /** Label, scope, minted, last used, the action — one grid for the head and every row. */
 const GRID =
-  'grid grid-cols-[minmax(0,1fr)_4.5rem_12rem_12rem_5.5rem] items-center gap-x-6 px-5 @max-[52rem]/table:grid-cols-[minmax(0,1fr)_4.5rem_12rem_5.5rem]'
+  'grid grid-cols-[minmax(0,1fr)_4.5rem_12rem_12rem_5.5rem] items-center gap-x-6 px-5 @max-[52rem]/table:grid-cols-[minmax(0,1fr)_4.5rem_12rem_5.5rem] @max-[38rem]/table:grid-cols-[minmax(0,1fr)_4.5rem_5.5rem] @max-[38rem]/table:gap-x-3'
 /** The column that steps away first. */
 const STEP = '@max-[52rem]/table:hidden'
+/** The last-used column, which on a phone moves under the label. */
+const PHONE_HIDE = '@max-[38rem]/table:hidden'
 
 /**
  * One token. A live read token is the norm and stays quiet; a write token
@@ -198,12 +200,30 @@ function TokenRow({ t, busy, onRevoke }: { t: McpTokenRow; busy: boolean; onRevo
   return (
     <li className={cn(GRID, TABLE_ROW, revoked && 'text-muted-foreground')}>
       <span className="flex min-w-0 flex-col">
-        <Mono className={cn('truncate', !revoked && 'text-foreground')}>{t.label}</Mono>
+        <Mono
+          className={cn(
+            'truncate @max-[38rem]/table:whitespace-normal',
+            !revoked && 'text-foreground',
+          )}
+        >
+          {t.label}
+        </Mono>
         {t.revokedAt !== null && (
           <span className={CELL_SUB}>
             revoked <When at={t.revokedAt} />
           </span>
         )}
+        {/* The columns a phone has no room for, as the label's second line. */}
+        <span className={cn(CELL_SUB, 'hidden whitespace-normal @max-[38rem]/table:block')}>
+          minted <When at={t.createdAt} /> ·{' '}
+          {t.lastUsedAt === null ? (
+            'never used'
+          ) : (
+            <>
+              last used <When at={t.lastUsedAt} />
+            </>
+          )}
+        </span>
       </span>
       <span>
         {revoked ? (
@@ -217,7 +237,7 @@ function TokenRow({ t, busy, onRevoke }: { t: McpTokenRow; busy: boolean; onRevo
       <span className={cn(CELL_QUIET, STEP, 'whitespace-nowrap')}>
         <When at={t.createdAt} />
       </span>
-      <span className={cn(CELL_QUIET, 'whitespace-nowrap')}>
+      <span className={cn(CELL_QUIET, PHONE_HIDE, 'whitespace-nowrap')}>
         {t.lastUsedAt === null ? 'never used' : <When at={t.lastUsedAt} />}
       </span>
       <span className="text-right">

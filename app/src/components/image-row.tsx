@@ -50,18 +50,18 @@ export const IMAGE_GRID = cn(
   'grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.3fr)_7.5rem]',
   // Below a tablet half-window the two versions move under the name, so the
   // row is the name and its state: the one identifying cell and one value.
-  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_auto]',
+  '@max-[56rem]/table:grid-cols-[minmax(0,1fr)_auto]',
 )
 /** A table whose groups already name the verdict has no state column at all:
     pinned and queued sit beside the name instead. */
 export const IMAGE_GRID_GROUPED = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.3fr)]',
-  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)]',
+  '@max-[56rem]/table:grid-cols-[minmax(0,1fr)]',
 )
-const NARROW = '@max-[44rem]/table:hidden'
+const NARROW = '@max-[56rem]/table:hidden'
 // Inside a board (no table frame) the same steps follow the BOARD's width: a
-// phone's board is far narrower than its 44rem table threshold.
+// phone's board is far narrower than its 56rem table threshold.
 const CARD_GRID = '@max-[40rem]/board:grid-cols-[minmax(0,1fr)_auto]'
 const CARD_NARROW = '@max-[40rem]/board:hidden'
 
@@ -193,19 +193,21 @@ export function ImageRow({
             </span>
             {/* Where the version columns step away, the versions are the
                 name's second line: nothing is dropped, it is moved. */}
-            <span className="ml-5 hidden min-w-0 items-center gap-1.5 text-[0.75rem] text-muted-foreground @max-[44rem]/table:flex @max-[40rem]/board:flex">
+            <span className="ml-5 hidden min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0 text-[0.75rem] text-muted-foreground @max-[56rem]/table:flex @max-[40rem]/board:flex">
               <MidTrunc text={runningText} className="font-mono" />
+              {/* The arrow travels with the new version: when the pair does not
+                  fit on one line the new one wraps whole to a line of its own. */}
               {(available !== null || r.verdict === 'tag-moved') && (
-                <>
+                <span className="flex min-w-0 items-center gap-1.5">
                   <span aria-hidden="true" className="flex-none">
                     →
                   </span>
                   {available !== null ? (
                     <MidTrunc text={available} className="font-mono text-foreground" />
                   ) : (
-                    <span className="flex-none">new digest</span>
+                    <span className="whitespace-nowrap">new digest</span>
                   )}
-                </>
+                </span>
               )}
             </span>
           </span>

@@ -79,3 +79,25 @@ export function Pairs({ rows }: { rows: { k: string; v: ReactNode }[] }) {
     </dl>
   )
 }
+
+/**
+ * A dotted name that may only break AFTER a dot: `http-intake.logs.us5.datadoghq.com`
+ * wraps as `http-intake.logs.` / `us5.datadoghq.com`, never `…datadoghq.co` / `m`.
+ */
+export function DottedName({ name }: { name: string }) {
+  const parts = name.split('.')
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={`${String(i)}-${p}`}>
+          {p}
+          {i < parts.length - 1 && (
+            <>
+              .<wbr />
+            </>
+          )}
+        </span>
+      ))}
+    </>
+  )
+}

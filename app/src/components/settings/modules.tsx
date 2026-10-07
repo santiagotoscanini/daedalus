@@ -22,6 +22,8 @@ const GRID =
   'grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)_2rem_3.5rem] items-center gap-x-6 px-5 @max-[40rem]/table:grid-cols-[minmax(0,1fr)_2rem_3.5rem]'
 /** The column that steps away on a narrow table. */
 const STEP = '@max-[40rem]/table:hidden'
+/** What the stepped-away column holds, drawn under the name instead. */
+const SHOW_STEPPED = '@max-[40rem]/table:block'
 
 const why = (id: string): string => STRUCTURAL_WHY[id] ?? 'a running box cannot do without it'
 
@@ -69,6 +71,10 @@ function Row({ m }: { m: ModuleSwitch }) {
         </Mono>
         {pending && <Chip tone="warn">{m.desired ? 'on after Apply' : 'off after Apply'}</Chip>}
         {refused !== null && <span className="text-[0.78rem] text-danger">{refused}</span>}
+        {/* Where it answers, when the column for it has no room (a phone). */}
+        <span className={cn('hidden basis-full', SHOW_STEPPED, !on && 'opacity-60')}>
+          <Where m={m} />
+        </span>
       </span>
       <span className={cn('min-w-0', STEP, !on && 'opacity-60')}>
         <Where m={m} />
@@ -140,8 +146,9 @@ export function Modules({ rows }: { rows: ModuleSwitch[] }) {
             </li>
             {structural.map((m) => (
               <li key={m.id} className={cn(GRID, TABLE_ROW)}>
-                <span title={why(m.id)} className="min-w-0 truncate">
-                  <Mono className="text-foreground">{m.id}</Mono>
+                <span title={why(m.id)} className="min-w-0">
+                  <Mono className="block truncate text-foreground">{m.id}</Mono>
+                  <span className={cn(CELL_QUIET, 'hidden', SHOW_STEPPED)}>{why(m.id)}</span>
                 </span>
                 <span className={cn(CELL_QUIET, STEP, 'truncate')}>{why(m.id)}</span>
                 <ServiceSettingsButton ids={[m.id]} size="xs" />

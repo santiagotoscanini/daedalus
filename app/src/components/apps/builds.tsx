@@ -163,10 +163,14 @@ export function BuildsBoard({
                   <span
                     className={cn(CELL_SUB, 'hidden whitespace-normal @max-[40rem]/table:block')}
                   >
-                    {requesterLabel(b)}
-                    {b.publish === 'candidate' ? ' · candidate' : ''}
-                    {took === null ? '' : ` · ${ms(took)}`}
-                    {now === null ? '' : ` · ${since((now - Date.parse(b.createdAt)) / 1000)}`}
+                    <span className="block truncate">
+                      {requesterLabel(b)}
+                      {b.publish === 'candidate' ? ' · candidate' : ''}
+                    </span>
+                    <span className="whitespace-nowrap">
+                      {took === null ? '' : `${ms(took)} · `}
+                      {now === null ? '' : since((now - Date.parse(b.createdAt)) / 1000)}
+                    </span>
                     {(b.state === 'failed' ? b.error : isOpenBuild(b.state) ? b.phase : null) && (
                       <span className="block text-foreground">
                         {b.state === 'failed' ? b.error : b.phase}

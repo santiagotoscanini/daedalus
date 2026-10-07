@@ -206,13 +206,15 @@ function PressureBoard({ d }: { d: Host }) {
   return (
     <Board title="Pressure" icon="⌁" span={4} aside={<span className={NOTE}>share of time</span>}>
       {/* PSI — see `HostData.pressure`. */}
-      <Facts
-        rows={[
-          { k: 'CPU stalled', v: pct(d.pressure.cpu, 2) },
-          { k: 'I/O stalled', v: pct(d.pressure.io, 2) },
-          { k: 'Memory stalled', v: pct(d.pressure.memory, 2) },
-        ]}
-      />
+      <div className="[&>dl]:grid-cols-3">
+        <Facts
+          rows={[
+            { k: 'CPU stalled', v: pct(d.pressure.cpu, 2) },
+            { k: 'I/O stalled', v: pct(d.pressure.io, 2) },
+            { k: 'Memory stalled', v: pct(d.pressure.memory, 2) },
+          ]}
+        />
+      </div>
       <p className={FOOT}>
         The share of time in which <em>something</em> was waiting on each resource rather than
         running. Zero is the healthy reading and the usual one; I/O climbing while cpu stays flat is
@@ -332,6 +334,8 @@ function GenerationsBoard({ d }: { d: Host }) {
       title="Generations"
       icon="⎌"
       span={4}
+      // Beside nothing between the drawer and a laptop: fill the row there.
+      spanMd={12}
       aside={<span className={NOTE}>{num(d.generations.length)} on disk</span>}
     >
       <ul className={LIST}>

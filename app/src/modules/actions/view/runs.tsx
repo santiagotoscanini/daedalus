@@ -82,7 +82,7 @@ function RunsPerDayBoard({ f }: { f: RunsFacts }) {
 function ByEventBoard({ f }: { f: RunsFacts }) {
   const { d } = f
   return (
-    <Board title="By event" icon="rows" span={4}>
+    <Board title="By event" icon="rows" span={4} spanMd={12}>
       <BarList
         items={d.byEvent.map((e) => ({ label: e.label.replace(/_/g, ' '), value: e.value }))}
         empty="nothing ran"

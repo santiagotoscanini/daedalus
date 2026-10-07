@@ -25,7 +25,7 @@ const CALLER_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_4rem_4.5rem_4rem_minmax(0,1.4fr)_5.5rem]',
   '@max-[60rem]/table:grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_4rem_4rem_5.5rem]',
-  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto]',
 )
 const WIDE = '@max-[60rem]/table:hidden'
 const MID = '@max-[38rem]/table:hidden'
@@ -34,7 +34,8 @@ const NUM = cn(CELL_QUIET, 'text-right')
 const NONE = <span className="text-muted-foreground/50">{DASH}</span>
 
 /** The bar is the comparison this table exists to make, so it is the one drawn thing in a row. */
-const BAR = 'block h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]'
+const BAR =
+  'block h-1 min-w-8 @max-[38rem]/table:hidden flex-1 overflow-hidden rounded-full bg-foreground/[0.08]'
 const BAR_FILL =
   'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-muted-foreground opacity-60 motion-reduce:animate-none'
 
@@ -52,8 +53,9 @@ export function WhoIsCallingBoard({ f }: { f: LitellmFacts }) {
               would score zero and never appear. */}
           {data.rejected.keys > 0 && (
             <p className={REJECTED}>
-              <b>{num(data.rejected.keys)}</b> keys never completed a request.{' '}
-              <b>{num(data.rejected.requests)}</b> attempts, last{' '}
+              <b>{num(data.rejected.keys)}</b> {data.rejected.keys === 1 ? 'key' : 'keys'} never
+              completed a request. <b>{num(data.rejected.requests)}</b>{' '}
+              {data.rejected.requests === 1 ? 'attempt' : 'attempts'}, last{' '}
               {ledgerAgo(data.rejected.last, todayDate)}.{' '}
               {data.rejected.live === 0 ? (
                 'None of them exists on the gateway today.'
@@ -109,14 +111,14 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
   return (
     <li className={cn(CALLER_GRID, TABLE_ROW)}>
       <div className="min-w-0">
-        <span className="flex min-w-0 items-center gap-2">
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @max-[38rem]/table:flex-col @max-[38rem]/table:items-start">
           <span
             // A name that cannot be read at face value — an internal credential,
             // or a hash — carries its explanation on a hover, and says so with a
             // dotted underline.
             className={cn(
               CELL_NAME,
-              '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]',
+              '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:break-word]',
               caller.note !== null && 'cursor-help border-b border-dotted',
             )}
             title={caller.note ?? caller.name}
@@ -146,7 +148,7 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
             style={{ width: `${String(Math.max(1.5, (caller.requests / max) * 100))}%` }}
           />
         </span>
-        <span className="w-12 flex-none text-right text-[0.8125rem] text-foreground tabular-nums">
+        <span className="w-12 flex-none text-right text-[0.8125rem] text-foreground tabular-nums @max-[38rem]/table:w-auto">
           {num(caller.requests)}
         </span>
       </span>

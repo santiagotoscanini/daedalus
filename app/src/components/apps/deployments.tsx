@@ -123,14 +123,19 @@ function DeployLine({ d }: { d: DeployRow }) {
         </span>
         {/* On a phone the hidden columns live here, under the revision. */}
         <span className="mt-0.5 hidden text-[0.75rem] text-muted-foreground @max-[40rem]/table:block">
-          <When at={d.startedAt} /> · {ms(d.durationMs)}
+          <span className="whitespace-nowrap">
+            <When at={d.startedAt} />
+          </span>{' '}
+          <span className="whitespace-nowrap">· {ms(d.durationMs)}</span>
           {d.commitUrl ? (
-            <>
-              {' · '}
-              <a href={d.commitUrl} target="_blank" rel="noreferrer" className="relative z-10">
-                view commit ↗
-              </a>
-            </>
+            <a
+              href={d.commitUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="relative z-10 block whitespace-nowrap"
+            >
+              view commit ↗
+            </a>
           ) : null}
         </span>
       </span>
@@ -185,6 +190,13 @@ function DeployLine({ d }: { d: DeployRow }) {
  * — so this is the deploy unit's own journal (deploy.sh's account of pull,
  * restart and health-check), the last 6 hours of it from Loki.
  */
+/** A raw 64-hex digest is unreadable and wraps ten lines on a phone: the first
+    12 characters name it, and the row's title carries the whole line. */
+const shortDigests = (line: string) =>
+  line.replace(/(sha256:)?([0-9a-f]{64})/g, (_m, _p: string | undefined, h: string) =>
+    h.slice(0, 12),
+  )
+
 function Activity({ activity }: { activity: ActivityData }) {
   const rolled = rollUp(activity)
 
@@ -207,13 +219,15 @@ function Activity({ activity }: { activity: ActivityData }) {
               {rolled.map((l) => (
                 <div
                   key={l.key}
-                  className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-3 border-hairline border-t px-3 py-1 first:border-t-0"
+                  className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-baseline gap-2 border-hairline border-t py-1 pr-2 pl-3 first:border-t-0 sm:grid-cols-[6.5rem_minmax(0,1fr)_auto] sm:gap-3"
                 >
                   {/* Already formatted by the server — see ActivityRow. */}
                   <time className="whitespace-nowrap text-muted-foreground" dateTime={l.ts}>
                     {l.at}
                   </time>
-                  <span className="min-w-0 text-subdued [overflow-wrap:anywhere]">{l.line}</span>
+                  <span className="min-w-0 text-subdued [overflow-wrap:anywhere]" title={l.line}>
+                    {shortDigests(l.line)}
+                  </span>
                   {l.count > 1 && (
                     // The repeat count for a folded run. Right-aligned in its own
                     // column so the messages stay on one left edge.

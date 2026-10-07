@@ -57,9 +57,13 @@ export function GithubSection({ g }: { g: Github }) {
         <StatStrip>
           <Stat
             label="App installation"
-            value={inst === null ? 'unknown' : (inst.account?.login ?? inst.state)}
+            value={inst === null ? 'unknown' : inst.state}
             tone={inst !== null && !instOk ? 'warn' : undefined}
-            sub={inst === null ? 'not read yet' : inst.stale ? `${inst.state}, stale` : inst.state}
+            sub={
+              inst === null
+                ? 'not read yet'
+                : `${inst.account?.login ?? 'no account'}${inst.stale ? ', stale' : ''}`
+            }
           />
           <Stat
             label="API budget"
@@ -92,7 +96,7 @@ export function GithubSection({ g }: { g: Github }) {
             <>
               <li className={cn(DELIVERY_GRID, TABLE_HEAD)}>
                 <span>Event</span>
-                <span>Outcome</span>
+                <span className="@max-[36rem]/table:hidden">Outcome</span>
                 <span className="text-right">Received</span>
               </li>
               {g.deliveries.map((x) => (

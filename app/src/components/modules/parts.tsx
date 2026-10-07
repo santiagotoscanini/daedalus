@@ -12,7 +12,7 @@ import type { ReactNode } from 'react'
  * a board in one row wrap together.
  */
 export const SECTION_SPAN = {
-  4: 'mt-4 col-span-4 max-[78rem]:col-span-8 max-[50rem]:col-span-12',
+  4: 'mt-4 col-span-4 max-[78rem]:col-span-6 max-[50rem]:col-span-12',
   6: 'mt-4 col-span-6 max-[78rem]:col-span-12',
   8: 'mt-4 col-span-8 max-[78rem]:col-span-12',
   12: 'mt-4 col-span-12',

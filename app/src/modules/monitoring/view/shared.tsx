@@ -16,7 +16,7 @@ export const LIST =
    Both truncate: one long row must not widen the panel. */
 export const MAIN = 'min-w-0 flex-auto truncate text-foreground'
 export const SIDE =
-  'max-w-[60%] min-w-0 flex-[0_1_auto] truncate text-[0.72rem] tabular-nums text-muted-foreground'
+  'max-w-[60%] min-w-0 flex-[0_1_auto] truncate text-[0.75rem] tabular-nums text-muted-foreground'
 export const NUM = 'min-w-[1.4rem] text-right tabular-nums text-foreground'
 
 export const SEVERITY: Record<string, 'bad' | 'warn' | 'info'> = {
@@ -66,19 +66,21 @@ export function AllClear({
   title: string
   detail: ReactNode
   aside?: ReactNode
-  /** The why, on hover: the line has no ⓘ to fold prose behind. */
+  /** The why: a second line of visible text, because touch has no hover. */
   note?: string
 }) {
   return (
-    <p
-      title={note}
-      className="col-span-12 m-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.84rem] text-muted-foreground"
-    >
+    <p className="col-span-12 m-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.84rem] text-muted-foreground">
       <Pulse on={false} tone="ok" />
       <span className="text-foreground [font-weight:560]">{title}</span>
       <span>{detail}</span>
       {aside !== undefined && (
         <span className="ml-auto text-[0.75rem] text-muted-foreground">{aside}</span>
+      )}
+      {note !== undefined && (
+        <span className="basis-full max-w-[40rem] text-[0.78rem] leading-[1.5] text-muted-foreground">
+          {note}
+        </span>
       )}
     </p>
   )

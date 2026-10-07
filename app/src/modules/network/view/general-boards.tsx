@@ -203,7 +203,7 @@ export function TheRouterBoard({ f }: { f: GeneralFacts }) {
           height={150}
         />
         <div className="flex min-w-0 flex-col items-start gap-1">
-          <strong className="flex items-baseline gap-1.5 text-[1rem] tracking-[-0.01em] text-foreground [font-weight:600]">
+          <strong className="flex items-baseline gap-1.5 [text-wrap:balance] text-[1rem] tracking-[-0.01em] text-foreground [font-weight:600]">
             {router.model ?? 'Unknown'}
             {/* The hardware revision is part of the identity and never the
                 thing you are looking for, so it rides the model at the size
@@ -221,7 +221,6 @@ export function TheRouterBoard({ f }: { f: GeneralFacts }) {
       </div>
       <Pairs
         rows={[
-          { k: 'Firmware', v: <span className={MONO}>{router.firmware ?? DASH}</span> },
           { k: 'Built', v: router.built ?? DASH },
           { k: 'Address', v: <span className={MONO}>{router.gateway}</span> },
           { k: 'Round trip', v: rtt(gateway?.rttMs ?? null) },

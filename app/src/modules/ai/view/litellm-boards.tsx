@@ -55,7 +55,7 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
         empty="the gateway’s ledger is empty"
       />
       {daily.length > 0 && (
-        <p className={AXIS}>
+        <p className={cn(AXIS, 'text-[0.75rem]')}>
           <span>{firstDate.slice(5)}</span>
           <span>requests per day</span>
           <span>{todayDate.slice(5)}</span>
@@ -99,10 +99,9 @@ type NeighbourData = LitellmData['neighbours'][number]
 /**
  * One of the gateway's neighbours, as a pair of boards.
  *
- * Changelog on the left, log on the right, side by side while the changelog is
- * short; stacked at full width once it runs past a handful of entries, where a
- * half-width pair left the log board standing in a panel twice its height and
- * truncated every commit title. Both, because those are the only two
+ * Changelog above, log below, both full width: side by side, a short changelog
+ * left the log board standing beside a panel a fraction of its height, and a
+ * long one truncated every commit title. Both, because those are the only two
  * things ever wanted from a container with no page of its own: what would
  * change if I updated it, and what has it been saying. The title carries the
  * verdict, so the row answers "is anything here behind" before it is read.
@@ -112,7 +111,7 @@ export function NeighbourPair({ n }: { n: NeighbourData }) {
   const unit =
     n.gap !== null ? (behind === 1 ? 'release behind' : 'releases behind') : 'commits behind'
   const count = String(behind)
-  const span = behind > 6 ? 12 : 6
+  const span = 12
 
   return (
     <>

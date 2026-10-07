@@ -220,3 +220,10 @@ export function decodeSeagate(model: string | null): Segment[] | null {
   }
   return segments
 }
+
+/** "Interrupted (host reset)" → "interrupted": the chip says what happened, the hover why. */
+export function shortStatus(s: string | null): string {
+  if (s === null) return 'failed'
+  const open = s.indexOf('(')
+  return (open > 0 ? s.slice(0, open) : s).trim().toLowerCase()
+}

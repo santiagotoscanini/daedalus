@@ -88,7 +88,10 @@ export function GroupsSection({ d }: { d: IdpData }) {
 /** Grouped, not listed — see `IdpData['devices']`. */
 export function DevicesSection({ d }: { d: IdpData }) {
   return (
-    <TableSection title="Devices that signed in" className={SECTION_SPAN[4]}>
+    <TableSection
+      title="Devices that signed in"
+      className={cn(SECTION_SPAN[4], 'max-[78rem]:col-span-12')}
+    >
       {d.devices.length === 0 ? (
         <p className={TABLE_NONE}>nobody signed in during the window</p>
       ) : (

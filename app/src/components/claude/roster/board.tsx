@@ -122,6 +122,9 @@ export function RosterBoard({
                 key={`g-${r.state}`}
                 title={`${STATE_GROUP[r.state].title} · ${num(counts[r.state])}`}
                 note={STATE_GROUP[r.state].note}
+                // On a phone the explanation stacks under the title instead of
+                // wrapping the title itself into three lines.
+                className="max-[40rem]:h-auto max-[40rem]:flex-col max-[40rem]:items-start max-[40rem]:gap-0.5 max-[40rem]:py-2 [&>span:first-child]:whitespace-nowrap"
               />
             ),
             <RosterRow

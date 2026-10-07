@@ -52,7 +52,7 @@ export const HINT = `explain ${ASIDE} max-w-[64ch] leading-[1.5]`
  * padded auto height and a fixed 36px); the `data-[size=default]` half is the
  * trigger's own size rule, which a bare `h-8` does not outrank.
  */
-export const CONTROL_H = 'h-8 py-0 data-[size=default]:h-8'
+export const CONTROL_H = 'h-8 py-0 data-[size=default]:h-8 placeholder:text-muted-foreground/60'
 
 /**
  * The inner tile a disclosed form, an armed confirm or a sub-list sits in
@@ -200,7 +200,7 @@ export function Section({
           <span className="min-w-0 truncate">{title}</span>
           <ExplainToggle className="-my-1 hidden opacity-0 group-hover/section:opacity-100 group-has-[.explain]/section:inline-flex" />
           {aside !== undefined && (
-            <span className="ml-auto inline-flex flex-none items-center gap-2 text-[0.75rem] text-muted-foreground [font-weight:400]">
+            <span className="ml-auto inline-flex flex-none items-center gap-2 text-[0.75rem] text-muted-foreground [font-weight:400] max-[40rem]:hidden">
               {aside}
             </span>
           )}
@@ -208,6 +208,12 @@ export function Section({
         {description !== undefined && (
           <div className="max-w-[640px] text-[0.8rem] text-muted-foreground leading-relaxed">
             {description}
+          </div>
+        )}
+        {/* On a phone the reading drops under the title instead of crowding it. */}
+        {aside !== undefined && (
+          <div className="hidden items-center gap-2 text-[0.75rem] text-muted-foreground max-[40rem]:flex">
+            {aside}
           </div>
         )}
       </header>

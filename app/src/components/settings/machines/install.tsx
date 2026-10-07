@@ -40,12 +40,12 @@ function CopyLine({ command, label }: { command: string; label: string }) {
     }
   }
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
       <p
         ref={line}
         className={cn(
           MONO,
-          'm-0 min-w-0 flex-1 select-all overflow-x-auto whitespace-pre rounded-lg bg-foreground/[0.05] px-3 py-1.5 leading-[1.45] [overflow-wrap:normal]',
+          'm-0 min-w-0 flex-1 select-all overflow-x-auto whitespace-pre rounded-lg bg-foreground/[0.05] px-3 py-1.5 leading-[1.45] [overflow-wrap:normal] max-sm:whitespace-pre-wrap max-sm:[overflow-wrap:anywhere]',
         )}
       >
         {command}
@@ -53,6 +53,7 @@ function CopyLine({ command, label }: { command: string; label: string }) {
       <Button
         size="sm"
         variant="outline"
+        className="max-sm:w-full"
         onClick={() => void copy()}
         aria-label={`Copy the ${label}`}
       >

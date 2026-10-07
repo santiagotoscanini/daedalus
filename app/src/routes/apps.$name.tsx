@@ -10,6 +10,7 @@ import {
 import { ApplyBar } from '../components/apply-bar'
 import { SetupLine } from '../components/apps/setup-line'
 import { type AppRecord, CHIP, SegmentPicker } from '../components/apps/shared'
+import { AppTabRow } from '../components/apps/tab-row'
 import { TabBody } from '../components/apps/tab-views'
 import { AppIcon, type AppState, StatePill } from '../components/controls'
 import { Crumbs, PageHead } from '../components/page'
@@ -184,6 +185,15 @@ function AppDetail() {
           fact twice. */}
       <AppHero app={app} state={state} patch={patch} />
 
+      {/* The rail carries these from 52rem up; below it the rail is a drawer, so
+          the sections are also a scrolling row here. */}
+      <AppTabRow
+        name={app.name}
+        active={tab}
+        hasDatabase={app.postgres}
+        hasVpn={app.egressContainer !== null}
+      />
+
       {save.error !== null && (
         <Alert variant="destructive" className="mb-5">
           <AlertTitle>The change was not saved</AlertTitle>
@@ -205,7 +215,7 @@ function AppDetail() {
 
       {/* No tab bar here: inside an app the sections live in the left rail —
           the shell swaps the category nav for the app-scoped one while this
-          route is matched (components/shell/app-rail.tsx). */}
+          route is matched (components/shell/app-rail.tsx). Below 52rem the rail is a drawer, so AppTabRow repeats them above. */}
 
       <TabBody
         tab={tab}

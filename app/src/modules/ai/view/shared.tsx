@@ -59,7 +59,7 @@ export const ITEM_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
    answer, the runs that failed. Warn rather than bad — it is something to look
    into, not something that is currently broken. */
 export const REJECTED =
-  'm-0 rounded-xl border border-warning/30 bg-warning/[0.07] px-3 py-2 text-[0.75rem] leading-[1.5] text-subdued [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums'
+  'm-0 rounded-xl border border-warning/30 bg-warning/[0.07] px-3 py-2 text-[0.8125rem] leading-[1.5] text-subdued [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums'
 
 /* ── a table with a heading ────────────────────────────────────────────────
    The house TableSection (components/table-section.tsx), with the two things

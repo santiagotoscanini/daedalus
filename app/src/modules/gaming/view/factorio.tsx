@@ -75,7 +75,7 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
           tone={live.game === 'stopped' ? 'warn' : undefined}
           sub={
             live.since === null ? (
-              'nothing in the log for 30 days'
+              'no log in 30 days'
             ) : (
               <>
                 since <LocalTime at={live.since} opts={DAY_TIME} />

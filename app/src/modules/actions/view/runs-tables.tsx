@@ -71,27 +71,23 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
             </span>
           )}
         </a>
-        <span className="hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-[0.72rem] text-muted-foreground @max-[38rem]/table:flex">
+        <span className="hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-[0.75rem] text-muted-foreground @max-[38rem]/table:flex">
           {!showFailure && <RunChip status={r.status} conclusion={r.conclusion} />}
           <span>{r.repo}</span>
           <span>· {r.event.replace(/_/g, ' ')}</span>
           <span className="tabular-nums">· {took(r.seconds)}</span>
         </span>
-        {/* The job path gives way, never the failing step: the job truncates
-            and the step (the one red) is always whole. */}
+        {/* The failing step (the one red) is never cut: the line wraps instead,
+            to two lines if it has to. */}
         {showFailure && r.failed !== null && (
-          <p className={cn(CELL_SUB, 'flex min-w-0 items-baseline gap-1')}>
+          <p
+            className={cn(CELL_SUB, 'overflow-visible whitespace-normal [overflow-wrap:anywhere]')}
+          >
             {r.failed.step === null ? (
-              <span className="truncate text-danger">{r.failed.job}</span>
+              <span className="text-danger">{r.failed.job}</span>
             ) : (
               <>
-                <span className="min-w-0 truncate" title={r.failed.job}>
-                  {r.failed.job}
-                </span>
-                <span className="flex-none">›</span>
-                <span className="max-w-[60%] flex-none truncate text-danger" title={r.failed.step}>
-                  {r.failed.step}
-                </span>
+                {r.failed.job} › <span className="text-danger">{r.failed.step}</span>
               </>
             )}
           </p>
@@ -186,7 +182,7 @@ export function FailuresTable({ d }: { d: Runs }) {
 
 /** Name · runs · failed · median. */
 const TALLY_GRID =
-  'grid items-center gap-x-3 px-5 grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_4rem] @min-[38rem]/table:gap-x-5'
+  'grid items-center gap-x-5 px-5 grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_4rem] @max-[38rem]/table:grid-cols-[minmax(0,1fr)_3rem] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.fail]:hidden @max-[38rem]/table:[&>.med]:hidden'
 
 export function ByWorkflowTable({ d }: { d: Runs }) {
   return (
@@ -195,16 +191,23 @@ export function ByWorkflowTable({ d }: { d: Runs }) {
         <li className={cn(TALLY_GRID, TABLE_HEAD)}>
           <span>Workflow</span>
           <span className="text-right">Runs</span>
-          <span className="text-right">Failed</span>
-          <span className="text-right">Median</span>
+          <span className="fail text-right">Failed</span>
+          <span className="med text-right">Median</span>
         </li>
         {d.byWorkflow.length === 0 && <li className={TABLE_EMPTY}>no runs</li>}
         {d.byWorkflow.map((w) => (
           <li key={w.label} className={cn(TALLY_GRID, TABLE_ROW_DENSE)}>
-            <span className="text-foreground [overflow-wrap:anywhere]">{w.label}</span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-foreground [overflow-wrap:anywhere]">{w.label}</span>
+              {/* On a phone failed and median are this line. */}
+              <span className="hidden text-[0.75rem] text-muted-foreground tabular-nums @max-[38rem]/table:block">
+                {w.failed > 0 && <span className="text-danger">{num(w.failed)} failed · </span>}
+                median {took(w.p50)}
+              </span>
+            </span>
             <span className={cn(CELL_QUIET, 'text-right')}>{num(w.runs)}</span>
-            <Failed n={w.failed} />
-            <span className={cn(CELL_QUIET, 'text-right')}>{took(w.p50)}</span>
+            <Failed n={w.failed} className="fail" />
+            <span className={cn(CELL_QUIET, 'med text-right')}>{took(w.p50)}</span>
           </li>
         ))}
       </ul>
@@ -219,40 +222,41 @@ export function ByRepositoryTable({ d }: { d: Runs }) {
         <li className={cn(TALLY_GRID, TABLE_HEAD)}>
           <span>Repository</span>
           <span className="text-right">Runs</span>
-          <span className="text-right">Failed</span>
-          <span className="text-right">Median</span>
+          <span className="fail text-right">Failed</span>
+          <span className="med text-right">Median</span>
         </li>
         {d.byRepo.map((r) => {
           const readable = r.access === 'app' || r.access === 'public'
           return (
             <li key={r.repo} className={cn(TALLY_GRID, TABLE_ROW_DENSE)}>
-              <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+              <span className="flex min-w-0 flex-col">
                 <Ext href={`${r.url}/actions`} className="text-foreground [overflow-wrap:anywhere]">
                   {r.repo}
                 </Ext>
-                <span className="text-[0.75rem] text-muted-foreground">
+                {/* The kind sits on the muted second line, always; on a phone the
+                    tallies join it. */}
+                <span className="text-[0.75rem] text-muted-foreground tabular-nums">
                   {r.kind}
                   {r.access === 'public' && ' · public'}
+                  {readable && r.total > r.runs && ` · ${num(r.runs)} of ${num(r.total)} read`}
+                  <span className="hidden @max-[38rem]/table:inline">
+                    {readable && r.failed > 0 && (
+                      <span className="text-danger"> · {num(r.failed)} failed</span>
+                    )}
+                    {readable && r.p50 !== null && ` · median ${duration(r.p50)}`}
+                  </span>
                 </span>
               </span>
               {readable ? (
                 <>
-                  <span
-                    className={cn(CELL_QUIET, 'text-right')}
-                    title={r.total > r.runs ? `${num(r.runs)} of ${num(r.total)} read` : undefined}
-                  >
-                    {num(r.runs)}
-                    {r.total > r.runs && (
-                      <span className="text-muted-foreground/70"> /{num(r.total)}</span>
-                    )}
-                  </span>
-                  <Failed n={r.failed} />
-                  <span className={cn(CELL_QUIET, 'text-right')}>
+                  <span className={cn(CELL_QUIET, 'text-right')}>{num(r.runs)}</span>
+                  <Failed n={r.failed} className="fail" />
+                  <span className={cn(CELL_QUIET, 'med text-right')}>
                     {r.p50 === null ? DASH : duration(r.p50)}
                   </span>
                 </>
               ) : (
-                <span className="col-span-3 text-right font-mono text-[0.72rem] text-warning">
+                <span className="col-span-3 text-right font-mono text-[0.75rem] text-warning @max-[38rem]/table:col-span-1">
                   needs actions: read
                 </span>
               )}
@@ -265,10 +269,12 @@ export function ByRepositoryTable({ d }: { d: Runs }) {
 }
 
 /** Zero failures is the norm and recedes to a dash; any failure is the ink. */
-function Failed({ n }: { n: number }) {
+function Failed({ n, className }: { n: number; className?: string }) {
   return n > 0 ? (
-    <span className="text-right text-danger tabular-nums [font-weight:560]">{num(n)}</span>
+    <span className={cn('text-right text-danger tabular-nums [font-weight:560]', className)}>
+      {num(n)}
+    </span>
   ) : (
-    <span className={cn(CELL_QUIET, 'text-right text-muted-foreground/60')}>{DASH}</span>
+    <span className={cn(CELL_QUIET, 'text-right text-muted-foreground/60', className)}>{DASH}</span>
   )
 }

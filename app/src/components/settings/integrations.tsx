@@ -156,6 +156,7 @@ export function Integrations({
                 field="mail.sender"
                 label="Sender"
                 validate={mailAddressError}
+                className="w-[22rem]"
               />
             ),
           },
@@ -167,6 +168,7 @@ export function Integrations({
                 field="mail.alertTo"
                 label="Alerts to"
                 validate={mailAddressError}
+                className="w-[22rem]"
               />
             ),
           },

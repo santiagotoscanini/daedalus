@@ -89,6 +89,7 @@ export function PhotosView({ data: d }: { data: Photos }) {
           title="Disk"
           icon="grid"
           span={4}
+          spanMd={12}
           aside={<span className={NOTE}>{pct(diskPct, 1)} used</span>}
         >
           <Progress pct={diskPct} tone="muted" />

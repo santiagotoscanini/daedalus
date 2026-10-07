@@ -211,17 +211,21 @@ export function WorkspaceBoard({
   workspace,
   workspaceRoot,
   span,
+  loneOnTablet,
 }: {
   repo: Frame['repo']
   workspace: Frame['workspace']
   workspaceRoot: Frame['workspaceRoot']
   span: 4 | 6
+  /** The odd third board: on a tablet it fills the row rather than sit beside a gap. */
+  loneOnTablet?: boolean
 }) {
   return (
     <Board
       title="Workspace"
       icon="⎇"
       span={span}
+      spanMd={loneOnTablet === true ? 12 : undefined}
       aside={<CloneButton repo={repo} cloned={workspace !== null} />}
     >
       {workspace ? (

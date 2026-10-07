@@ -176,7 +176,7 @@ function TenantsTable({ rows }: { rows: Postgres['databases'] }) {
             <span className="flex min-w-0 flex-col">
               <span className="truncate font-mono text-[0.76rem] text-foreground">{db.name}</span>
               {/* On a phone connections, cache hit and rollbacks are this line. */}
-              <span className="hidden text-[0.72rem] text-muted-foreground tabular-nums @max-[40rem]/table:block">
+              <span className="hidden text-[0.75rem] text-muted-foreground tabular-nums @max-[40rem]/table:block">
                 {num(db.connections)} conn ·{' '}
                 <span className={cn(cacheLow && 'text-warning')}>
                   {pct(db.cacheHitPct, 2)} cached

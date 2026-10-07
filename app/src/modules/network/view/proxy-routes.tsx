@@ -79,7 +79,7 @@ export function PublishedTable({
           value={filter}
           onChange={setFilter}
           label="Filter hostnames"
-          className="h-8.5"
+          className="h-8.5 max-[40rem]:min-h-10"
           options={[
             { value: 'all' as const, label: 'All', count: d.routes.length },
             { value: 'remote' as const, label: 'Internet', count: remote },
@@ -153,7 +153,7 @@ function Group({ title, rows, site }: { title: string; rows: ProxyData['routes']
             </span>
             {/* On a phone the other columns are this second line: reach, then
               the middleware — nothing is dropped, it is moved. */}
-            <span className="hidden flex-wrap items-center gap-x-2 text-[0.72rem] text-muted-foreground @max-[40rem]/table:flex">
+            <span className="hidden flex-wrap items-center gap-x-2 text-[0.75rem] text-muted-foreground @max-[40rem]/table:flex">
               <span>{r.remote ? 'Internet' : 'LAN only'}</span>
               {r.via !== null && <span className="font-mono">· {r.via}</span>}
             </span>

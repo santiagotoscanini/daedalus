@@ -14,11 +14,11 @@ import { TableSection } from '../../../components/table-section'
 import { cn } from '../../../lib/cn'
 import { bytes, compact, pct } from '../../../lib/format'
 import type { General, GeneralFacts } from './general'
-import { CAPTION, FOOT } from './shared'
+import { CAPTION, DottedName, FOOT } from './shared'
 
 /** Service · split bar · in · out · total. The two directions step away first. */
 const SERVICES_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(7rem,11rem)_minmax(4rem,1fr)_4.5rem_4.5rem_5rem] @max-[38rem]/table:grid-cols-[minmax(6rem,10rem)_minmax(3rem,1fr)_5rem] @max-[38rem]/table:[&>.dir]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(7rem,11rem)_minmax(4rem,1fr)_4.5rem_4.5rem_5rem] @max-[38rem]/table:grid-cols-[minmax(5rem,0.7fr)_minmax(0,1.3fr)_4.5rem] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.dir]:hidden'
 
 /** Domain · share · lookups. The bar steps away on a narrow column. */
 const DOMAINS_GRID =
@@ -152,8 +152,8 @@ export function WhatThisHouseAsksForBoard({ f }: { f: GeneralFacts }) {
         {top.length === 0 && <li className={TABLE_EMPTY}>no queries recorded</li>}
         {top.map((d) => (
           <li key={d.label} className={cn(DOMAINS_GRID, TABLE_ROW_DENSE)}>
-            <span className="min-w-0 text-foreground [overflow-wrap:anywhere]" title={d.label}>
-              {d.label}
+            <span className="min-w-0 text-foreground [overflow-wrap:break-word]" title={d.label}>
+              <DottedName name={d.label} />
             </span>
             <span className="bar flex h-1.5 min-w-0 overflow-hidden rounded-full bg-foreground/[0.06]">
               <span

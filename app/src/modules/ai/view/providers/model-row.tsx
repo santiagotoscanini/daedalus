@@ -55,7 +55,7 @@ const NONE = <span className="text-muted-foreground/50">{DASH}</span>
    and an action second, and a column of always-lit buttons would compete with
    the model that is actually running. */
 const QUIET_BTN =
-  'ml-auto h-7 flex-none px-2.5 text-[0.75rem] text-subdued opacity-50 transition-opacity duration-[0.12s] group-hover/row:opacity-100 focus-visible:opacity-100'
+  'ml-auto h-7 flex-none px-2.5 text-[0.75rem] text-subdued opacity-70 transition-opacity duration-[0.12s] group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
 
 /**
  * What the gateway calls this model, if it carries it at all.
@@ -113,6 +113,7 @@ function phoneLine(model: CatalogEntry): string {
  */
 function Attributes({ model }: { model: CatalogEntry }) {
   const parts = [
+    model.loaded === null ? null : 'loaded',
     model.recipe,
     model.loaded?.device ?? null,
     model.loaded?.maxContext != null ? `${num(model.loaded.maxContext / 1024)}k ctx` : null,
@@ -121,8 +122,8 @@ function Attributes({ model }: { model: CatalogEntry }) {
   ].filter((x): x is string => x !== null)
   if (parts.length === 0 && model.loaded?.pinned !== true) return null
   return (
-    <p className={cn(CELL_SUB, 'flex items-center gap-2')}>
-      <span className="truncate">{parts.join(' · ')}</span>
+    <p className={cn(CELL_SUB, 'flex flex-wrap items-center gap-x-2 gap-y-1 whitespace-normal')}>
+      <span>{parts.join(' · ')}</span>
       {model.loaded?.pinned === true && <Chip>pinned</Chip>}
     </p>
   )

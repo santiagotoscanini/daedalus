@@ -118,7 +118,7 @@ function MachinesThatCouldTakeAJobTable({ f }: { f: RunnersFacts }) {
                 {m.name}
               </span>
               {/* On a phone platform, demand and labels are this second line. */}
-              <span className="hidden text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+              <span className="hidden text-[0.75rem] text-muted-foreground @max-[38rem]/table:block">
                 {osWord(m.os)} · {m.arch}
                 {m.agentVersion !== null && ` · agent ${m.agentVersion}`}
                 {' · '}

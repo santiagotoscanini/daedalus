@@ -140,6 +140,7 @@ export function Overview({
             workspace={workspace}
             workspaceRoot={workspaceRoot}
             span={span}
+            loneOnTablet={deployShot !== null}
           />
 
           {notes.length > 0 && (

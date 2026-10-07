@@ -79,10 +79,11 @@ export function ServiceHead({
           )}
           {verdict !== undefined && <VersionCompare verdict={verdict} rows={compare ?? []} />}
         </p>
-        {/* A 640px measure, two lines: a head that reads as a paragraph is a
+        {/* A 640px measure on a wide screen (two lines); between the drawer and 78rem the
+            column is the measure, so a tablet has no empty strip beside it. Two lines: a head that reads as a paragraph is a
             page that has not decided what it is about. Never clamped: each
             page keeps its own copy short instead. */}
-        <p className="m-0 mt-0.5 max-w-[40rem] text-[0.84rem] leading-[1.5] text-muted-foreground">
+        <p className="m-0 mt-0.5 max-w-none text-[0.84rem] leading-[1.5] text-muted-foreground min-[78rem]:max-w-[40rem]">
           {lede}
         </p>
       </div>

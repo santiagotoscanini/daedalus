@@ -30,16 +30,16 @@ const modeWord = (m: string | null): string =>
           ? 'images'
           : m.replace(/_/g, ' ')
 
-/* Alias, kind, upstream, host. The host repeats down a machine's group (one
-   machine, one address), so it is the first to go and quiet while it stays. */
+/* Alias, kind, upstream. The host is the machine's address and is the same on
+   every row of its group, so it is said once, in the group's band, instead of
+   on every row. On a phone the kind moves into the alias's meta line and the
+   row is one column: the alias, then "kind · upstream" under it. */
 const ROUTE_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[minmax(0,1.3fr)_7rem_minmax(0,1.8fr)_minmax(0,1fr)]',
-  '@max-[52rem]/table:grid-cols-[minmax(0,1.2fr)_7rem_minmax(0,1.6fr)]',
-  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_7rem]',
+  'grid-cols-[minmax(0,1.3fr)_7rem_minmax(0,2fr)]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)]',
 )
-const HOST = '@max-[52rem]/table:hidden'
-const UPSTREAM = '@max-[38rem]/table:hidden'
+const PHONE_HIDE = '@max-[38rem]/table:hidden'
 
 export function GatewayView({ data }: { data: GatewayData }) {
   const { routing, machineNames } = data
@@ -76,11 +76,10 @@ export function GatewayView({ data }: { data: GatewayData }) {
           >
             <ul className={TABLE} aria-label="Gateway routes">
               {routing.routes.length > 0 && (
-                <li aria-hidden="true" className={cn(ROUTE_GRID, TABLE_HEAD)}>
+                <li aria-hidden="true" className={cn(ROUTE_GRID, TABLE_HEAD, PHONE_HIDE)}>
                   <span>Published as</span>
-                  <span>Kind</span>
-                  <span className={UPSTREAM}>Upstream model</span>
-                  <span className={HOST}>Host</span>
+                  <span className={PHONE_HIDE}>Kind</span>
+                  <span className={PHONE_HIDE}>Upstream model</span>
                 </li>
               )}
               {ordered.map(([group, routes]) => (
@@ -105,40 +104,54 @@ type Route = GatewayData['routing']['routes'][number]
 
 function RouteGroup({ group, routes }: { group: string; routes: Route[] }) {
   const byHand = group === 'config.yaml'
+  // One address per machine, so one in the band. A group that does talk to
+  // more than one says so on the rows that differ from the first.
+  const hosts = [...new Set(routes.map((r) => r.host ?? 'no api_base'))]
+  const main = hosts[0] ?? ''
   return (
     <>
       <TableGroup
         title={byHand ? 'config.yaml' : group}
-        note={byHand ? 'kept by hand' : 'written by daedalus'}
-      />
-      {routes.map((r) => (
-        <li key={`${group}-${r.alias}-${r.id ?? ''}`} className={cn(ROUTE_GRID, TABLE_ROW)}>
-          <div className="min-w-0">
-            <span
-              className={cn(
-                CELL_NAME,
-                '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]',
-                'block',
-              )}
-              title={r.alias}
-            >
-              {r.alias}
+        note={
+          <>
+            {byHand ? 'kept by hand' : 'written by daedalus'}
+            {' · '}
+            <span className={cn(hosts.length === 1 && main !== 'no api_base' && CELL_MONO)}>
+              {hosts.length === 1 ? main : `${String(hosts.length)} hosts`}
             </span>
-            <p className={PHONE_SUB}>
-              {r.upstream} · {r.host ?? 'no api_base'}
-            </p>
-          </div>
-          <span className={CELL_QUIET}>{modeWord(r.mode)}</span>
-          <span className={cn(CELL_MONO, UPSTREAM)} title={r.upstream}>
-            {r.upstream}
-          </span>
-          {/* A route with no api_base is the odd one out: it goes wherever the
-              provider SDK's default is, not to a machine in the house. */}
-          <span className={cn(CELL_MONO, HOST, r.host === null && 'font-sans text-foreground')}>
-            {r.host ?? 'no api_base'}
-          </span>
-        </li>
-      ))}
+          </>
+        }
+      />
+      {routes.map((r) => {
+        const host = r.host ?? 'no api_base'
+        return (
+          <li key={`${group}-${r.alias}-${r.id ?? ''}`} className={cn(ROUTE_GRID, TABLE_ROW)}>
+            <div className="min-w-0">
+              <span
+                className={cn(
+                  CELL_NAME,
+                  '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]',
+                  'block',
+                )}
+                title={r.alias}
+              >
+                {r.alias}
+              </span>
+              <p className={PHONE_SUB}>
+                {modeWord(r.mode)} · {r.upstream}
+                {hosts.length > 1 && host !== main ? ` · ${host}` : ''}
+              </p>
+            </div>
+            <span className={cn(CELL_QUIET, PHONE_HIDE)}>{modeWord(r.mode)}</span>
+            <span className={cn(CELL_MONO, PHONE_HIDE)} title={r.upstream}>
+              {r.upstream}
+              {hosts.length > 1 && host !== main && (
+                <span className="block text-muted-foreground/70">{host}</span>
+              )}
+            </span>
+          </li>
+        )
+      })}
     </>
   )
 }

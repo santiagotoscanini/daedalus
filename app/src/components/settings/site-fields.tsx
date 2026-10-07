@@ -84,7 +84,7 @@ function Control({
   children: ReactNode
 }) {
   return (
-    <Field invalid={error !== null} className="w-auto items-start gap-1">
+    <Field invalid={error !== null} className="w-full max-w-full items-start gap-1">
       {/* The control first, then what is known about the value beside it: the
           eye lands on the field, and the pending chip reads as a remark on it. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -150,25 +150,29 @@ function TextInner({
   }
   return (
     <Control edit={edit} field={field} error={error} saving={saving}>
-      {prefix !== undefined && <span className={AFFIX}>{prefix}</span>}
-      <Input
-        id={id}
-        type="text"
-        aria-label={label}
-        className={cn(BOX, className)}
-        value={draft}
-        disabled={edit.committed === null}
-        aria-invalid={error !== null}
-        onChange={(e) => {
-          setDraft(e.target.value)
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-          if (e.key === 'Escape') setDraft(value)
-        }}
-      />
-      {suffix !== undefined && <span className={AFFIX}>{suffix}</span>}
+      <span className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1 max-[40rem]:w-full">
+        <span className="flex min-w-0 max-w-full items-center gap-2 max-[40rem]:w-full">
+          {prefix !== undefined && <span className={AFFIX}>{prefix}</span>}
+          <Input
+            id={id}
+            type="text"
+            aria-label={label}
+            className={cn(BOX, prefix !== undefined && 'min-w-0 flex-1 sm:flex-none', className)}
+            value={draft}
+            disabled={edit.committed === null}
+            aria-invalid={error !== null}
+            onChange={(e) => {
+              setDraft(e.target.value)
+            }}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+              if (e.key === 'Escape') setDraft(value)
+            }}
+          />
+        </span>
+        {suffix !== undefined && <span className={cn(AFFIX, 'break-all')}>{suffix}</span>}
+      </span>
     </Control>
   )
 }
@@ -292,7 +296,7 @@ export function SiteSelect({ edit, field, label, groups, patchFor, disabled }: S
         value={current}
         options={groups}
         aria-label={label}
-        className={cn(BOX, 'w-[20rem]')}
+        className={cn(BOX, 'w-full sm:w-[20rem]')}
         mono
         busy={saving}
         failed={refused !== null}

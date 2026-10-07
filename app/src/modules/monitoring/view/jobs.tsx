@@ -120,7 +120,7 @@ function ScheduledJobsBoard({ f }: { f: JobsFacts }) {
                 {j.unit}
               </span>
               {/* On a phone how it is watched and the two times are this line. */}
-              <span className="hidden text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+              <span className="hidden text-[0.75rem] text-muted-foreground @max-[38rem]/table:block">
                 <span className={cn(j.slug !== null && j.status !== 'up' && 'text-warning')}>
                   {j.slug === null
                     ? 'mail on failure'
@@ -221,7 +221,7 @@ function DeadManSSwitchesBoard({ f }: { f: JobsFacts }) {
               <span className="text-foreground [overflow-wrap:anywhere]">{c.name}</span>
               <span
                 className={cn(
-                  'hidden text-[0.72rem] text-muted-foreground @max-[30rem]/table:block',
+                  'hidden text-[0.75rem] text-muted-foreground @max-[30rem]/table:block',
                   c.status !== 'up' && (c.status === 'grace' ? 'text-warning' : 'text-danger'),
                 )}
               >

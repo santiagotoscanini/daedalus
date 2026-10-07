@@ -43,7 +43,7 @@ export function DeclaredNames({ lan }: { lan: Lan }) {
           value={filter}
           onChange={setFilter}
           label="Filter names"
-          className="h-8.5"
+          className="h-8.5 max-[40rem]:min-h-10"
           options={[
             { value: 'all' as const, label: 'All', count: lan.length },
             { value: 'public' as const, label: 'Public', count: pub },
@@ -69,7 +69,7 @@ export function DeclaredNames({ lan }: { lan: Lan }) {
             <span className="flex min-w-0 flex-col">
               <span className="truncate font-mono text-[0.76rem] text-foreground">{n.short}</span>
               {/* On a phone the address and zone columns are this second line. */}
-              <span className="hidden truncate text-[0.72rem] text-muted-foreground @max-[36rem]/table:block">
+              <span className="hidden truncate text-[0.75rem] text-muted-foreground @max-[36rem]/table:block">
                 {n.elsewhere ? n.ip : 'this box'}
                 {n.public && ' · public'}
               </span>

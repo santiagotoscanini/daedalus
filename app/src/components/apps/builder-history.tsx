@@ -29,11 +29,13 @@ const APP_GRID = cn(
   'grid-cols-[minmax(0,1fr)_5rem_5rem_6rem_5rem]',
   '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_5rem_5rem]',
 )
+/** Stage · median · builds. */
+const STAGE_GRID = 'grid items-center gap-x-6 px-5 grid-cols-[minmax(0,1fr)_6rem_5rem]'
 /** App + commit · stage · error · when. */
 const FAIL_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[max-content_5.75rem_minmax(0,1fr)_4.5rem]',
-  '@max-[44rem]/table:grid-cols-[max-content_minmax(0,1fr)]',
+  'grid-cols-[12.5rem_5.75rem_minmax(0,1fr)_4.5rem]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)] @max-[44rem]/table:gap-y-0.5',
 )
 const NARROW = '@max-[36rem]/table:hidden'
 const FAIL_NARROW = '@max-[44rem]/table:hidden'
@@ -57,20 +59,27 @@ export function HistorySection({ h }: { h: History }) {
         />
         <Stat label="Median build" value={ms(h.medianMs)} sub="hand-off to finish" />
       </StatStrip>
-      {/* The pipeline read across: one cell per stage, in build order. */}
+      {/* The pipeline in build order: a short table, so five stages never
+          leave an orphan tile at any width. */}
       {h.stages.some((s) => s.medianMs !== null) ? (
-        <StatStrip>
+        <ul className={cn(TABLE, 'mb-4')} aria-label="Median time per stage">
+          <li className={cn(STAGE_GRID, TABLE_HEAD)}>
+            <span>Stage</span>
+            <span className="text-right">Median</span>
+            <span className="text-right">Builds</span>
+          </li>
           {h.stages
             .filter((s) => s.medianMs !== null)
             .map((s) => (
-              <Stat
-                key={s.phase}
-                label={s.phase}
-                value={ms(s.medianMs)}
-                sub={`median · ${String(s.count)} builds`}
-              />
+              <li key={s.phase} className={cn(STAGE_GRID, TABLE_ROW)}>
+                <span className="text-foreground">{s.phase}</span>
+                <span className={cn(CELL_QUIET, 'text-right whitespace-nowrap')}>
+                  {ms(s.medianMs)}
+                </span>
+                <span className={cn(CELL_QUIET, 'text-right')}>{String(s.count)}</span>
+              </li>
             ))}
-        </StatStrip>
+        </ul>
       ) : (
         <p className="mt-0 mb-4 text-[0.8rem] text-muted-foreground">
           No stage has been timed yet.
@@ -145,7 +154,7 @@ export function FailuresSection({ h }: { h: History }) {
             <li className={cn(FAIL_GRID, TABLE_HEAD)}>
               <span>Build</span>
               <span className={FAIL_NARROW}>Failed in</span>
-              <span>Error</span>
+              <span className={FAIL_NARROW}>Error</span>
               <span className={cn('text-right', FAIL_NARROW)}>When</span>
             </li>
             {h.failures.map((f) => (
@@ -153,9 +162,9 @@ export function FailuresSection({ h }: { h: History }) {
                 <Link
                   to="/apps/$name/builds/$id"
                   params={{ name: f.app, id: f.id }}
-                  className={cn(TABLE_LINK, 'flex min-w-0 items-baseline gap-2')}
+                  className={cn(TABLE_LINK, 'flex min-w-0 flex-wrap items-baseline gap-x-2')}
                 >
-                  <span className="truncate text-foreground [font-weight:560]">{f.app}</span>
+                  <span className="text-foreground [font-weight:560]">{f.app}</span>
                   <code className={CELL_MONO}>{sha7(f.sha)}</code>
                 </Link>
                 {/* Every row here is a failure, so the stage is the fact that

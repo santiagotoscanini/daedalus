@@ -70,7 +70,7 @@ export function PantryView({ data: d }: { data: Pantry }) {
           </p>
         </Board>
 
-        <Board title="Chores & tasks" icon="✓" span={4}>
+        <Board title="Chores & tasks" icon="✓" span={4} spanMd={12}>
           <Facts
             list
             rows={[

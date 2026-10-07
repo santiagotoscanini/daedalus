@@ -3,7 +3,7 @@ import type { BuilderData } from '../../lib/apps/builder'
 import { cn } from '../../lib/cn'
 import { bytes } from '../../lib/format'
 import { ImageRow } from '../image-row'
-import { EMPTY, FOOT, LIST, MONO, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
+import { EMPTY, FOOT, MONO, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
 import { Board, BoardGrid, Facts } from '../viz'
 import { GithubSection } from './builder-github'
 import { FailuresSection, HistorySection } from './builder-history'
@@ -74,7 +74,7 @@ function ToolchainBoard({ d }: { d: Builder }) {
       ) : facts.mise.length === 0 ? (
         <p className={EMPTY}>no app has a mise cache yet</p>
       ) : (
-        <ul className={LIST}>
+        <ul className="grid grid-cols-1 gap-x-8 @min-[26rem]/board:grid-cols-2 @min-[26rem]/board:[&>li:nth-child(2)]:border-t-0">
           {facts.mise.map((m) => (
             <li key={m.app} className={ROW}>
               <span className={cn(ROW_MAIN, MONO)}>{m.app}</span>
