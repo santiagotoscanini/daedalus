@@ -298,88 +298,6 @@ html {
   background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(226, 121, 90, 0.18), transparent 70%);
 }
 
-/* The receipt's strike: an ember hairline drawn through each rented
- * service as its row scrolls in. The static page ships it drawn; only a row
- * the reveal hid (.reveal-pre) starts undrawn. */
-.strike {
-  position: relative;
-  display: inline-block;
-}
-.strike::after {
-  content: "";
-  position: absolute;
-  left: -0.2em;
-  right: -0.2em;
-  top: 54%;
-  height: 1px;
-  background: var(--color-accent);
-  transform-origin: left center;
-  transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1) 0.35s;
-}
-.reveal-pre .strike::after {
-  transform: scaleX(0);
-}
-.reveal-pre.reveal-in .strike::after {
-  transform: scaleX(1);
-}
-
-/* The Apply bar at landing scale: glass over the page, its edge in ember
- * while a change waits or runs, as the app draws it. */
-.apply-bar {
-  background: rgba(22, 22, 26, 0.72);
-  border-color: rgba(226, 121, 90, 0.35);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 24px 60px -12px rgba(0, 0, 0, 0.7),
-    0 0 40px -14px rgba(226, 121, 90, 0.8);
-  backdrop-filter: blur(20px) saturate(1.5);
-  transition:
-    border-color 0.4s ease,
-    box-shadow 0.4s ease;
-}
-.apply-bar.is-applied {
-  border-color: rgba(78, 168, 122, 0.4);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 24px 60px -12px rgba(0, 0, 0, 0.7),
-    0 0 40px -16px rgba(78, 168, 122, 0.7);
-}
-
-/* The phases under it: the one running is lit, the ones passed are struck
- * through, the ones ahead wait in the dim ink. `still` is the prerendered
- * and reduced-motion state: all legible, none struck. */
-.phase .phase-name,
-.phase .phase-body {
-  transition:
-    color 0.35s ease,
-    opacity 0.35s ease;
-}
-.phase[data-state="still"] .phase-name {
-  color: var(--color-accent);
-}
-.phase[data-state="still"] .phase-body {
-  color: var(--color-muted);
-}
-.phase[data-state="now"] .phase-name {
-  color: var(--color-accent);
-}
-.phase[data-state="now"] .phase-body {
-  color: var(--color-fg);
-}
-.phase[data-state="done"] .phase-name {
-  color: var(--color-dim);
-  text-decoration: line-through;
-  text-decoration-color: rgba(226, 121, 90, 0.7);
-}
-.phase[data-state="done"] .phase-body {
-  color: var(--color-dim);
-}
-.phase[data-state="next"] .phase-name,
-.phase[data-state="next"] .phase-body {
-  color: var(--color-dim);
-  opacity: 0.55;
-}
-
 /* The FAQ's disclosure marker is the + in the summary, not the browser's. */
 .faq summary::-webkit-details-marker {
   display: none;
@@ -504,33 +422,20 @@ html {
 }
 
 /* ---------------------------------------------------------------- *
- * The walk: the hero and its pinned scroll (components/walk)
+ * The network: the hero and its pinned scroll (components/walk)
  * ---------------------------------------------------------------- */
 @layer components {
-  .walk-stage {
-    position: absolute;
-    inset: 0 0 auto 0;
+  .net-stage {
+    position: relative;
     height: 100svh;
     overflow: hidden;
     z-index: 0;
   }
-  .walk[data-mode="pinned"] .walk-stage {
+  .net[data-mode="pinned"] .net-stage {
     position: sticky;
     top: 0;
   }
-  .walk-stations {
-    position: relative;
-    z-index: 1;
-  }
-  .walk[data-mode="pinned"] .walk-stations {
-    position: sticky;
-    top: 0;
-    height: 100svh;
-    margin-top: -100svh;
-  }
-
-  /* The canvas fades in over the poster once its first frame is drawn */
-  .walk-canvas {
+  .net-canvas {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -538,98 +443,213 @@ html {
     opacity: 0;
     transition: opacity 1.2s ease;
   }
-  .walk[data-ready] .walk-canvas {
+  .net[data-ready] .net-canvas {
     opacity: 1;
   }
-  .walk-poster {
+  .net-poster {
     position: absolute;
     inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    perspective: 1600px;
     transition: opacity 1.2s ease 0.1s;
-    -webkit-mask-image: radial-gradient(closest-side, #000 40%, transparent 96%);
-    mask-image: radial-gradient(closest-side, #000 40%, transparent 96%);
-    filter: drop-shadow(0 0 12px rgba(226, 121, 90, 0.3));
+    -webkit-mask-image: radial-gradient(ellipse 70% 70% at 55% 50%, #000 40%, transparent 100%);
+    mask-image: radial-gradient(ellipse 70% 70% at 55% 50%, #000 40%, transparent 100%);
   }
-  .walk[data-ready] .walk-poster {
+  .net-poster svg {
+    width: 100%;
+    height: 100%;
+    transform: translateX(8%);
+  }
+  .net[data-ready] .net-poster {
     opacity: 0;
   }
-  .walk-poster-plan {
-    position: relative;
-    flex: none;
-    width: min(62rem, 150vw);
-    transform-style: preserve-3d;
-    transform: translateX(14%) rotateX(56deg) rotateZ(-40deg);
-  }
-
-  /* Legibility and focus: the type sits in a darker pocket on the left, the
-   * edges fall off to the page */
-  .walk-vignette {
+  .net-vignette {
     position: absolute;
     inset: 0;
     pointer-events: none;
     background:
-      linear-gradient(0deg, rgba(8, 8, 10, 0.8) 0%, rgba(8, 8, 10, 0.3) 26%, transparent 46%),
-      linear-gradient(90deg, rgba(8, 8, 10, 0.7) 0%, rgba(8, 8, 10, 0.3) 30%, transparent 54%),
-      radial-gradient(ellipse 80% 75% at 50% 48%, transparent 50%, rgba(8, 8, 10, 0.7) 100%);
+      linear-gradient(0deg, rgba(8, 8, 10, 0.78) 0%, rgba(8, 8, 10, 0.25) 24%, transparent 44%),
+      linear-gradient(90deg, rgba(8, 8, 10, 0.55) 0%, transparent 40%),
+      radial-gradient(ellipse 85% 80% at 50% 50%, transparent 55%, rgba(8, 8, 10, 0.7) 100%);
   }
 
-  /* Stations. Stacked in the flow until the stage pins, then layered. */
-  .station {
-    position: relative;
-    display: flex;
-    align-items: center;
-    padding: 5.5rem 0 4rem;
-  }
-  .station[data-i="0"] {
-    min-height: 100svh;
-    padding-bottom: 5rem;
-  }
-  .walk[data-mode="pinned"] .station {
+  /* The text that lives in the graph */
+  .net-layer {
     position: absolute;
     inset: 0;
-    padding: 4.5rem 0 2rem;
-    will-change: opacity, transform;
-    transform: translate3d(0, var(--y, 0px), 0);
+    pointer-events: none;
+    display: none;
   }
-  .walk[data-mode="pinned"] .station:not([data-i="0"]) {
-    opacity: 0;
+  .net[data-mode="pinned"] .net-layer {
+    display: block;
   }
-  .station-win {
-    transform-origin: 14% 50%;
-  }
-  .walk[data-mode="pinned"] .station-win {
-    transform: perspective(1900px) rotateY(calc(var(--t, 0) * -9deg)) translate3d(calc(var(--t, 0) * 44px), 0, 0);
-  }
-
-  .hero-strike {
-    position: relative;
-    display: inline-block;
-  }
-  .hero-strike::after {
-    content: "";
+  .net-lines {
     position: absolute;
-    left: -0.2em;
-    right: -0.2em;
-    top: 54%;
-    height: 1px;
-    background: var(--color-accent);
-    transform: scaleX(0);
-    transform-origin: left center;
-    animation: hero-strike 0.8s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 1.5s) forwards;
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
-  @keyframes hero-strike {
-    to {
-      transform: scaleX(1);
-    }
+  .net-lines line {
+    stroke: rgba(255, 255, 255, 0.5);
+    stroke-width: 1;
+  }
+  .net-node,
+  .net-step,
+  .net-module,
+  .net-tile,
+  .net-inspector,
+  .net-ingest-cap,
+  .net-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    will-change: transform, opacity;
+  }
+  .net-node {
+    display: grid;
+    gap: 2px;
+    margin: 14px 0 0 -70px;
+    width: 140px;
+    text-align: center;
+    font: 500 10.5px/1.25 var(--font-mono);
+    letter-spacing: 0.04em;
+    text-shadow: 0 0 10px rgba(8, 8, 10, 0.95);
+  }
+  .net-node b {
+    color: #ececf0;
+    font-weight: 500;
+  }
+  .net-node i {
+    color: var(--color-dim);
+    font-style: normal;
+    font-size: 9.5px;
+  }
+  .net-step {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #d4d4da;
+    text-wrap: pretty;
+    text-shadow: 0 0 14px rgba(8, 8, 10, 0.95);
+  }
+  .net-step em {
+    display: block;
+    margin-bottom: 6px;
+    font: 500 10.5px/1 var(--font-mono);
+    font-style: normal;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  .net-inspector {
+    transition: none;
+  }
+  .net-inspector .demo-fit {
+    box-shadow:
+      0 1px 1px rgba(0, 0, 0, 0.45),
+      0 24px 70px -20px rgba(0, 0, 0, 0.9),
+      0 0 90px -30px rgba(226, 121, 90, 0.4);
+  }
+  .net-tile {
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+    padding: 0.7rem 1.1rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.6rem;
+    background: rgba(14, 14, 18, 0.75);
+    backdrop-filter: blur(6px);
+    white-space: nowrap;
+  }
+  .net-tile strong {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #ececf0;
+  }
+  .net-tile span {
+    font: 500 10.5px/1 var(--font-mono);
+    color: var(--color-muted);
+  }
+  .net-module {
+    margin: -8px 0 0 12px;
+    font: 500 10.5px/1 var(--font-mono);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    color: var(--color-muted);
+    transition: color 0.5s ease;
+    text-shadow: 0 0 10px rgba(8, 8, 10, 0.95);
+  }
+  .net-module[data-lit] {
+    color: #f5b8a2;
+  }
+  .net-ingest-cap {
+    left: 50%;
+    top: auto;
+    bottom: 2.6rem;
+    width: min(34rem, calc(100% - 3rem));
+    translate: -50% 0;
+    text-align: center;
+    transition: opacity 0.4s ease;
+  }
+  .net-ingest-cap em {
+    display: block;
+    font: 500 10.5px/1.4 var(--font-mono);
+    font-style: normal;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  .net-ingest-cap p {
+    margin-top: 8px;
+    font-size: 15px;
+    line-height: 1.5;
+    color: #d4d4da;
+    text-wrap: pretty;
+  }
+  .net-card {
+    left: 1.5rem;
+    right: 1.5rem;
+    top: auto;
+    bottom: 1.6rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.9rem;
+    background: rgba(12, 12, 16, 0.82);
+    backdrop-filter: blur(10px);
+    transition: opacity 0.35s ease;
+    display: none;
+  }
+  .net-card p:first-child {
+    font: 500 10.5px/1 var(--font-mono);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  .net-card p:last-child {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #d4d4da;
   }
 
-  .walk-cue {
+  /* The hero's copy sits over the graph, bottom left */
+  .net-hero {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    min-height: 100svh;
+    padding: 6rem 0 5.5rem;
+  }
+  .net[data-mode="pinned"] .net-hero {
+    position: absolute;
+    inset: 0;
+    will-change: opacity, transform;
+  }
+  .net-cue {
     position: absolute;
     left: max(1.5rem, calc((100vw - 72rem) / 2 + 1.5rem));
     bottom: 1.6rem;
+    z-index: 2;
     display: none;
     align-items: center;
     gap: 0.9rem;
@@ -638,7 +658,7 @@ html {
     text-transform: uppercase;
     color: var(--color-dim);
   }
-  .walk-cue i {
+  .net-cue i {
     display: block;
     width: 38px;
     height: 1px;
@@ -658,150 +678,54 @@ html {
       opacity: 0;
     }
   }
+  .net[data-mode="pinned"] .net-cue {
+    display: flex;
+  }
 
-  .walk-rail {
+  /* The plain list: shown until the stage pins */
+  .net-list {
+    position: relative;
+    z-index: 1;
+    background: var(--color-app);
+  }
+  .net[data-mode="pinned"] .net-list {
     display: none;
   }
 
-  /* Labels anchored to things in the scene: placed by the scene each frame */
-  .walk-label {
-    position: absolute;
-    left: 0;
-    top: 0;
-    opacity: 0;
-    pointer-events: none;
-    will-change: transform, opacity;
-  }
-  .walk-label::before {
-    content: "";
-    position: absolute;
-    left: -3px;
-    top: -3px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-accent);
-    box-shadow: 0 0 14px 3px rgba(226, 121, 90, 0.65);
-  }
-  .walk-label > span {
-    position: relative;
-    display: block;
-    margin: -6px 0 0 18px;
-    padding-top: 0;
-    font: 500 11px/1 var(--font-mono);
-    letter-spacing: 0.05em;
-    color: #ececf0;
-    white-space: nowrap;
-    text-shadow: 0 0 10px rgba(8, 8, 10, 0.9);
-  }
-  .walk-label > span::before {
-    content: "";
-    position: absolute;
-    left: -14px;
-    top: 5px;
-    width: 10px;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.4);
-  }
-
-  @media (min-width: 1024px) {
-    .walk-cue {
-      display: flex;
-    }
-    .walk[data-mode="pinned"] .walk-rail {
-      position: absolute;
-      right: 1.4rem;
-      top: 50%;
-      z-index: 2;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 1rem;
-      transform: translateY(-50%);
-    }
-    .walk-rail span {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      font: 500 9.5px/1 var(--font-mono);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: transparent;
-      transition: color 0.4s ease;
-    }
-    .walk-rail span::after {
-      content: "";
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.22);
-      transition:
-        background 0.4s ease,
-        box-shadow 0.4s ease;
-    }
-    .walk-rail span[data-on] {
-      color: var(--color-muted);
-    }
-    .walk-rail span[data-on]::after {
-      background: var(--color-accent);
-      box-shadow: 0 0 10px 2px rgba(226, 121, 90, 0.6);
-    }
-  }
-
-  /* Phones: the art sits above, the copy and the window below it */
   @media (max-width: 767px) {
-    .walk-vignette {
+    .net-vignette {
       background:
-        linear-gradient(0deg, rgba(8, 8, 10, 0.92) 0%, rgba(8, 8, 10, 0.7) 42%, transparent 68%),
+        linear-gradient(0deg, rgba(8, 8, 10, 0.92) 0%, rgba(8, 8, 10, 0.6) 40%, transparent 62%),
         radial-gradient(ellipse 90% 60% at 50% 30%, transparent 50%, rgba(8, 8, 10, 0.6) 100%);
     }
-    .station {
-      align-items: flex-end;
+    .net[data-mode="pinned"] .net-card {
+      display: block;
     }
-    .walk[data-mode="pinned"] .station {
-      padding: 4rem 0 1.25rem;
+    .net-hero {
+      padding-bottom: 2rem;
     }
-    .walk-poster-plan {
-      transform: translateY(-16%) rotateX(56deg) rotateZ(-40deg);
+    .net-tile {
+      padding: 0.45rem 0.7rem;
+    }
+    .net-tile strong {
+      font-size: 13px;
+    }
+    .net-tile span,
+    .net-module {
+      display: none;
+    }
+    .net-ingest-cap {
+      bottom: 1.4rem;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .hero-strike::after {
-      animation: none;
-      transform: scaleX(1);
-    }
-    .walk-cue i {
+    .net-cue i {
       animation: none;
     }
-    .walk-canvas,
-    .walk-poster {
+    .net-canvas,
+    .net-poster {
       transition: none;
-    }
-  }
-}
-
-@layer components {
-  /* Desktop: the art is a band across the top, the copy and the screen sit
-   * under it on one baseline */
-  @media (min-width: 1024px) {
-    .station:not([data-i="0"]) {
-      align-items: flex-end;
-    }
-    .walk[data-mode="pinned"] .station:not([data-i="0"]) {
-      padding-bottom: 2.6rem;
-    }
-  }
-}
-
-@layer components {
-  /* A short laptop screen: the screen shrinks, the list of facts goes, so the art keeps its band */
-  @media (min-width: 1024px) and (max-height: 780px) {
-    .station-win {
-      width: min(100%, 34rem) !important;
-    }
-    .station-copy ul {
-      display: none;
     }
   }
 }

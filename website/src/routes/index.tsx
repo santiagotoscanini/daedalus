@@ -1,10 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ApplyFlow } from "~/components/sections/apply-flow";
 import { Faq } from "~/components/sections/faq";
 import { GetIt } from "~/components/sections/get-it";
 import { OpenSource } from "~/components/sections/open-source";
-import { RentedCloud } from "~/components/sections/rented-cloud";
 import { Walk } from "~/components/walk/walk";
 import { pageHead } from "~/site-head";
 
@@ -19,17 +17,14 @@ export const Route = createFileRoute("/")({
     }),
 });
 
-/** One argument in six parts: the product (the walk: hero and three stations, each
- * with a real screen of the app), the receipt that is the idea, the Apply bar that is how it
- * works, the two pieces to get, the questions, and the labyrinth again as
- * the bookend. Each screen of the app appears once, in the walk. */
+/** One argument: the network at work (the hero, three requests and what the box takes in),
+ * the two pieces to get, the questions, and the labyrinth again as the bookend. Each
+ * screen of the app appears once, in the network. */
+
 function Landing() {
   return (
     <main id="main">
       <Walk />
-      <div className="divider mx-auto max-w-4xl" aria-hidden />
-      <RentedCloud />
-      <ApplyFlow />
       <div className="divider mx-auto max-w-4xl" aria-hidden />
       <GetIt />
       <Faq />

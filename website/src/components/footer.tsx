@@ -65,13 +65,8 @@ export function Footer() {
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">Site</p>
           <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
             <li>
-              <Link to="/" hash="cloud" className="transition-colors hover:text-fg">
-                The idea
-              </Link>
-            </li>
-            <li>
-              <Link to="/" hash="loop" className="transition-colors hover:text-fg">
-                How it works
+              <Link to="/" hash="walk" className="transition-colors hover:text-fg">
+                The network
               </Link>
             </li>
             <li>
