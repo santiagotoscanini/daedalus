@@ -97,10 +97,11 @@ Linear / Notion, not glow: dark mode is a GREY ladder, never near-black.
 - Restraint: colour is for state. No glows, gradients or accent bars as
   ornament. Type: Geist / Geist Mono; page title 1.75rem/640, board title
   0.875rem/560, captions 0.75–0.78rem muted, figures 1.6rem tabular.
-- **Explanations fold.** `FOOT` (and settings `NOTE`) carry the marker
-  class `explain`; a `Board` or settings `Section` hides every `.explain`
-  inside it until its ⓘ is pressed (`components/explain.tsx`, CSS `:has()`
-  decides whether the ⓘ is drawn). A caption that carries a live fact or a
+- **Explanations live in a bubble.** `FOOT` (and settings `NOTE`) carry the
+  marker class `explain`; a panel hides every `.explain` inside it
+  (`EXPLAIN_FOLDED`) and its ⓘ shows that prose in a hover/focus/tap bubble
+  (`components/explain.tsx`), so opening one never moves the layout; CSS
+  `:has()` decides whether the ⓘ is drawn. A page lede passes `content`. A caption that carries a live fact or a
   state is `CAPTION`, which never folds.
 - Rail groups come from the manifest's `section`.
 
