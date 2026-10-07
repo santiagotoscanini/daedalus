@@ -2,7 +2,13 @@ import { LogBoard } from '../../../../components/logs'
 import { useNow } from '../../../../components/poll'
 import { Changelog } from '../../../../components/release-notes'
 import { LinkRow, ServiceHead } from '../../../../components/service-head'
-import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../../components/table'
+import {
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW_DENSE,
+} from '../../../../components/table'
 import { TableSection } from '../../../../components/table-section'
 import { Board, BoardGrid, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
@@ -211,10 +217,10 @@ function TheAddressOverTimeBoard({ f }: { f: DdnsFacts }) {
         {/* The current address carries the ink; the ones it replaced are
             history and recede. */}
         {d.history.map((h) => (
-          <li key={h.at} className={cn(ADDR_GRID, TABLE_ROW)}>
+          <li key={h.at} className={cn(ADDR_GRID, TABLE_ROW_DENSE)}>
             <span
               className={cn(
-                'truncate font-mono text-[0.8rem]',
+                'truncate font-mono text-[0.76rem]',
                 h.heldDays === null ? 'text-foreground [font-weight:560]' : 'text-subdued',
               )}
             >

@@ -8,6 +8,7 @@ import { EMPTY, FOOT, SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from '../to
 import { Alert, AlertDescription } from '../ui/alert'
 import { Board, BoardGrid, Stat, StatStrip } from '../viz'
 import {
+  ACCESS_NOTE,
   AgentsBoard,
   ClientsBoard,
   CountriesBoard,
@@ -15,7 +16,11 @@ import {
   PathsBoard,
   RejectsBoard,
 } from './access-boards'
-import { LEDE, STRIP_FOOT } from './shared'
+import { LEDE } from './shared'
+
+/** Two boards in one third-width column of the board grid, the last taking the slack. */
+const STACK =
+  'flex min-w-0 flex-col gap-4 [grid-column:span_4] max-[78rem]:[grid-column:span_12] [&>section:last-child]:flex-1'
 
 export type AccessData = Extract<AppTabData, { kind: 'access' }>['access']
 
@@ -163,31 +168,28 @@ export function Access({
               Nothing arrived through the tunnel in {spec.prose}. The route exists; nothing outside
               is visiting it.
             </p>
+            <p className={FOOT}>{ACCESS_NOTE}</p>
           </Board>
         </BoardGrid>
       ) : (
         <BoardGrid>
           <GeoPanel hostname={hostname} range={range} />
 
-          <CountriesBoard access={access} />
+          {/* The two lists stacked beside the map: Countries is a couple of
+              rows, so alone it was a tall board with nothing in it. */}
+          <div className={STACK}>
+            <CountriesBoard access={access} />
+            <ClientsBoard access={access} />
+          </div>
 
-          <ClientsBoard access={access} />
+          {/* Wide: a path is the longest label on the page. */}
+          <PathsBoard access={access} />
 
           <AgentsBoard access={access} />
-
-          {/* Full width: a path is the longest label on the page, and at half
-              width every one of them was cut off. */}
-          <PathsBoard access={access} />
 
           <RejectsBoard access={access} grafanaUrl={grafanaUrl} range={range} />
         </BoardGrid>
       )}
-
-      <p className={cn(STRIP_FOOT, 'm-0')}>
-        Only tunnel traffic is counted. Loki keeps 30 days, so that is the longest window there is.
-        The map is a Grafana panel from the App access dashboard, filtered to this host; the link on
-        the rejected-requests board opens the fleet-wide Security dashboard instead.
-      </p>
     </div>
   )
 }

@@ -191,7 +191,6 @@ export function SiteSwitch({
   )
   return (
     <Control edit={edit} field={field} error={refused} saving={saving}>
-      <Chip tone={checked ? 'ok' : 'muted'}>{checked ? 'active' : 'off'}</Chip>
       <Switch
         aria-label={label}
         checked={checked}
@@ -201,6 +200,9 @@ export function SiteSwitch({
           save({ [field]: v })
         }}
       />
+      <span className={checked ? 'text-[0.8125rem] text-subdued' : ASIDE}>
+        {checked ? 'active' : 'off'}
+      </span>
     </Control>
   )
 }

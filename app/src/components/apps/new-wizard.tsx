@@ -13,6 +13,7 @@ import { NEW_APP_STAGES, type NewAppStage, STAGE_LABEL } from '../../lib/stage'
 import { createAppFn, fetchAppPreflight, type fetchNewAppOptions } from '../../server/registry'
 import { Segmented } from '../controls'
 import { Toggle } from '../slider'
+import { SECTION_TITLE } from '../table'
 import { FOOT } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
@@ -20,7 +21,11 @@ import { useAction } from '../use-action'
 import { Board, BoardGrid } from '../viz'
 import { ReadinessPanel } from './readiness'
 import { RepoPicker } from './repo-picker'
-import { SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
+
+/** A step's heading: the house section title, its note inline in muted ink. */
+const SECTION_HEAD = SECTION_TITLE
+const SECTION_HEAD_SMALL = 'text-[0.8rem] font-normal text-muted-foreground'
+
 import { WizardField } from './wizard-field'
 
 type Options = Awaited<ReturnType<typeof fetchNewAppOptions>>
@@ -40,7 +45,7 @@ export const WIZARD = 'mt-6 flex flex-col'
 /** No margin of its own — see above. `min-width: 0` because the board grid
     inside is wider than its content and a flex item floors at min-content. */
 export const WIZARD_STEP = 'min-w-0'
-export const FIRST_STEP_HEAD = cn(SECTION_HEAD, 'mt-0 border-t-0 pt-0')
+export const FIRST_STEP_HEAD = cn(SECTION_HEAD, 'mt-0')
 
 const WARN_BANNER = 'mb-5 text-foreground'
 const MUTED_BANNER = 'mb-5 text-subdued'

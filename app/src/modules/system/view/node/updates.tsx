@@ -88,15 +88,18 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
 
   return (
     <BoardGrid>
+      {/* The three things on this machine that have a version — its OS, the
+          agent, Claude Code — as three short boards of one height; then what
+          is pending and what landed, full width. */}
       <WindowsBoard f={f} />
 
       <AgentBoard f={f} />
 
+      <ClaudeCodeBoard f={f} />
+
       <Panel f={f} />
 
       <InstalledLatelyBoard f={f} />
-
-      <ClaudeCodeBoard f={f} />
 
       <NotReadable t={t} />
     </BoardGrid>
@@ -174,14 +177,14 @@ function AgentBoard({ f }: { f: NodeUpdatesFacts }) {
     <Board
       title="Agent"
       icon="◎"
-      span={8}
+      span={4}
       aside={
         status.restart_pending ? (
           <Chip tone="ok">installed, restarting</Chip>
         ) : status.update_available !== null ? (
           <Chip tone="warn">{status.update_available}</Chip>
         ) : (
-          <Chip tone="ok">current</Chip>
+          <span className={NOTE}>current</span>
         )
       }
     >
@@ -290,7 +293,7 @@ function InstalledLatelyBoard({ f }: { f: NodeUpdatesFacts }) {
     <Board
       title="Installed lately"
       icon="✓"
-      span={6}
+      span={12}
       aside={u !== null && <span className={NOTE}>{num(u.installed.length)} newest</span>}
     >
       {u === null ? (
@@ -332,12 +335,13 @@ function ClaudeCodeBoard({ f }: { f: NodeUpdatesFacts }) {
     <Board
       title="Claude Code"
       icon="claude"
-      span={6}
+      span={4}
       aside={
-        status.claude === null ? undefined : (
-          <Chip tone={status.claude.state === 'running' ? 'ok' : 'muted'}>
-            {status.claude.state}
-          </Chip>
+        status.claude === null ? undefined : // Running is the norm and reads as a word.
+        status.claude.state === 'running' ? (
+          <span className={NOTE}>running</span>
+        ) : (
+          <Chip tone="muted">{status.claude.state}</Chip>
         )
       }
     >

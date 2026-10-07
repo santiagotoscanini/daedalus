@@ -1,7 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
+import { Board, BoardGrid, Facts } from '../../../components/viz'
 import { bytes, num } from '../../../lib/format'
 import type { MediaData } from '../data'
 import { FOOT, MONO } from './shared'
@@ -34,28 +34,23 @@ export function CalibreView({ d }: { d: Calibre }) {
       />
 
       <BoardGrid>
-        <Board title="The shelf" icon="❏" span={8}>
+        {/* One board: the disk figures were a board of their own holding two
+            numbers, the short half of a pair. They are the shelf's size. */}
+        <Board title="The shelf" icon="❏" span={12}>
           <Facts
             rows={[
               { k: 'Books', v: num(calibre.books) },
               { k: 'Authors', v: num(calibre.authors) },
               { k: 'Series', v: num(calibre.series) },
               { k: 'Categories', v: num(calibre.categories) },
+              { k: 'On disk', v: bytes(disk.usedBytes) },
+              { k: 'Free', v: bytes(disk.freeBytes) },
             ]}
           />
           <p className={FOOT}>
             Read through the OPDS catalogue with its own credentials, the same endpoint an e-reader
             uses. It is the one path on this app that skips the Pocket ID gate.
           </p>
-        </Board>
-
-        <Board title="Disk" icon="grid" span={4}>
-          <Measures
-            items={[
-              { k: 'On disk', v: bytes(disk.usedBytes) },
-              { k: 'Free', v: bytes(disk.freeBytes) },
-            ]}
-          />
         </Board>
 
         <Changelog gap={calibre.gap} span={12} />

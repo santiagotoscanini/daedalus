@@ -26,7 +26,7 @@ import {
 /* The stacked service pages each open with their own ServiceHead, which
    already names the service; the break between them is air and a hairline,
    not a third heading saying the name again. */
-const BREAK = 'mt-10 border-hairline border-t pt-8'
+const BREAK = 'mt-8 border-hairline border-t pt-8'
 
 const APP_GRID = cn(
   'grid items-center gap-x-6 px-5',

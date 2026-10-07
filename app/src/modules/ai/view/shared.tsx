@@ -105,7 +105,7 @@ export function TableSection({
       </h3>
       {note !== undefined && <p className={SECTION_NOTE}>{note}</p>}
       {children}
-      {foot !== undefined && <div className="mt-3 flex flex-col gap-2 px-1">{foot}</div>}
+      {foot !== undefined && <div className="mt-3 flex flex-col gap-2">{foot}</div>}
     </section>
   )
 }

@@ -1,4 +1,10 @@
-import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import {
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW_DENSE,
+} from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { AXIS, CAPTION, FOOT, NOTE } from '../../../components/tokens'
 import {
@@ -232,7 +238,7 @@ function ByRepositoryTable({ f }: { f: MinutesFacts }) {
         </li>
         {d.byRepo.length === 0 && <li className={TABLE_EMPTY}>no jobs read</li>}
         {d.byRepo.map((r) => (
-          <li key={r.repo} className={cn(REPO_GRID, TABLE_ROW)}>
+          <li key={r.repo} className={cn(REPO_GRID, TABLE_ROW_DENSE)}>
             <Ext href={`${r.url}/actions`} className="truncate text-foreground">
               {r.repo}
             </Ext>
@@ -282,7 +288,7 @@ function CostPerWorkflowTable({ f }: { f: MinutesFacts }) {
         </li>
         {d.byWorkflow.length === 0 && <li className={TABLE_EMPTY}>no hosted jobs read</li>}
         {d.byWorkflow.map((w) => (
-          <li key={w.label} className={cn(WF_COST_GRID, TABLE_ROW)}>
+          <li key={w.label} className={cn(WF_COST_GRID, TABLE_ROW_DENSE)}>
             <span className="truncate text-foreground">{w.label}</span>
             <span className={cn(CELL_QUIET, 'job truncate')}>
               {w.topJob === null ? DASH : `${w.topJob} · ${num(w.topJobBilled)}`}

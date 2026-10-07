@@ -1,14 +1,14 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW_DENSE } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
-import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { CAPTION, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, since } from '../../../lib/format'
 import type { MonitoringData } from '../data'
-import { LIST, MAIN, SEVERITY, SIDE } from './shared'
+import { AllClear, LIST, MAIN, SEVERITY, SIDE } from './shared'
 
 // The Alerts tab: Grafana — what is firing, where a firing alert goes, what is
 // muted on purpose, and whether the mail relay at the end of every path works.
@@ -49,11 +49,17 @@ export function AlertsView({ data: d }: { data: Alerts }) {
             <span className={MONO}>assets/provisioning/alerting/</span>. UI edits do not survive.
             The files are source of truth.
           </p>
+          <p className={FOOT}>
+            These are Grafana&rsquo;s rules, not prometheus&rsquo;s. Prometheus&rsquo;s own{' '}
+            <span className={MONO}>/rules</span> endpoint is empty and would report zero on a box
+            with {num(d.rules)}.
+          </p>
         </Board>
 
         <WhereAnAlertGoesBoard f={f} />
 
-        <DeliberatelySilentBoard />
+        {/* Beside the other two when the all-clear line leaves a full row of three. */}
+        <DeliberatelySilentBoard span={d.active.length === 0 ? 4 : 8} />
 
         <Panel2 f={f} />
 
@@ -82,30 +88,33 @@ type AlertsFacts = NonNullable<ReturnType<typeof alertsFacts>>
 
 function Panel({ f }: { f: AlertsFacts }) {
   const { d } = f
+  if (d.active.length === 0) {
+    return (
+      <AllClear
+        title="Nothing firing"
+        detail={`No rule is firing or pending. All ${num(d.rules)} are evaluating and quiet.`}
+        aside={`${num(d.rules)} rules`}
+      />
+    )
+  }
   return (
     <Board
-      title={d.active.length === 0 ? 'Nothing firing' : 'Firing now'}
+      title="Firing now"
       icon="⚑"
       span={8}
       aside={<span className={NOTE}>{num(d.rules)} rules</span>}
     >
-      {d.active.length === 0 ? (
-        <p className={EMPTY}>
-          No rule is firing or pending. All {num(d.rules)} are evaluating and quiet.
-        </p>
-      ) : (
-        <ul className={LIST}>
-          {d.active.map((a) => (
-            <li key={`${a.folder}-${a.name}`}>
-              <Chip tone={SEVERITY[a.severity] ?? 'muted'}>{a.severity}</Chip>
-              <span className={MAIN} title={a.summary}>
-                {a.name}
-              </span>
-              <span className={SIDE}>{a.folder}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className={LIST}>
+        {d.active.map((a) => (
+          <li key={`${a.folder}-${a.name}`}>
+            <Chip tone={SEVERITY[a.severity] ?? 'muted'}>{a.severity}</Chip>
+            <span className={MAIN} title={a.summary}>
+              {a.name}
+            </span>
+            <span className={SIDE}>{a.folder}</span>
+          </li>
+        ))}
+      </ul>
       <p className={FOOT}>
         These are Grafana&rsquo;s rules, not prometheus&rsquo;s. Prometheus&rsquo;s own{' '}
         <span className={MONO}>/rules</span> endpoint is empty and would report zero on a box with{' '}
@@ -137,9 +146,9 @@ function WhereAnAlertGoesBoard({ f }: { f: AlertsFacts }) {
   )
 }
 
-function DeliberatelySilentBoard() {
+function DeliberatelySilentBoard({ span }: { span: 4 | 8 }) {
   return (
-    <Board title="Deliberately silent" icon="🔇" span={8}>
+    <Board title="Deliberately silent" icon="🔇" span={span}>
       {/* Not a fault, and the page has to say so — a muted alert path and an
         alert path that was never built look identical from here. */}
       <p className={CAPTION}>
@@ -265,8 +274,8 @@ function FailedSendsTable({ f }: { f: AlertsFacts }) {
           <span className="text-right">When</span>
         </li>
         {d.mail.failures.map((x) => (
-          <li key={`${x.unit}-${String(x.agoSeconds)}`} className={cn(SEND_GRID, TABLE_ROW)}>
-            <span className="truncate font-mono text-[0.8rem] text-foreground" title={x.unit}>
+          <li key={`${x.unit}-${String(x.agoSeconds)}`} className={cn(SEND_GRID, TABLE_ROW_DENSE)}>
+            <span className="truncate font-mono text-[0.76rem] text-foreground" title={x.unit}>
               {x.unit}
             </span>
             <span className={cn(CELL_QUIET, 'err truncate text-danger/90')} title={x.error}>

@@ -30,7 +30,7 @@ export function Settings({
   const site = useSite()
   return (
     <BoardGrid>
-      <Board title="Platform" icon="◱" span={4}>
+      <Board title="Platform" icon="◱" span={6}>
         <Toggle
           checked={app.postgres}
           disabled={readOnly}
@@ -85,6 +85,66 @@ export function Settings({
           <code>site/vault/apps/{app.name}-env.sops</code> is loaded into the container, and nothing
           else decides it. The <b>Secrets</b> tab writes it, and the next rebuild injects it. A
           value that is not secret belongs on <b>Variables</b>, where it can be read and edited.
+        </p>
+      </Board>
+
+      {/* Rows of matched height: the two long panels (switches, limits) side
+          by side, then the three short forms in thirds. */}
+      <Board title="Resource limits" icon="◴" span={6}>
+        <Slider
+          label="CPU"
+          hint="cores the container may burn"
+          value={app.limitCpus}
+          min={0.25}
+          max={8}
+          step={0.25}
+          disabled={readOnly}
+          format={(v) => (
+            <>
+              {v} <small>{v === 1 ? 'core' : 'cores'}</small>
+            </>
+          )}
+          onChange={(v) => {
+            patch({ limitCpus: v })
+          }}
+        />
+        <Slider
+          label="Memory"
+          hint="resident cap: pages spill to zram past it, OOM kill at twice it"
+          value={app.limitMemoryMb}
+          min={128}
+          max={4096}
+          step={128}
+          disabled={readOnly}
+          format={(v) => (
+            <>
+              {v} <small>MB</small>
+            </>
+          )}
+          onChange={(v) => {
+            patch({ limitMemoryMb: v })
+          }}
+        />
+        <Slider
+          label="Processes"
+          hint="max processes + threads (fork-bomb guard)"
+          value={app.limitPids}
+          min={64}
+          max={2048}
+          step={64}
+          disabled={readOnly}
+          format={(v) => v}
+          onChange={(v) => {
+            patch({ limitPids: v })
+          }}
+        />
+        <p className={FOOT}>
+          Enforced by cgroup v2, and only because systemd delegates <code>cpu io memory pids</code>{' '}
+          down to <code>user@1000.service</code>. Without that, podman would accept the flags and
+          the kernel would ignore them. CPU throttles rather than kills. Memory is the resident cap:
+          pages past it spill to zram and the OOM kill lands at twice it, because podman writes{' '}
+          <code>--memory-swap</code> through verbatim instead of subtracting. Takes effect on the
+          next Apply, which restarts the container.
         </p>
       </Board>
 
@@ -150,65 +210,7 @@ export function Settings({
         />
       </Board>
 
-      <Board title="Resource limits" icon="◴" span={6}>
-        <Slider
-          label="CPU"
-          hint="cores the container may burn"
-          value={app.limitCpus}
-          min={0.25}
-          max={8}
-          step={0.25}
-          disabled={readOnly}
-          format={(v) => (
-            <>
-              {v} <small>{v === 1 ? 'core' : 'cores'}</small>
-            </>
-          )}
-          onChange={(v) => {
-            patch({ limitCpus: v })
-          }}
-        />
-        <Slider
-          label="Memory"
-          hint="resident cap: pages spill to zram past it, OOM kill at twice it"
-          value={app.limitMemoryMb}
-          min={128}
-          max={4096}
-          step={128}
-          disabled={readOnly}
-          format={(v) => (
-            <>
-              {v} <small>MB</small>
-            </>
-          )}
-          onChange={(v) => {
-            patch({ limitMemoryMb: v })
-          }}
-        />
-        <Slider
-          label="Processes"
-          hint="max processes + threads (fork-bomb guard)"
-          value={app.limitPids}
-          min={64}
-          max={2048}
-          step={64}
-          disabled={readOnly}
-          format={(v) => v}
-          onChange={(v) => {
-            patch({ limitPids: v })
-          }}
-        />
-        <p className={FOOT}>
-          Enforced by cgroup v2, and only because systemd delegates <code>cpu io memory pids</code>{' '}
-          down to <code>user@1000.service</code>. Without that, podman would accept the flags and
-          the kernel would ignore them. CPU throttles rather than kills. Memory is the resident cap:
-          pages past it spill to zram and the OOM kill lands at twice it, because podman writes{' '}
-          <code>--memory-swap</code> through verbatim instead of subtracting. Takes effect on the
-          next Apply, which restarts the container.
-        </p>
-      </Board>
-
-      <Board title="Single sign-on" icon="key" span={6}>
+      <Board title="Single sign-on" icon="key" span={4}>
         <Segmented
           value={app.authMode}
           disabled={readOnly}

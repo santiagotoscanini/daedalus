@@ -2,7 +2,14 @@
 // asks for — as the house table rather than bar lists inside boards.
 
 import { useState } from 'react'
-import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import {
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW_DENSE,
+  TableMore,
+} from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { cn } from '../../../lib/cn'
 import { bytes, compact, pct } from '../../../lib/format'
@@ -75,18 +82,14 @@ function TrafficTable({ rows }: { rows: General['services'] }) {
         <TrafficRow key={r.name} row={r} ceiling={ceiling} />
       ))}
       {rest > 0 && (
-        <li className={cn(TABLE_ROW, 'flex min-h-11 items-center px-5')}>
-          <button
-            type="button"
-            className="cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] text-muted-foreground hover:text-foreground"
-            aria-expanded={all}
-            onClick={() => {
-              setAll((v) => !v)
-            }}
-          >
-            {all ? 'Show the top 12' : `${String(rest)} quieter container${rest === 1 ? '' : 's'}`}
-          </button>
-        </li>
+        <TableMore
+          open={all}
+          onToggle={() => {
+            setAll((v) => !v)
+          }}
+          more={`${String(rest)} quieter container${rest === 1 ? '' : 's'}`}
+          less="Show the top 12"
+        />
       )}
     </ul>
   )
@@ -107,7 +110,7 @@ function Key({ tone, label }: { tone: 'in' | 'out'; label: string }) {
 function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceiling: number }) {
   const width = (n: number) => `${String((n / ceiling) * 100)}%`
   return (
-    <li className={cn(SERVICES_GRID, TABLE_ROW)}>
+    <li className={cn(SERVICES_GRID, TABLE_ROW_DENSE)}>
       <span className="truncate text-foreground" title={row.name}>
         {row.name}
       </span>
@@ -148,7 +151,7 @@ export function WhatThisHouseAsksForBoard({ f }: { f: GeneralFacts }) {
         </li>
         {top.length === 0 && <li className={TABLE_EMPTY}>no queries recorded</li>}
         {top.map((d) => (
-          <li key={d.label} className={cn(DOMAINS_GRID, TABLE_ROW)}>
+          <li key={d.label} className={cn(DOMAINS_GRID, TABLE_ROW_DENSE)}>
             <span className="truncate text-foreground" title={d.label}>
               {d.label}
             </span>

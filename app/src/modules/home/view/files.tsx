@@ -69,8 +69,9 @@ export function FilesView({ data: d }: { data: Files }) {
         </Board>
 
         <Board title="Who is using it" icon="◑" span={4}>
-          <Measures
-            items={[
+          <Facts
+            list
+            rows={[
               { k: 'Last 5 min', v: num(d.active.m5) },
               { k: 'Last hour', v: num(d.active.h1) },
               { k: 'Last day', v: num(d.active.d1) },

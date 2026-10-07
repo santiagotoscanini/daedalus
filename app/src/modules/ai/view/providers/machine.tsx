@@ -23,7 +23,7 @@ const KIND_LINKS: Partial<Record<ProviderMachine['kind'], { label: string; href:
 /* Under the head, hanging past the artwork so it lines up with the name —
    the same row a service page's LinkRow draws. */
 const DOCS =
-  '-mt-2 mb-6 ml-[3.625rem] flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.75rem] max-[44rem]:ml-0'
+  '-mt-2 mb-6 ml-12 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.75rem] max-[44rem]:ml-0'
 const DOC_LINK =
   'text-muted-foreground no-underline transition-colors hover:text-foreground hover:no-underline'
 

@@ -96,7 +96,12 @@ export function PiecesBoard({ d }: { d: Record_ }) {
       version: d.agents.library.version,
       where: <span className={CELL_MONO}>{d.agents.library.url}</span>,
       state: (
-        <a className="text-[0.78rem]" href={d.agents.library.url} target="_blank" rel="noreferrer">
+        <a
+          className="text-[0.78rem] text-muted-foreground no-underline hover:text-foreground"
+          href={d.agents.library.url}
+          target="_blank"
+          rel="noreferrer"
+        >
           open ↗
         </a>
       ),

@@ -1,6 +1,7 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/service-head'
+import { LIVE } from '../../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { bytes, num, rate, since } from '../../../../lib/format'
@@ -38,7 +39,7 @@ export function NzbPage({ d }: { d: Downloaders }) {
           icon="down"
           span={8}
           aside={
-            <span className={NOTE}>
+            <span className={LIVE}>
               <Pulse on={(nzb.rate ?? 0) > 0} tone="accent" />
               {nzb.paused ? 'paused' : nzb.standby ? 'idle' : 'active'}
             </span>

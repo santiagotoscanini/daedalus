@@ -236,13 +236,13 @@ export function DetectionLine({ app, build }: { app: string; build: OverviewBuil
   const parts = detectionParts(build.summary.resolvedStrategy, build.detection)
   return (
     <p className="m-0 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.8rem] text-subdued">
-      {parts.map((p, i) => (
-        <span key={p.text} className="inline-flex items-baseline gap-2">
-          {i > 0 && (
-            <span aria-hidden="true" className="text-muted-foreground">
-              ·
-            </span>
-          )}
+      {/* The separator trails each part, so a wrapped line ends on a dot
+          rather than starting with one. */}
+      {parts.map((p) => (
+        <span
+          key={p.text}
+          className="inline-flex items-baseline gap-2 after:text-muted-foreground after:content-['·']"
+        >
           {p.code === true ? (
             <span>
               start <code>{p.text}</code>

@@ -91,10 +91,10 @@ export function GithubApp({ app, notice, onDismissNotice }: GithubAppProps) {
       }
     >
       {app !== null && identity !== undefined && (
-        <>
+        <div className="flex flex-wrap items-center gap-2 [&>form]:basis-full">
           <AppActions app={app} identity={identity} />
           <PasteKey settingsUrl={app.settingsUrl} />
-        </>
+        </div>
       )}
     </Section>
   )
@@ -244,7 +244,7 @@ function AppActions({ app, identity }: { app: GithubAppStatus; identity: SiteGit
   const inst = app.installation
   const installed = app.state === 'installed' || app.state === 'installed-elsewhere'
   return (
-    <div className="flex flex-col gap-3 empty:hidden">
+    <div className="flex flex-col gap-3 empty:hidden has-[p]:basis-full">
       {app.state === 'created' && app.installUrl !== undefined && (
         <div className="flex flex-col gap-2">
           <div>
@@ -299,9 +299,11 @@ function TokenFreshness({ installation: i }: { installation: Installation }) {
   return (
     <Stack>
       <span className="inline-flex items-center gap-2">
-        <Chip tone={left <= 0 ? 'bad' : i.stale ? 'warn' : 'ok'}>
-          {left <= 0 ? 'expired' : i.stale ? 'stale' : 'fresh'}
-        </Chip>
+        {left > 0 && !i.stale ? (
+          <span className="text-[0.78rem] text-muted-foreground">fresh</span>
+        ) : (
+          <Chip tone={left <= 0 ? 'bad' : 'warn'}>{left <= 0 ? 'expired' : 'stale'}</Chip>
+        )}
         {left > 0 && (
           <span className="text-[0.78rem] text-subdued">
             expires in <Until at={expires} />

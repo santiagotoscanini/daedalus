@@ -9,7 +9,7 @@ import {
   TABLE_EMPTY,
   TABLE_HEAD,
   TABLE_LINK,
-  TABLE_ROW,
+  TABLE_ROW_DENSE,
   TABLE_ROW_LINK,
   TableGroup,
 } from '../../../components/table'
@@ -30,7 +30,7 @@ const RUN_GRID =
 /** One run as a table row; the whole row opens the run on GitHub. */
 function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boolean }) {
   return (
-    <li className={cn(RUN_GRID, TABLE_ROW, TABLE_ROW_LINK)}>
+    <li className={cn(RUN_GRID, TABLE_ROW_DENSE, TABLE_ROW_LINK)}>
       <span>
         <RunChip status={r.status} conclusion={r.conclusion} />
       </span>
@@ -159,7 +159,7 @@ export function ByWorkflowTable({ d }: { d: Runs }) {
         </li>
         {d.byWorkflow.length === 0 && <li className={TABLE_EMPTY}>no runs</li>}
         {d.byWorkflow.map((w) => (
-          <li key={w.label} className={cn(TALLY_GRID, TABLE_ROW)}>
+          <li key={w.label} className={cn(TALLY_GRID, TABLE_ROW_DENSE)}>
             <span className="truncate text-foreground">{w.label}</span>
             <span className={cn(CELL_QUIET, 'text-right')}>{num(w.runs)}</span>
             <Failed n={w.failed} />
@@ -184,7 +184,7 @@ export function ByRepositoryTable({ d }: { d: Runs }) {
         {d.byRepo.map((r) => {
           const readable = r.access === 'app' || r.access === 'public'
           return (
-            <li key={r.repo} className={cn(TALLY_GRID, TABLE_ROW)}>
+            <li key={r.repo} className={cn(TALLY_GRID, TABLE_ROW_DENSE)}>
               <span className="flex min-w-0 items-baseline gap-1.5">
                 <Ext href={`${r.url}/actions`} className="truncate text-foreground">
                   {r.repo}

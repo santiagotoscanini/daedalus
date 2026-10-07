@@ -56,7 +56,6 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
           type="button"
           variant="ghost"
           size="sm"
-          className="-ml-2"
           onClick={() => {
             setOpen(true)
             forget()

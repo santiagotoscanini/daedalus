@@ -57,7 +57,7 @@ export const manifest = {
       id: 'tools',
       label: 'Tools',
       probe: 'stirling-pdf',
-      boardSpans: [4, 8, 12],
+      boardSpans: [12, 12],
       nix: 'stirling-pdf',
     },
   ],

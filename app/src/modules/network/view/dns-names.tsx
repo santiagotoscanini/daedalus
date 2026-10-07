@@ -9,7 +9,7 @@ import {
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
-  TABLE_ROW,
+  TABLE_ROW_DENSE,
 } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { Chip } from '../../../components/viz'
@@ -65,8 +65,8 @@ export function DeclaredNames({ lan }: { lan: Lan }) {
         </li>
         {shown.length === 0 && <li className={TABLE_EMPTY}>No name matches that filter.</li>}
         {shown.map((n) => (
-          <li key={n.fqdn} className={cn(GRID, TABLE_ROW)} title={n.fqdn}>
-            <span className="truncate font-mono text-[0.8rem] text-foreground">{n.short}</span>
+          <li key={n.fqdn} className={cn(GRID, TABLE_ROW_DENSE)} title={n.fqdn}>
+            <span className="truncate font-mono text-[0.76rem] text-foreground">{n.short}</span>
             {/* This box is the norm, so it recedes; an entry pointing at
                 another machine prints the address in full ink. */}
             {n.elsewhere ? (

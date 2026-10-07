@@ -152,9 +152,12 @@ export function ToolsModelsCalledBoard({ f }: { f: LitellmFacts }) {
 type NeighbourData = LitellmData['neighbours'][number]
 
 /**
- * One of the gateway's neighbours, as a pair of half-width boards.
+ * One of the gateway's neighbours, as a pair of boards.
  *
- * Changelog on the left, log on the right, because those are the only two
+ * Changelog on the left, log on the right, side by side while the changelog is
+ * short; stacked at full width once it runs past a handful of entries, where a
+ * half-width pair left the log board standing in a panel twice its height and
+ * truncated every commit title. Both, because those are the only two
  * things ever wanted from a container with no page of its own: what would
  * change if I updated it, and what has it been saying. The title carries the
  * verdict, so the row answers "is anything here behind" before it is read.
@@ -164,13 +167,14 @@ export function NeighbourPair({ n }: { n: NeighbourData }) {
   const unit =
     n.gap !== null ? (behind === 1 ? 'release behind' : 'releases behind') : 'commits behind'
   const count = String(behind)
+  const span = behind > 6 ? 12 : 6
 
   return (
     <>
       <Changelog
         gap={n.gap}
         build={n.build}
-        span={6}
+        span={span}
         title={behind === 0 ? `${n.label} — current` : `${n.label} — ${count} ${unit}`}
         aside={
           <span className={NOTE}>
@@ -182,7 +186,7 @@ export function NeighbourPair({ n }: { n: NeighbourData }) {
       <Board
         title={`${n.label} logs`}
         icon="logs"
-        span={6}
+        span={span}
         aside={<span className={NOTE}>{n.role}</span>}
       >
         <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />

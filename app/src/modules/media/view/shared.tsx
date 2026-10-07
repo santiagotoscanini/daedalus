@@ -213,7 +213,7 @@ export function TableSection({
       </h3>
       {note !== undefined && <p className={SECTION_NOTE}>{note}</p>}
       {children}
-      {foot !== undefined && <div className="mt-3 flex flex-col gap-2 px-1">{foot}</div>}
+      {foot !== undefined && <div className="mt-3 flex flex-col gap-2">{foot}</div>}
     </section>
   )
 }
@@ -258,14 +258,17 @@ export function QueueTable({
 }) {
   return (
     <ul className={TABLE} aria-label={label}>
-      <li aria-hidden="true" className={cn(QUEUE_GRID, TABLE_HEAD)}>
-        <span>Name</span>
-        <span className={QUEUE_WIDE} />
-        <span className="text-right">Done</span>
-        <span className={cn(QUEUE_WIDE, 'text-right')}>{detail}</span>
-      </li>
+      {/* No column labels over an empty queue: one quiet row is the answer. */}
+      {rows.length > 0 && (
+        <li aria-hidden="true" className={cn(QUEUE_GRID, TABLE_HEAD)}>
+          <span>Name</span>
+          <span className={QUEUE_WIDE} />
+          <span className="text-right">Done</span>
+          <span className={cn(QUEUE_WIDE, 'text-right')}>{detail}</span>
+        </li>
+      )}
       {rows.length === 0 ? (
-        <li className={TABLE_EMPTY}>{empty}</li>
+        <li className={cn(TABLE_EMPTY, 'py-6')}>{empty}</li>
       ) : (
         rows.map((r) => (
           <li key={r.key} className={cn(QUEUE_GRID, TABLE_ROW)}>

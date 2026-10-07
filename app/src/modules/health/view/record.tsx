@@ -58,18 +58,18 @@ export function RecordView({ data: d }: { data: Record_ }) {
       <BoardGrid>
         <PiecesBoard d={d} />
 
-        {/* Three projects, three release cycles: a row of three, each saying
-            what it would bring rather than one changelog speaking for all. */}
-        <Changelog build={d.build} span={4} title={commitTitle('getbased', d.build)} />
+        {/* Three projects, three release cycles: each says what it would
+            bring rather than one changelog speaking for all. */}
+        <Changelog build={d.build} span={6} title={commitTitle('getbased', d.build)} />
         <Changelog
           gap={d.relay.gap}
-          span={4}
+          span={6}
           title={gapTitle('Relay and context gateway', d.relay.gap)}
           aside={<VersionAside version={d.relay.version} />}
         />
         <Changelog
           build={d.agents.build}
-          span={4}
+          span={12}
           title={commitTitle('getbased-agents', d.agents.build)}
         />
 

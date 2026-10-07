@@ -101,65 +101,11 @@ export function OutboundView({ data }: { data: Outbound }) {
         ]}
       />
 
-      {/* The SOFTWARE first, because it is shared by every tunnel — see
-          `OutboundData.gluetun`. */}
-      <BoardGrid>
-        <Changelog
-          build={data.gluetun}
-          span={6}
-          title={
-            data.gluetun.behind.length === 0
-              ? 'gluetun · current'
-              : `gluetun · ${String(data.gluetun.behind.length)} commits behind`
-          }
-          aside={
-            <span className={NOTE}>
-              {data.gluetun.running === null ? (
-                'build unknown'
-              ) : (
-                <span className={MONO}>{data.gluetun.running}</span>
-              )}
-              {data.gluetun.builtOn !== null && ` · built ${data.gluetun.builtOn}`}
-            </span>
-          }
-          foot={
-            <p className={FOOT}>
-              {/* Why this is not the release-notes panel every other service
-                  gets — a correctness point, not a shortcut. */}
-              Commits, not releases, and deliberately: this image is a digest-pinned{' '}
-              <code>:latest</code>, which is master, and master has <b>diverged</b> from the v3.41.x
-              release line. v3.41.2 ships an acknowledged port-forwarding deadlock this box would
-              trip, because it sets <code>VPN_PORT_FORWARDING_UP_COMMAND</code>. A release list here
-              would advise a downgrade into a known bug. The build is read out of gluetun’s own
-              startup banner in Loki, since <code>/v1/version</code> is not in the control-server
-              allow list and widening it would restart the tunnel.
-            </p>
-          }
-        />
-
-        <Changelog
-          gap={data.exporter}
-          span={6}
-          title="gluetun-exporter"
-          aside={<span className={NOTE}>version unknowable</span>}
-          foot={
-            <p className={FOOT}>
-              What has been <b>published</b>. Which of it is running cannot be said: the image is a
-              digest-pinned <code>:latest</code> and the exporter prints no version in its log,
-              serves none on <code>/metrics</code>, and has no endpoint that would answer. So this
-              is the honest half. A release exists, and comparing it to what is here is a manual
-              job. It polls each tunnel’s control API every 30 seconds and is what the VPN-down
-              alert reads.
-            </p>
-          }
-        />
-      </BoardGrid>
-
       {/* Everything below is per TUNNEL — including the logs, which are the
           one thing here that genuinely differs between them. The switch sits
           on the boundary rather than in the header, so it is visibly the thing
           that governs what follows it and not what precedes it. */}
-      <div className={cn(SWITCH_BAR, 'mt-10')}>
+      <div className={SWITCH_BAR}>
         {data.tunnels.length > 1 && (
           <Segmented
             value={t.key}
@@ -199,6 +145,63 @@ export function OutboundView({ data }: { data: Outbound }) {
           ]}
         />
       </BoardGrid>
+
+      {/* The software last: it is shared by every tunnel (see
+          `OutboundData.gluetun`), and its release history is reference, where
+          each tunnel's health is the reading this page exists for. */}
+      <div className="mt-4">
+        <BoardGrid>
+          <Changelog
+            build={data.gluetun}
+            span={12}
+            title={
+              data.gluetun.behind.length === 0
+                ? 'gluetun · current'
+                : `gluetun · ${String(data.gluetun.behind.length)} commits behind`
+            }
+            aside={
+              <span className={NOTE}>
+                {data.gluetun.running === null ? (
+                  'build unknown'
+                ) : (
+                  <span className={MONO}>{data.gluetun.running}</span>
+                )}
+                {data.gluetun.builtOn !== null && ` · built ${data.gluetun.builtOn}`}
+              </span>
+            }
+            foot={
+              <p className={FOOT}>
+                {/* Why this is not the release-notes panel every other service
+                  gets — a correctness point, not a shortcut. */}
+                Commits, not releases, and deliberately: this image is a digest-pinned{' '}
+                <code>:latest</code>, which is master, and master has <b>diverged</b> from the
+                v3.41.x release line. v3.41.2 ships an acknowledged port-forwarding deadlock this
+                box would trip, because it sets <code>VPN_PORT_FORWARDING_UP_COMMAND</code>. A
+                release list here would advise a downgrade into a known bug. The build is read out
+                of gluetun’s own startup banner in Loki, since <code>/v1/version</code> is not in
+                the control-server allow list and widening it would restart the tunnel.
+              </p>
+            }
+          />
+
+          <Changelog
+            gap={data.exporter}
+            span={12}
+            title="gluetun-exporter"
+            aside={<span className={NOTE}>version unknowable</span>}
+            foot={
+              <p className={FOOT}>
+                What has been <b>published</b>. Which of it is running cannot be said: the image is
+                a digest-pinned <code>:latest</code> and the exporter prints no version in its log,
+                serves none on <code>/metrics</code>, and has no endpoint that would answer. So this
+                is the honest half. A release exists, and comparing it to what is here is a manual
+                job. It polls each tunnel’s control API every 30 seconds and is what the VPN-down
+                alert reads.
+              </p>
+            }
+          />
+        </BoardGrid>
+      </div>
     </>
   )
 }

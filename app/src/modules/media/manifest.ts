@@ -45,7 +45,7 @@ export const manifest = {
       id: 'calibre',
       label: 'Calibre',
       probe: 'calibre-web',
-      boardSpans: [8, 4, 12],
+      boardSpans: [12, 12],
       nix: 'calibre-web',
     },
     // Past the rule: everything that fills the two libraries above.

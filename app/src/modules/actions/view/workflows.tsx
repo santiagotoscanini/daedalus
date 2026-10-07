@@ -160,22 +160,19 @@ function WorkflowsTable({ repos }: { repos: Workflows['repos'] }) {
 function RepoGroup({ r }: { r: Workflows['repos'][number] }) {
   return (
     <>
-      <li
-        data-group=""
-        className="flex h-8 items-center gap-2.5 border-hairline border-y bg-foreground/[0.02] px-5 text-[0.75rem] first:border-t-0"
-      >
-        <Ext href={`${r.url}/actions`} className="text-foreground [font-weight:560]">
-          {r.repo}
-        </Ext>
-        <span className="text-muted-foreground">
-          {num(r.workflows.length)} workflow{r.workflows.length === 1 ? '' : 's'} · {readNote(r)}
-        </span>
-        {r.access.runs !== 'app' && (
-          <Chip tone={accessTone(r.access.runs)} className="ml-auto">
-            runs: {accessWord(r.access.runs)}
-          </Chip>
-        )}
-      </li>
+      <TableGroup
+        title={
+          <Ext href={`${r.url}/actions`} className="text-foreground">
+            {r.repo}
+          </Ext>
+        }
+        note={`${num(r.workflows.length)} workflow${r.workflows.length === 1 ? '' : 's'} · ${readNote(r)}`}
+        aside={
+          r.access.runs !== 'app' ? (
+            <Chip tone={accessTone(r.access.runs)}>runs: {accessWord(r.access.runs)}</Chip>
+          ) : undefined
+        }
+      />
       {r.workflows.map((w) => (
         <li key={w.id} className={cn(WF_GRID, TABLE_ROW, 'py-2.5')}>
           <span>
@@ -205,7 +202,11 @@ function RepoGroup({ r }: { r: Workflows['repos'][number] }) {
                 {num(w.jobs)} {w.jobs === 1 ? 'job' : 'jobs'}
                 {w.runsOn.length > 0 && ` on ${[...new Set(w.runsOn.map(imageWord))].join(', ')}`}
               </span>
-              {w.uses.length > 0 && <span>uses {w.uses.join(', ')}</span>}
+              {w.uses.length > 0 && (
+                <span className="min-w-0 basis-full truncate" title={w.uses.join(', ')}>
+                  uses {w.uses.join(', ')}
+                </span>
+              )}
             </span>
           </span>
           <span className={cn(CELL_QUIET, 'tally text-right')}>

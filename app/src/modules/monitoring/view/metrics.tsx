@@ -5,7 +5,7 @@ import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Trend } from '../../../components/viz'
 import { bytes, compact, DASH, num } from '../../../lib/format'
 import type { MonitoringData } from '../data'
-import { LIST, MAIN, SCRAPE_NEIGHBOURS, SIDE } from './shared'
+import { AllClear, LIST, MAIN, SCRAPE_NEIGHBOURS, SIDE } from './shared'
 
 // The Metrics tab: prometheus — the targets not reporting and why, its storage
 // and reach, the series trend and the slowest scrapes.
@@ -36,34 +36,14 @@ export function MetricsView({ data: d }: { data: Metrics }) {
       />
 
       <BoardGrid>
-        <Board
-          title={d.down.length === 0 ? 'Every target reporting' : 'Targets not reporting'}
-          icon="◉"
-          span={8}
-          aside={
-            <span className={NOTE}>
-              {num(d.targetsUp)} up · {num(d.targetsDown)} down
-            </span>
-          }
-        >
-          {d.down.length === 0 ? (
-            <p className={EMPTY}>All {num(d.targetsUp)} scrape targets answered.</p>
-          ) : (
-            <ul className={LIST}>
-              {d.down.map((t) => (
-                <li key={`${t.job}-${t.instance}`}>
-                  <Chip tone="bad">{t.job}</Chip>
-                  <span className={`${MAIN} ${MONO}`}>{t.instance}</span>
-                  <span className={SIDE}>{t.error}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <Targets d={d} />
+
+        <Board title="Series, seven days" icon="panels" span={8}>
+          <Trend values={d.seriesTrend} tone="accent" height={110} />
           <p className={FOOT}>
-            Read from prometheus&rsquo;s own API rather than from{' '}
-            <span className={MONO}>up == 0</span>, because only the API carries the last error: the
-            difference between &ldquo;prometheus cannot reach this&rdquo; and &ldquo;this answered
-            401&rdquo;. Both look like a dead target on a graph.
+            Active series is what memory here is spent on. A step up that never comes back down is a
+            new label with unbounded values. That is how a TSDB usually gets into trouble, and a
+            total sample count would not show it.
           </p>
         </Board>
 
@@ -99,15 +79,6 @@ export function MetricsView({ data: d }: { data: Metrics }) {
           </p>
         </Board>
 
-        <Board title="Series, seven days" icon="panels" span={8}>
-          <Trend values={d.seriesTrend} tone="accent" height={110} />
-          <p className={FOOT}>
-            Active series is what memory here is spent on. A step up that never comes back down is a
-            new label with unbounded values. That is how a TSDB usually gets into trouble, and a
-            total sample count would not show it.
-          </p>
-        </Board>
-
         <Board title="Slowest scrapes" icon="⏱" span={4}>
           <BarList items={d.slowestScrapes} tone="muted" empty="nothing measured" />
           <p className={FOOT}>
@@ -115,7 +86,7 @@ export function MetricsView({ data: d }: { data: Metrics }) {
           </p>
         </Board>
 
-        <Changelog gap={d.gap} span={12} />
+        <Changelog gap={d.gap} span={8} />
 
         <LogBoard
           source={{ container: 'prometheus' }}
@@ -124,5 +95,51 @@ export function MetricsView({ data: d }: { data: Metrics }) {
         />
       </BoardGrid>
     </>
+  )
+}
+
+/** The scrape targets: one quiet line when all answer, the board when not. */
+function Targets({ d }: { d: Metrics }) {
+  if (d.down.length === 0) {
+    return (
+      <AllClear
+        title="Every target reporting"
+        detail={`All ${num(d.targetsUp)} scrape targets answered.`}
+        aside={`${num(d.targetsUp)} up · ${num(d.targetsDown)} down`}
+        note="Read from prometheus’s own API rather than from up == 0, because only the API carries the last error: the difference between “prometheus cannot reach this” and “this answered 401”."
+      />
+    )
+  }
+  return (
+    <Board
+      title="Targets not reporting"
+      icon="◉"
+      span={12}
+      aside={
+        <span className={NOTE}>
+          {num(d.targetsUp)} up · {num(d.targetsDown)} down
+        </span>
+      }
+    >
+      {d.down.length === 0 ? (
+        <p className={EMPTY}>All {num(d.targetsUp)} scrape targets answered.</p>
+      ) : (
+        <ul className={LIST}>
+          {d.down.map((t) => (
+            <li key={`${t.job}-${t.instance}`}>
+              <Chip tone="bad">{t.job}</Chip>
+              <span className={`${MAIN} ${MONO}`}>{t.instance}</span>
+              <span className={SIDE}>{t.error}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={FOOT}>
+        Read from prometheus&rsquo;s own API rather than from <span className={MONO}>up == 0</span>,
+        because only the API carries the last error: the difference between &ldquo;prometheus cannot
+        reach this&rdquo; and &ldquo;this answered 401&rdquo;. Both look like a dead target on a
+        graph.
+      </p>
+    </Board>
   )
 }

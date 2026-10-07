@@ -78,12 +78,16 @@ code {
   overflow-wrap: anywhere;
 }
 
+/* Links are ink, not colour: the accent is for selection and focus, and an
+   orange word in a row read as a state. A hairline underline on hover. */
 a {
-  color: var(--primary);
+  color: var(--foreground);
   text-decoration: none;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in oklch, var(--foreground) 35%, transparent);
 }
 a:hover {
-  text-decoration: underline;
+  text-decoration-line: underline;
 }
 
 h1 {

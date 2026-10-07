@@ -21,8 +21,8 @@ type Photos = Extract<HomeData, { tab: 'photos' }>
 
 /* Who is backing up: the account, then three numbers read down their columns. */
 const USERS_GRID =
-  'grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_4.5rem] items-center gap-x-4 px-5 @max-[22rem]/table:grid-cols-[minmax(0,1fr)_4.5rem_4.5rem]'
-const HIDE_NARROW = '@max-[22rem]/table:hidden'
+  'grid grid-cols-[minmax(0,1fr)_4rem_4rem_4.5rem] items-center gap-x-3 px-5 @max-[18rem]/table:grid-cols-[minmax(0,1fr)_4.5rem_4.5rem]'
+const HIDE_NARROW = '@max-[18rem]/table:hidden'
 
 export function PhotosView({ data: d }: { data: Photos }) {
   const total = (d.photos ?? 0) + (d.videos ?? 0)

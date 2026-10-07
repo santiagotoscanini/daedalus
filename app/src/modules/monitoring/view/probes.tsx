@@ -7,7 +7,7 @@ import {
   SOURCE_NOTE,
   verdictOf,
 } from '../../../components/service-head'
-import { TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import { TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW_DENSE } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
@@ -15,7 +15,7 @@ import { cn } from '../../../lib/cn'
 import { DASH, num, pct } from '../../../lib/format'
 import { useSite } from '../../../lib/site-context'
 import type { MonitoringData } from '../data'
-import { LIST, MAIN } from './shared'
+import { AllClear, LIST, MAIN } from './shared'
 
 // The Probes tab: gatus, the one watcher that looks at the box from outside —
 // what is not answering, the worst week, certificates and the slowest answers.
@@ -48,62 +48,7 @@ export function ProbesView({ data: d }: { data: Probes }) {
       />
 
       <BoardGrid>
-        <Board
-          title={d.failing.length === 0 ? 'Everything answering' : 'Not answering'}
-          icon="◎"
-          span={8}
-          aside={
-            <span className={NOTE}>
-              {num(d.up)} up · {num(d.down)} down
-            </span>
-          }
-        >
-          {d.failing.length === 0 ? (
-            <p className={EMPTY}>All {num(d.up)} endpoints answered their last probe.</p>
-          ) : (
-            <ul className={LIST}>
-              {d.failing.map((f) => (
-                <li key={f}>
-                  <span className={MAIN}>{f}</span>
-                  <Chip tone="bad">down</Chip>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            Some of what fails here is not an outage: traefik dials the *arrs at a port published
-            out of gluetun&rsquo;s rootless namespace, where a new connection stalls about ten
-            seconds one time in forty, and gatus times out at ten. Roughly 2% of those probes fail
-            against a service answering every request anybody made. That is why the tab dots
-            elsewhere on this dashboard require three minutes of silence before they turn red.
-          </p>
-        </Board>
-
-        <Board title="Certificates" icon="key" span={4}>
-          <Facts
-            rows={[
-              {
-                k: 'Soonest expiry',
-                v:
-                  d.cert.days === null ? (
-                    DASH
-                  ) : (
-                    <span className={cn(d.cert.days < 30 && 'text-warning')}>
-                      {num(d.cert.days)} days
-                    </span>
-                  ),
-              },
-              { k: 'On', v: d.cert.host ?? DASH },
-              { k: '24h uptime', v: pct(d.uptime24h, 2) },
-            ]}
-          />
-          <p className={FOOT}>
-            One entrypoint-level wildcard covers <span className={MONO}>*.{site.baseDomain}</span>,
-            so this is one certificate for every hostname on the box. Renewal is DNS-01 through
-            Cloudflare and automatic. A number falling below thirty means lego is failing, and the
-            store is a single file that is in no backup.
-          </p>
-        </Board>
+        <Status d={d} />
 
         <TableSection
           title="Worst week"
@@ -117,7 +62,7 @@ export function ProbesView({ data: d }: { data: Probes }) {
             </li>
             {d.worst.length === 0 && <li className={TABLE_EMPTY}>nothing measured</li>}
             {d.worst.map((w) => (
-              <li key={w.name} className={cn(RANK_GRID, TABLE_ROW)}>
+              <li key={w.name} className={cn(RANK_GRID, TABLE_ROW_DENSE)}>
                 <span className="truncate text-foreground">{w.name}</span>
                 <span
                   className={cn(
@@ -148,7 +93,7 @@ export function ProbesView({ data: d }: { data: Probes }) {
             </li>
             {d.slowest.length === 0 && <li className={TABLE_EMPTY}>nothing measured</li>}
             {d.slowest.map((s) => (
-              <li key={s.label} className={cn(RANK_GRID, TABLE_ROW)}>
+              <li key={s.label} className={cn(RANK_GRID, TABLE_ROW_DENSE)}>
                 <span className="truncate text-foreground">{s.label}</span>
                 <span className="text-right text-subdued tabular-nums">{s.display}</span>
               </li>
@@ -160,7 +105,33 @@ export function ProbesView({ data: d }: { data: Probes }) {
           </p>
         </TableSection>
 
-        <Changelog gap={d.gap} span={12} />
+        <Board title="Certificates" icon="key" span={4}>
+          <Facts
+            rows={[
+              {
+                k: 'Soonest expiry',
+                v:
+                  d.cert.days === null ? (
+                    DASH
+                  ) : (
+                    <span className={cn(d.cert.days < 30 && 'text-warning')}>
+                      {num(d.cert.days)} days
+                    </span>
+                  ),
+              },
+              { k: 'On', v: d.cert.host ?? DASH },
+              { k: '24h uptime', v: pct(d.uptime24h, 2) },
+            ]}
+          />
+          <p className={FOOT}>
+            One entrypoint-level wildcard covers <span className={MONO}>*.{site.baseDomain}</span>,
+            so this is one certificate for every hostname on the box. Renewal is DNS-01 through
+            Cloudflare and automatic. A number falling below thirty means lego is failing, and the
+            store is a single file that is in no backup.
+          </p>
+        </Board>
+
+        <Changelog gap={d.gap} span={8} />
 
         <LogBoard
           source={{ container: 'gatus' }}
@@ -181,3 +152,49 @@ export function ProbesView({ data: d }: { data: Probes }) {
 
 /** Endpoint · one figure. */
 const RANK_GRID = 'grid items-center gap-x-6 px-5 grid-cols-[minmax(8rem,1fr)_7rem]'
+
+/** Every endpoint answering is one quiet line; anything down is a board listing it. */
+function Status({ d }: { d: Probes }) {
+  if (d.failing.length === 0) {
+    return (
+      <AllClear
+        title="Everything answering"
+        detail={`All ${num(d.up)} endpoints answered their last probe.`}
+        aside={`${num(d.up)} up · ${num(d.down)} down`}
+        note="Some probe failures are not outages: a new connection into gluetun’s rootless namespace stalls about one time in forty, so roughly 2% of those probes fail against a service answering everyone. Tab dots wait three minutes of silence before turning red."
+      />
+    )
+  }
+  return (
+    <Board
+      title="Not answering"
+      icon="◎"
+      span={12}
+      aside={
+        <span className={NOTE}>
+          {num(d.up)} up · {num(d.down)} down
+        </span>
+      }
+    >
+      {d.failing.length === 0 ? (
+        <p className={EMPTY}>All {num(d.up)} endpoints answered their last probe.</p>
+      ) : (
+        <ul className={LIST}>
+          {d.failing.map((f) => (
+            <li key={f}>
+              <span className={MAIN}>{f}</span>
+              <Chip tone="bad">down</Chip>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={FOOT}>
+        Some of what fails here is not an outage: traefik dials the *arrs at a port published out of
+        gluetun&rsquo;s rootless namespace, where a new connection stalls about ten seconds one time
+        in forty, and gatus times out at ten. Roughly 2% of those probes fail against a service
+        answering every request anybody made. That is why the tab dots elsewhere on this dashboard
+        require three minutes of silence before they turn red.
+      </p>
+    </Board>
+  )
+}

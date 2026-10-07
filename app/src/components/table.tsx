@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react'
 import { cn } from '../lib/cn'
+import { type Tone, toneStyle } from '../lib/tone'
 
 // The house table: the Apps list's vocabulary, for every list of things.
 //
@@ -31,7 +33,7 @@ export const TABLE_HEAD =
 
 /** A row. Hairline above every row except the first after the head or a group. */
 export const TABLE_ROW =
-  'group/row relative min-h-[3.25rem] border-hairline border-t py-2 text-[0.8125rem] transition-colors duration-100 [&:nth-child(2)]:border-t-0 [[data-group]+&]:border-t-0 first:border-t-0'
+  'group/row relative min-h-11 border-hairline border-t py-2 text-[0.8125rem] transition-colors duration-100 [&:nth-child(2)]:border-t-0 [[data-group]+&]:border-t-0 first:border-t-0'
 
 /** A row that is a link (stretch an anchor inside with TABLE_LINK). */
 export const TABLE_ROW_LINK =
@@ -57,10 +59,16 @@ export const TABLE_EMPTY = 'px-5 py-12 text-center text-[0.85rem] text-muted-for
 export function TableGroup({
   title,
   note,
+  aside,
+  tone,
   className,
 }: {
-  title: string
-  note?: string
+  title: ReactNode
+  note?: ReactNode
+  /** A group that is itself an exception (orphans, failures): its title takes the tone. */
+  tone?: Tone
+  /** Pushed to the band's right end: a mark only an exceptional group carries. */
+  aside?: ReactNode
   className?: string
 }) {
   return (
@@ -71,8 +79,17 @@ export function TableGroup({
         className,
       )}
     >
-      <span className="text-foreground [font-weight:560]">{title}</span>
+      <span
+        className={cn(
+          '[font-weight:560]',
+          tone === undefined ? 'text-foreground' : 'text-(--tone)',
+        )}
+        style={tone === undefined ? undefined : toneStyle(tone)}
+      >
+        {title}
+      </span>
       {note !== undefined && <span className="text-muted-foreground">{note}</span>}
+      {aside !== undefined && <span className="ml-auto flex items-center">{aside}</span>}
     </li>
   )
 }
@@ -82,3 +99,52 @@ export const SECTION_TITLE =
   'mt-10 mb-3 flex flex-wrap items-center gap-x-2 text-[0.875rem] text-foreground [font-weight:600] first:mt-0'
 /** The line under a SECTION_TITLE. */
 export const SECTION_NOTE = '-mt-2 mb-3 text-[0.8rem] text-muted-foreground'
+
+/**
+ * A denser row, for a long list of short identifiers (hostnames, names on the
+ * LAN, jobs, tenants, runs): 40px instead of 52, so fifty rows are a scroll
+ * rather than a page. Use it in place of TABLE_ROW, never beside it in one table.
+ */
+export const TABLE_ROW_DENSE =
+  'group/row relative min-h-10 border-hairline border-t py-1.5 text-[0.8125rem] transition-colors duration-100 [&:nth-child(2)]:border-t-0 [[data-group]+&]:border-t-0 first:border-t-0'
+
+/**
+ * The tail of a long table, folded: the last row is a quiet toggle that shows
+ * the rest ("63 quieter containers") or folds them back. The caller owns the
+ * state, so it decides which rows the tail is.
+ */
+export function TableMore({
+  open,
+  onToggle,
+  more,
+  less,
+}: {
+  open: boolean
+  onToggle: () => void
+  /** The label while folded: what the hidden rows are. */
+  more: string
+  /** The label while open. */
+  less: string
+}) {
+  return (
+    <li className="flex min-h-10 items-center border-hairline border-t px-5">
+      <button
+        type="button"
+        className="cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] text-muted-foreground transition-colors hover:text-foreground"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            'mr-1.5 inline-block text-[0.7rem] transition-transform',
+            open && 'rotate-90',
+          )}
+        >
+          ▸
+        </span>
+        {open ? less : more}
+      </button>
+    </li>
+  )
+}

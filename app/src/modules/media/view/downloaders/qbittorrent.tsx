@@ -1,6 +1,7 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/service-head'
+import { LIVE } from '../../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures, Pulse } from '../../../../components/viz'
 import { bytes, DASH, num, rate, until } from '../../../../lib/format'
 import { FOOT, NOTE, QueueTable, TableSection } from '../shared'
@@ -35,7 +36,7 @@ export function QbtPage({ d }: { d: Downloaders }) {
           icon="down"
           span={8}
           aside={
-            <span className={NOTE}>
+            <span className={LIVE}>
               <Pulse on={(qbt.down ?? 0) + (qbt.up ?? 0) > 0} tone="accent" />
               {qbt.connection ?? DASH}
             </span>

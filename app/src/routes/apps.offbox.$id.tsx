@@ -212,6 +212,7 @@ function PagesBoards({ site, d }: { site: ExternalApp; d: PagesDetail }) {
               href={`https://github.com/${site.repo}/deployments/github-pages`}
               target="_blank"
               rel="noreferrer"
+              className="text-muted-foreground hover:text-foreground"
             >
               all ↗
             </a>
@@ -254,7 +255,7 @@ function PagesBoards({ site, d }: { site: ExternalApp; d: PagesDetail }) {
 }
 
 /** State · when · commit, for a site's publishes. */
-const PUB_GRID = 'grid items-center gap-x-6 px-5 grid-cols-[minmax(0,1fr)_8rem_6rem]'
+const PUB_GRID = 'grid items-center gap-x-6 px-5 grid-cols-[8rem_10rem_minmax(0,1fr)]'
 
 function VercelBoards({ d }: { d: VercelDetail }) {
   return (

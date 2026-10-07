@@ -147,11 +147,10 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
     <li className={cn(GRID, TABLE_ROW)}>
       <span className="flex min-w-0 flex-col">
         <span className={cn(CELL_NAME, MONO_FACE)}>{disk.device}</span>
+        {/* The family alone: the rpm is the detail board's, and two facts here
+            truncated at a laptop width. */}
         <span className={CELL_SUB} title={disk.model ?? undefined}>
           {kind}
-          {disk.rotationRate !== null &&
-            disk.rotationRate > 0 &&
-            ` · ${num(disk.rotationRate)} rpm`}
         </span>
       </span>
       <span className={cn(CELL_QUIET, N, MID)}>
@@ -206,7 +205,7 @@ function DiskBoard({ disk }: { disk: Disk }) {
       span={4}
       aside={
         disk.passed === null ? undefined : disk.passed ? (
-          <Chip tone="ok">SMART ok</Chip>
+          <span className="text-[0.75rem] text-muted-foreground">SMART ok</span>
         ) : (
           <Chip tone="bad">SMART failing</Chip>
         )
@@ -296,14 +295,21 @@ function DiskBoard({ disk }: { disk: Disk }) {
       <h4 className={SUB}>Self-tests</h4>
       <ul className={LIST}>
         {disk.selfTests.slice(0, 5).map((t, i) => (
-          <li key={`${t.type ?? '?'}-${String(t.hours ?? i)}-${String(i)}`} className={ROW}>
-            <span className={ROW_MAIN}>{t.type ?? '?'}</span>
-            <span className={ROW_SIDE}>
-              {/* A pass is the norm and reads as a word; only the test that
-                  did not finish takes a chip. */}
-              {t.passed ? 'ok' : <Chip tone="warn">{t.status ?? 'failed'}</Chip>}
+          <li
+            key={`${t.type ?? '?'}-${String(t.hours ?? i)}-${String(i)}`}
+            className={cn(ROW, 'grid grid-cols-[minmax(0,1fr)_2.5rem_4rem] gap-x-3')}
+          >
+            {/* A pass is the norm and reads as a word in its own column; the
+                test that did not finish carries its chip under its name, so a
+                long status never squeezes the name to an ellipsis. */}
+            <span className="flex min-w-0 flex-col items-start gap-1">
+              <span className={cn(ROW_MAIN, t.type === null && 'text-muted-foreground')}>
+                {t.type ?? 'unnamed test'}
+              </span>
+              {!t.passed && <Chip tone="warn">{t.status ?? 'failed'}</Chip>}
             </span>
-            <span className={cn(ROW_SIDE, 'w-16 text-right')}>
+            <span className={cn(ROW_SIDE, 'max-w-none text-right')}>{t.passed ? 'ok' : ''}</span>
+            <span className={cn(ROW_SIDE, 'max-w-none text-right')}>
               {/* Against the drive's CURRENT hours, because the drive has
                   no calendar — it counts hours, not dates. */}
               {t.hours === null || disk.powerOnHours === null

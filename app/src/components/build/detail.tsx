@@ -89,12 +89,12 @@ export function BuildDetail({
 
       <BoardGrid>
         <CommitBoard build={build} commit={commit} commitUrl={commitUrl} open={open} now={now} />
-        <ResultBoard name={name} app={app} build={build} open={open} />
-        <PhasesBoard build={build} open={open} />
-
-        <Board title="Checks" span={6}>
-          <Checks build={build} />
-        </Board>
+        {/* The short boards stack beside the tall ones, the last taking the
+            slack, so each row has one bottom edge and no empty half. */}
+        <div className={STACK}>
+          <ResultBoard name={name} app={app} build={build} open={open} />
+          <PhasesBoard build={build} open={open} />
+        </div>
 
         <Board title="Detection" span={12}>
           <Detection build={build} />
@@ -104,9 +104,10 @@ export function BuildDetail({
           <ImageBoard build={build} />
         </Board>
 
-        {/* The two short boards stacked beside the tall one, the last taking
-            the slack, so the row has one bottom edge and no empty half. */}
         <div className={STACK}>
+          <Board title="Checks" span={12}>
+            <Checks build={build} />
+          </Board>
           <Board title="Resolved tools" span={12}>
             <Tools build={build} />
           </Board>

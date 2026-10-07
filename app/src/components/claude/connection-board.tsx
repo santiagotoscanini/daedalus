@@ -1,5 +1,6 @@
 // The Connection board: the server's own lines about its link to Anthropic,
 // read back out of Loki for the last fortnight.
+import { cn } from '../../lib/cn'
 import type { RcEvent } from '../../lib/dashboard/claude'
 import { Ago } from '../ago'
 import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../tokens'
@@ -53,10 +54,20 @@ export function ConnectionBoard({ events }: { events: RcEvent[] }) {
 
 function EventRow({ event }: { event: RcEvent }) {
   return (
-    <li className={ROW}>
-      <Chip tone={EVENT_TONE[event.kind]}>{EVENT_LABEL[event.kind]}</Chip>
-      <span className={ROW_MAIN}>{event.text}</span>
-      <span className={ROW_SIDE}>
+    <li className={cn(ROW, 'grid grid-cols-[4.75rem_minmax(0,1fr)_4.5rem] gap-x-3')}>
+      {/* A drop is the one kind worth a colour; the rest are the link's normal
+          life and read as a quiet word in their column. */}
+      <span className="flex">
+        {event.kind === 'drop' ? (
+          <Chip tone={EVENT_TONE[event.kind]}>{EVENT_LABEL[event.kind]}</Chip>
+        ) : (
+          <span className="text-[0.75rem] text-muted-foreground">{EVENT_LABEL[event.kind]}</span>
+        )}
+      </span>
+      <span className={ROW_MAIN} title={event.text}>
+        {event.text}
+      </span>
+      <span className={cn(ROW_SIDE, 'max-w-none text-right whitespace-nowrap')}>
         <Ago at={event.at} />
       </span>
     </li>

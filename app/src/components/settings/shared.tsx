@@ -250,7 +250,15 @@ export function Unset({ label = 'not set' }: { label?: ReactNode }) {
 
 export function ExtLink({ href, children }: { href: string; children?: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className={cn(MONO, 'hover:text-foreground')}>
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        MONO,
+        'text-foreground no-underline decoration-foreground/30 underline-offset-[3px] hover:text-foreground hover:underline',
+      )}
+    >
       {children ?? href}
     </a>
   )

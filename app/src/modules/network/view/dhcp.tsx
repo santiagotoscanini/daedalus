@@ -7,8 +7,9 @@ import {
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
-  TABLE_ROW,
+  TABLE_ROW_DENSE,
   TableGroup,
+  TableMore,
 } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { Button } from '../../../components/ui/button'
@@ -72,18 +73,14 @@ function LanDevices({ devices }: { devices: Device[] }) {
       ))}
       {all && quiet.map((d) => <DeviceRow key={d.mac} d={d} />)}
       {quiet.length > 0 && (
-        <li className={cn(TABLE_ROW, 'flex min-h-11 items-center px-5')}>
-          <button
-            type="button"
-            className="cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] text-muted-foreground hover:text-foreground"
-            aria-expanded={all}
-            onClick={() => {
-              setAll((v) => !v)
-            }}
-          >
-            {all ? 'Hide the ones not seen today' : `${String(quiet.length)} not seen today`}
-          </button>
-        </li>
+        <TableMore
+          open={all}
+          onToggle={() => {
+            setAll((v) => !v)
+          }}
+          more={`${String(quiet.length)} not seen today`}
+          less="Hide the ones not seen today"
+        />
       )}
     </ul>
   )
@@ -95,7 +92,7 @@ function LanDevices({ devices }: { devices: Device[] }) {
 function DeviceRow({ d }: { d: Device }) {
   const active = d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE
   return (
-    <li className={cn(DEVICE_GRID, TABLE_ROW)}>
+    <li className={cn(DEVICE_GRID, TABLE_ROW_DENSE)}>
       <span
         className={cn(
           'truncate',

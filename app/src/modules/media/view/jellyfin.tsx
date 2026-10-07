@@ -123,15 +123,18 @@ function PlayingNow({ f }: { f: JellyfinFacts }) {
       }
     >
       <ul className={TABLE} aria-label="Playing now">
-        <li aria-hidden="true" className={cn(PLAY_GRID, TABLE_HEAD)}>
-          <span>Title</span>
-          <span className={MID}>Who</span>
-          <span className={WIDE}>Device</span>
-          <span>Method</span>
-          <span className={WIDE}>Progress</span>
-        </li>
+        {/* No column labels over an empty room: one quiet row is the whole answer. */}
+        {d.playing.length > 0 && (
+          <li aria-hidden="true" className={cn(PLAY_GRID, TABLE_HEAD)}>
+            <span>Title</span>
+            <span className={MID}>Who</span>
+            <span className={WIDE}>Device</span>
+            <span>Method</span>
+            <span className={WIDE}>Progress</span>
+          </li>
+        )}
         {d.playing.length === 0 ? (
-          <li className={TABLE_EMPTY}>Nobody is watching anything.</li>
+          <li className={cn(TABLE_EMPTY, 'py-6')}>Nobody is watching anything.</li>
         ) : (
           d.playing.map((s, i) => (
             <li key={`${s.user}-${String(i)}`} className={cn(PLAY_GRID, TABLE_ROW)}>
@@ -206,7 +209,11 @@ function WhoWatchesBoard({ f }: { f: JellyfinFacts }) {
       title="Who watches"
       icon="◍"
       span={4}
-      aside={<span className={NOTE}>{num(d.people.length)} accounts</span>}
+      aside={
+        <span className={NOTE}>
+          {num(d.people.length)} {d.people.length === 1 ? 'account' : 'accounts'}
+        </span>
+      }
     >
       {d.people.length === 0 ? (
         <p className={EMPTY}>could not read the user list</p>

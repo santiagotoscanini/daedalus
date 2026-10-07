@@ -6,8 +6,23 @@ import { compareOf, ServiceHead, SOURCE_NOTE, verdictOf } from '../../../../comp
 import { Board, BoardGrid, Chip, Measures } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { DASH, num } from '../../../../lib/format'
-import { CHECK_ROW, EMPTY, FOOT, LIST, MONO, NOTE, VERSION_SNAPSHOT } from '../shared'
+import {
+  CELL_NAME,
+  CELL_QUIET,
+  FOOT,
+  MONO,
+  NOTE,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableSection,
+  VERSION_SNAPSHOT,
+} from '../shared'
 import type { Wanted } from './shared'
+
+/* Instance, then what the run changed and what it left alone. */
+const SYNC_GRID = 'grid grid-cols-[minmax(0,1fr)_12rem_9rem] items-center gap-x-6 px-5'
 
 export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
   const recyclarr = d
@@ -45,40 +60,43 @@ export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
       />
 
       <BoardGrid>
-        <Board
+        <TableSection
           title="Last sync"
-          icon="⟳"
-          span={8}
-          aside={<span className={NOTE}>{recyclarr.lastRun?.day ?? DASH}</span>}
+          note={recyclarr.lastRun?.day ?? DASH}
+          foot={
+            <p className={FOOT}>
+              The last run&rsquo;s numbers, not a total: a nightly job that changed two formats
+              every night for a week did not change fourteen. Read out of its log, because Recyclarr
+              has no API, no metrics and no interface.
+            </p>
+          }
         >
-          {recyclarr.synced.length === 0 ? (
-            <p className={EMPTY}>no sync recorded in the window</p>
-          ) : (
-            <ul className={`${LIST} gap-1.5`}>
-              {recyclarr.synced.map((s) => (
-                <li key={s.instance} className={CHECK_ROW}>
-                  <span className="text-[0.75rem] text-muted-foreground">{s.instance}</span>
-                  <span className="min-w-0 text-foreground">
-                    {s.updated === 0 ? (
-                      'nothing changed'
-                    ) : (
-                      <strong>
-                        {num(s.updated)} custom format{s.updated === 1 ? '' : 's'} updated
-                      </strong>
-                    )}
-                    {' · '}
-                    {num(s.skipped)} already current
+          <ul className={TABLE} aria-label="Last sync">
+            {recyclarr.synced.length > 0 && (
+              <li aria-hidden="true" className={cn(SYNC_GRID, TABLE_HEAD)}>
+                <span>Instance</span>
+                <span className="text-right">Custom formats updated</span>
+                <span className="text-right">Already current</span>
+              </li>
+            )}
+            {recyclarr.synced.length === 0 ? (
+              <li className={cn(TABLE_EMPTY, 'py-6')}>No sync recorded in the window.</li>
+            ) : (
+              recyclarr.synced.map((s) => (
+                <li key={s.instance} className={cn(SYNC_GRID, TABLE_ROW)}>
+                  <span className={CELL_NAME}>{s.instance}</span>
+                  {/* A change is the reading; nothing changed is the norm. */}
+                  <span
+                    className={cn(CELL_QUIET, 'text-right', s.updated > 0 && 'text-foreground')}
+                  >
+                    {s.updated === 0 ? 'nothing changed' : num(s.updated)}
                   </span>
+                  <span className={cn(CELL_QUIET, 'text-right')}>{num(s.skipped)}</span>
                 </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            The last run&rsquo;s numbers, not a total: a nightly job that changed two formats every
-            night for a week did not change fourteen. Read out of its log, because Recyclarr has no
-            API, no metrics and no interface.
-          </p>
-        </Board>
+              ))
+            )}
+          </ul>
+        </TableSection>
 
         <Board title="Health" icon="warn" span={4}>
           <Measures
@@ -98,7 +116,7 @@ export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
 
         <Changelog
           gap={recyclarr.gap}
-          span={12}
+          span={8}
           aside={
             recyclarr.running.revision === null ? (
               <span className={NOTE}>recyclarr/recyclarr</span>

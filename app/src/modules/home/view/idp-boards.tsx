@@ -1,11 +1,12 @@
 // Home › Sign-in's boards: signing in, the applications, declared against
 // live, the logs. Who and the devices are in ./idp-who.tsx.
 
+import { Fragment } from 'react'
 import { GrafanaLogs, LogDetails } from '../../../components/logs'
 import { BOARD_TABLE, BOARD_TABLE_HEAD, BOARD_TABLE_ROW } from '../../../components/modules/parts'
-import { CELL_MONO, CELL_NAME, CELL_QUIET } from '../../../components/table'
+import { CELL_MONO, TableGroup } from '../../../components/table'
 import { AXIS, CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
-import { Board, Chip, Columns, Measures } from '../../../components/viz'
+import { Board, Columns, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { IdpData } from '../data/signin'
@@ -35,7 +36,7 @@ export function SigningInBoard({ d, w }: { d: IdpData; w: IdpData['window'] }) {
           display: `${num(p.authorizations)} app${p.authorizations === 1 ? '' : 's'} opened`,
         }))}
         tone="ok"
-        height={120}
+        height={176}
         empty="nothing in the window"
       />
       {d.daily.length > 0 && (
@@ -122,30 +123,30 @@ export function AppsBoard({
   )
 }
 
-/* Declared against live: what the row is, which client, its id, what that means. */
+/* Declared against live: which client and its id. What kind of mismatch a row
+   is, and what that means, is said once by its group rather than down a column. */
 const DECLARED_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)]',
-  '@max-[44rem]/table:grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,1.2fr)]',
+  'grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]',
 )
-const HIDE_NARROW = '@max-[44rem]/table:hidden'
 
 export function DeclaredBoard({ d }: { d: IdpData }) {
-  const rows = [
-    ...d.nix.orphans.map((c) => ({
-      ...c,
-      state: 'orphan',
-      what: 'live at the IdP, declared nowhere',
-    })),
-    ...d.nix.unsynced.map((c) => ({
-      ...c,
-      state: 'not synced',
-      what: 'declared, absent at the IdP',
-    })),
-  ]
+  const groups = [
+    {
+      title: `${num(d.nix.orphans.length)} orphan${d.nix.orphans.length === 1 ? '' : 's'}`,
+      note: 'live at the IdP, declared nowhere',
+      rows: d.nix.orphans,
+    },
+    {
+      title: `${num(d.nix.unsynced.length)} not synced`,
+      note: 'declared, absent at the IdP',
+      rows: d.nix.unsynced,
+    },
+  ].filter((g) => g.rows.length > 0)
+  const none = groups.length === 0
   return (
     <Board
-      title={rows.length === 0 ? 'Declared and live agree' : 'Declared vs live'}
+      title={none ? 'Declared and live agree' : 'Declared vs live'}
       icon="▣"
       span={8}
       aside={
@@ -159,7 +160,7 @@ export function DeclaredBoard({ d }: { d: IdpData }) {
           /export/sso.json is not published, so the declared side of the diff is missing and nothing
           here can be called an orphan yet.
         </p>
-      ) : rows.length === 0 ? (
+      ) : none ? (
         <p className={EMPTY}>
           Every live client is declared in <span className={MONO}>fleet.ssoClients</span>, and every
           declaration exists at the IdP. Nothing has outlived its stack.
@@ -167,22 +168,25 @@ export function DeclaredBoard({ d }: { d: IdpData }) {
       ) : (
         <ul className={BOARD_TABLE}>
           <li className={cn(DECLARED_GRID, BOARD_TABLE_HEAD)}>
-            <span>State</span>
             <span>Client</span>
-            <span className={HIDE_NARROW}>Client id</span>
-            <span>Meaning</span>
+            <span>Client id</span>
           </li>
-          {rows.map((c) => (
-            <li key={c.id} className={cn(DECLARED_GRID, BOARD_TABLE_ROW)}>
-              <span>
-                <Chip tone="warn">{c.state}</Chip>
-              </span>
-              <span className={CELL_NAME}>{c.name}</span>
-              <span className={cn(CELL_MONO, HIDE_NARROW)} title={c.id}>
-                {c.id}
-              </span>
-              <span className={cn(CELL_QUIET, 'truncate')}>{c.what}</span>
-            </li>
+          {groups.map((g, i) => (
+            <Fragment key={g.note}>
+              <TableGroup
+                title={g.title}
+                note={g.note}
+                className={i === 0 ? 'border-t-0' : undefined}
+              />
+              {g.rows.map((c) => (
+                <li key={c.id} className={cn(DECLARED_GRID, BOARD_TABLE_ROW)}>
+                  <span className="truncate text-[0.84rem] text-foreground">{c.name}</span>
+                  <span className={CELL_MONO} title={c.id}>
+                    {c.id}
+                  </span>
+                </li>
+              ))}
+            </Fragment>
           ))}
         </ul>
       )}

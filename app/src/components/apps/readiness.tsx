@@ -16,8 +16,12 @@ import { cn } from '../../lib/cn'
 import type { Check, CheckState, Readiness } from '../../lib/readiness'
 import { type Tone, toneStyle } from '../../lib/tone'
 import { RefreshButton } from '../controls'
+import { SECTION_TITLE } from '../table'
 import { GLASS } from '../viz/board'
-import { SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
+
+/** A step's heading: the house section title, its note inline in muted ink. */
+const SECTION_HEAD = SECTION_TITLE
+const SECTION_HEAD_SMALL = 'text-[0.8rem] font-normal text-muted-foreground'
 
 const MARK: Record<CheckState, string> = { ok: '✓', warn: '!', bad: '✗', unknown: '?' }
 

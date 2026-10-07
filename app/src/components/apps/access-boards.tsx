@@ -66,7 +66,7 @@ export function ClientsBoard({ access }: { access: AccessData }) {
 
 export function PathsBoard({ access }: { access: AccessData }) {
   return (
-    <Board title="Top paths" icon="⇢" span={12}>
+    <Board title="Top paths" icon="⇢" span={8}>
       <Bars
         rows={access.byPath.map((p) => ({
           key: `${p.path}-${p.status}`,
@@ -87,7 +87,7 @@ export function PathsBoard({ access }: { access: AccessData }) {
 
 export function AgentsBoard({ access }: { access: AccessData }) {
   return (
-    <Board title="Top user agents" icon="◇" span={6}>
+    <Board title="Top user agents" icon="◇" span={4}>
       <Bars
         rows={access.byAgent.map((a) => ({
           key: a.key,
@@ -242,9 +242,15 @@ export function GeoPanel({ hostname, range }: { hostname: string; range: AccessW
         </a>{' '}
         and it will fill in.
       </p>
+      <p className={FOOT}>{ACCESS_NOTE}</p>
     </Board>
   )
 }
+
+/** What this tab counts and where its map comes from. Folds behind the map's ⓘ, and the
+    empty board's when there is nothing to map. */
+export const ACCESS_NOTE =
+  'Only tunnel traffic is counted. Loki keeps 30 days, so that is the longest window there is. The map is a Grafana panel from the App access dashboard, filtered to this host; the link on the rejected-requests board opens the fleet-wide Security dashboard instead.'
 
 /** Status code, coloured by class. Keyed on the first digit so a code the
     dashboard has never seen still lands in the right bucket. */

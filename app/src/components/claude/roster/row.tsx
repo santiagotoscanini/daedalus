@@ -27,6 +27,12 @@ import { STATE_LABEL, STATE_TONE } from './tones'
    otherwise give away the button's width before their own. */
 const ROW_BTN = 'ml-auto h-7 shrink-0 px-2.5 text-[0.75rem]'
 
+/* The side column: how the row stands on its first line, the ids the CLI and
+   claude.ai go by on its second. Right-aligned, so the ids form a column. */
+const SIDE = 'flex min-w-0 flex-col items-end gap-1 pt-0.5'
+const SIDE_LINE =
+  'flex min-w-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-0.5 [&>span]:max-w-none'
+
 /* ── the enriched row ─────────────────────────────────────────────────────
 
    Three lines: what it is, what was last said to it, and what is in it. The
@@ -106,21 +112,47 @@ export function RosterRow({
 
   return (
     <li
-      className={cn(ROW, 'flex-col items-stretch py-3 [[data-group]+&]:border-t-0')}
+      className={cn(
+        ROW,
+        // One grid for every row, so the facts and the verb sit in the same
+        // columns down the whole roster: what it is (name, last prompt, its
+        // metadata) · how it stands and its ids · the verb.
+        'grid grid-cols-[minmax(0,1fr)_minmax(0,auto)_5rem] items-start gap-x-5 gap-y-0 py-3.5 [[data-group]+&]:border-t-0',
+      )}
       title={row.id ?? undefined}
     >
-      <div className="flex min-w-0 items-center gap-2">
-        {/* The board groups rows by state and names each group once, so a row
-            carries a chip only for the population that is a fault. */}
-        {row.state === 'orphan' && (
-          <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
-        )}
-        <span className={ROW_MAIN}>{row.label}</span>
-        <RowSideFacts row={row} control={control} />
+      <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* The board groups rows by state and names each group once, so a
+              row carries a chip only for the population that is a fault. */}
+          {row.state === 'orphan' && (
+            <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
+          )}
+          <span className={cn(ROW_MAIN, 'text-[0.84rem] [font-weight:520]')}>{row.label}</span>
+        </div>
 
-        {/* The verb, on the row. It is hidden while armed because Confirm and
-            Cancel take its place below — two buttons for one row at once is
-            the ambiguity the two-step exists to avoid. */}
+        {/* The one line of conversation on this page, and it gets a line of
+            its own because it is the only thing here that is not a
+            measurement. Quiet ink and a smaller size: it is context for the
+            title above it, not a heading of its own. Redacted twice —
+            host-side before it was written to a 0600 file, and again by
+            `promptLine` on the way here. */}
+        {prompt !== null && (
+          <p className={PROMPT} title={prompt}>
+            {prompt}
+          </p>
+        )}
+
+        <RowMetaLine row={row} />
+      </div>
+
+      <RowSideFacts row={row} control={control} />
+
+      {/* The verb, in its own column so every button on the roster lines up.
+          It is hidden while armed because Confirm and Cancel take its place
+          below — two buttons for one row at once is the ambiguity the
+          two-step exists to avoid. */}
+      <div className="flex justify-end">
         {control.kind !== 'none' && !busy && !armed && (
           <Button
             type="button"
@@ -138,24 +170,15 @@ export function RosterRow({
         )}
       </div>
 
-      {/* The one line of conversation on this page, and it gets a line of its
-          own because it is the only thing here that is not a measurement.
-          Quiet ink and a smaller size: it is context for the title above it,
-          not a heading of its own. Redacted twice — host-side before it was
-          written to a 0600 file, and again by `promptLine` on the way here. */}
-      {prompt !== null && (
-        <p className={PROMPT} title={prompt}>
-          {prompt}
-        </p>
+      {mine && outcome !== null && (
+        <div className="col-span-full">
+          <RowOutcome outcome={outcome} />
+        </div>
       )}
-
-      <RowMetaLine row={row} />
-
-      {mine && outcome !== null && <RowOutcome outcome={outcome} />}
 
       {control.kind !== 'none' && !busy && armed && (
         <ArmedConfirm
-          className={CTRL}
+          className={cn(CTRL, 'col-span-full')}
           costClassName={CTRL_COST}
           noteClassName={CTRL_NOTE}
           cost={<ArmedCost control={control} />}
@@ -196,44 +219,52 @@ function RowSideFacts({ row, control }: { row: RosterEntry; control: RowControl 
   const cliName = row.live?.name != null && row.live.name !== row.label ? row.live.name : null
 
   return (
-    <>
-      {/* An INTERACTIVE session's name is derived by the CLI (`nixos-ac`) and
+    <div className={SIDE}>
+      <div className={SIDE_LINE}>
+        {/* An INTERACTIVE session's name is derived by the CLI (`nixos-ac`) and
           names the session rather than the work, so it is marked as the weak
           label it is. A background agent's name is the one it was launched
           with — a real title — and marking that would be a lie. That holds
           whether or not its process is still there, so `dormant` is exempt
           for exactly the reason `background` is. */}
-      {row.labelSource === 'agent' && row.state !== 'background' && row.state !== 'dormant' && (
-        <span className={cn(ROW_SIDE, NARROW_HIDE)}>cli name</span>
-      )}
-      {/* A session this box started says so: it is the only live population
+        {row.labelSource === 'agent' && row.state !== 'background' && row.state !== 'dormant' && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE)}>cli name</span>
+        )}
+        {/* A session this box started says so: it is the only live population
           with a kill, and the row is where that difference is decided. */}
-      {row.managed && <span className={cn(ROW_SIDE, NARROW_HIDE)}>ours</span>}
-      {lifecycle !== null && <span className={ROW_SIDE}>{lifecycle}</span>}
-      {/* Spelled out beside the lifecycle word, because that word is what
+        {row.managed && <span className={cn(ROW_SIDE, NARROW_HIDE)}>ours</span>}
+        {/* Idle is the resting word; a session mid-turn is the one to see. */}
+        {lifecycle !== null && (
+          <span className={cn(ROW_SIDE, lifecycle !== 'idle' && 'text-foreground')}>
+            {lifecycle}
+          </span>
+        )}
+        {/* Spelled out beside the lifecycle word, because that word is what
           misleads: `blocked` is an agent waiting on a human, and reads as a
           live thing pausing. The missing pid is the fact underneath it. */}
-      {row.state === 'dormant' && <span className={ROW_SIDE}>no process</span>}
-      {/* The ids stay on the top line and only there: they are what the CLI
+        {row.state === 'dormant' && <span className={ROW_SIDE}>no process</span>}
+        {control.kind === 'none' && control.why === 'server' && (
+          <span className={ROW_SIDE}>ends with the server</span>
+        )}
+      </div>
+      <div className={cn(SIDE_LINE, MONO_FACE)}>
+        {/* The ids stay on the top line and only there: they are what the CLI
           verbs and claude.ai go by, so they belong beside the name they label
           rather than down among the measurements on the metadata line. */}
-      {cliName !== null && <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{cliName}</span>}
-      {/* The id claude.ai shows, which is NOT the transcript uuid beside
+        {cliName !== null && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{cliName}</span>
+        )}
+        {/* The id claude.ai shows, which is NOT the transcript uuid beside
           it — the thing you match a row here against a session over there
           by. */}
-      {row.live?.remote_id != null && (
-        <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{row.live.remote_id}</span>
-      )}
-      {shownId !== null && <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{shownId}</span>}
-      {/* No button, and the reason in its place. A session the Remote
-          Control server spawned has no per-session kill anywhere — not in
-          the CLI, not in systemd — so the only honest thing here is a
-          sentence. The one lever that does end it is the server restart on
-          the Remote control board. */}
-      {control.kind === 'none' && control.why === 'server' && (
-        <span className={cn(ROW_SIDE, NARROW_HIDE)}>ends with the server</span>
-      )}
-    </>
+        {row.live?.remote_id != null && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{row.live.remote_id}</span>
+        )}
+        {shownId !== null && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{shownId}</span>
+        )}
+      </div>
+    </div>
   )
 }
 

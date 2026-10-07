@@ -59,17 +59,16 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
       <BoardGrid>
         <RemoteControlBoard data={data} live={live} />
 
-        {/* Sign-in comes up beside Remote control. The two are one subject —
-            what this server is, and whether it can still reach Anthropic —
-            and row 1 is where the page's standing facts belong. */}
-        <SignInBoard credentials={facts.credentials} reporting={data.reporting} />
-
+        {/* Paired by height rather than by subject: Remote control and its
+            link's history are the two long boards, Sign-in and the releases
+            the two short ones. Side by side, each pair shares a bottom edge
+            instead of leaving half a board of empty glass. */}
         <ConnectionBoard events={data.events} />
 
-        {/* Beside Connection rather than across the page. The two answer the
-            same question from opposite ends — is this server talking to
-            Anthropic right now, and is it the build that should be — and a
-            version list is a column of short rows that never needed 12. */}
+        <SignInBoard credentials={facts.credentials} reporting={data.reporting} />
+
+        {/* Beside Sign-in rather than across the page: a version list is a
+            column of short rows that never needed 12. */}
         <ClaudeReleases gap={data.gap} note={verdict.note} />
 
         {/* The reason to open this page, so it sits where the attention goes

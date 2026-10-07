@@ -46,16 +46,29 @@ export function MachinesHead() {
   )
 }
 
-type Fact = { k: string; v: ReactNode; wide?: boolean }
+/**
+ * A fact and its width: one column, two, or the whole line (a key, a tunnel).
+ * `narrow` is a fact the row already shows in its columns — drawn here only
+ * once the table is too narrow to show those columns, so it is said once.
+ */
+/** An open machine: a faint well, so its story reads as inside the row and the next row as the next machine. */
+const OPEN = 'bg-foreground/[0.018]'
+
+type Fact = { k: string; v: ReactNode; wide?: boolean; half?: boolean; narrow?: boolean }
 
 /** A machine's facts, label over value, as many to a line as the width takes. */
 function Facts({ facts }: { facts: Fact[] }) {
   return (
-    <dl className="m-0 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-x-8 gap-y-4 border-hairline border-t px-5 py-5">
+    <dl className="m-0 grid grid-cols-4 gap-x-8 @max-[46rem]/table:grid-cols-2 gap-y-4 border-hairline border-t px-5 py-5">
       {facts.map((f) => (
         <div
           key={f.k}
-          className={cn('flex min-w-0 flex-col gap-1', f.wide === true && 'col-span-full')}
+          className={cn(
+            'flex min-w-0 flex-col gap-1',
+            f.wide === true && 'col-span-full',
+            f.half === true && 'col-span-2',
+            f.narrow === true && 'hidden @max-[46rem]/table:flex',
+          )}
         >
           <dt className="text-[0.72rem] text-muted-foreground">{f.k}</dt>
           <dd className="m-0 min-w-0 text-[0.8125rem]">{f.v}</dd>
@@ -162,7 +175,8 @@ export function MachineRow({
       k: 'Machine up',
       v: <Mono>{s?.os_uptime_secs == null ? '—' : duration(s.os_uptime_secs)}</Mono>,
     },
-    { k: 'Agent', v: <Mono>{agent}</Mono> },
+    ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
+    { k: 'Agent', v: <Mono>{agent}</Mono>, narrow: true },
     {
       k: 'Updates',
       v:
@@ -183,13 +197,14 @@ export function MachineRow({
             )}
           </span>
         ),
+      half: true,
     },
     {
       k: 'Address',
       v: n.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{n.lanIp}</Mono>,
+      narrow: true,
     },
-    ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
-    { k: 'Claude', v: <ClaudeCell m={m} />, wide: true },
+    { k: 'Claude', v: <ClaudeCell m={m} />, half: true },
     ...(s?.controller?.tunnel != null
       ? [{ k: 'Tunnel', v: <TunnelCell t={s.controller.tunnel} />, wide: true }]
       : []),
@@ -208,7 +223,7 @@ export function MachineRow({
   ]
 
   return (
-    <li className={cn(TABLE_ROW, 'block min-h-0 py-0')}>
+    <li className={cn(TABLE_ROW, 'block min-h-0 py-0', open && OPEN)}>
       <Summary
         id={n.id}
         open={open}
@@ -261,7 +276,7 @@ export function PendingRow({
   const p = m.pending
   if (p === null) return null
   return (
-    <li className={cn(TABLE_ROW, 'block min-h-0 py-0')}>
+    <li className={cn(TABLE_ROW, 'block min-h-0 py-0', OPEN)}>
       <Summary
         id={p.id}
         open
@@ -294,8 +309,11 @@ export function PendingRow({
           {
             k: 'Address',
             v: p.lan_ip === null ? <span className={ASIDE}>—</span> : <Mono>{p.lan_ip}</Mono>,
+            narrow: true,
           },
-          ...(p.agent_version !== null ? [{ k: 'Agent', v: <Mono>{p.agent_version}</Mono> }] : []),
+          ...(p.agent_version !== null
+            ? [{ k: 'Agent', v: <Mono>{p.agent_version}</Mono>, narrow: true }]
+            : []),
         ]}
       />
       <Band>

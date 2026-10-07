@@ -12,7 +12,6 @@ import {
   ExtLink,
   Line,
   NOTE,
-  NOTE_SHOWN,
   Pending,
   SECTIONS,
   Section,
@@ -61,18 +60,36 @@ export function General({
         description="What this box calls itself. Every hostname it publishes is exactly one label under the domain."
         rows={[
           { k: 'Hostname', v: <Value v={g.hostname} /> },
-          { k: 'Domain', v: <DomainPicker edit={edit} zones={zones} /> },
+          {
+            k: 'Domain',
+            v: (
+              <Stack className="gap-1.5">
+                <DomainPicker edit={edit} zones={zones} />
+                <span className={WARN}>
+                  Changing it renames every hostname on the box and reissues its wildcard
+                  certificate — every published URL, tunnel route and login redirect moves with it.
+                  It is allowed, and it is the most drastic edit on this page.
+                </span>
+              </Stack>
+            ),
+          },
           { k: 'This control plane', v: <ControlPlane edit={edit} reserved={g.reservedLabels} /> },
           {
             k: 'Timezone',
             v: (
-              <SiteSelect
-                edit={edit}
-                field="identity.timezone"
-                label="Timezone"
-                groups={tzGroups}
-                disabled={timezones.length === 0}
-              />
+              <Stack className="gap-1.5">
+                <SiteSelect
+                  edit={edit}
+                  field="identity.timezone"
+                  label="Timezone"
+                  groups={tzGroups}
+                  disabled={timezones.length === 0}
+                />
+                <span className={WARN}>
+                  Every container is started with the timezone, so applying a new one restarts all
+                  of them.
+                </span>
+              </Stack>
             ),
           },
         ]}
@@ -81,18 +98,10 @@ export function General({
           The domains are the Cloudflare zones the API token can see, and a zone's id is saved with
           it. A zone appears here once that token covers it.
         </p>
-        <p className={NOTE_SHOWN}>
-          Changing the domain renames every hostname on the box and reissues its wildcard
-          certificate — every published URL, tunnel route and login redirect moves with it. It is
-          allowed, and it is the most drastic edit on this page.
-        </p>
         <p className={NOTE}>
           The control plane's name is the part in front of the domain. Once a rename is applied, the
           old address keeps working beside the new one until you confirm from the new address, so a
           name that turns out not to work cannot lock you out of this page.
-        </p>
-        <p className={NOTE_SHOWN}>
-          Every container is started with the timezone, so applying a new one restarts all of them.
         </p>
       </Section>
 
@@ -104,6 +113,9 @@ export function General({
     </div>
   )
 }
+
+/** A consequence worth knowing before the edit, under its field: always visible. */
+const WARN = `${ASIDE} max-w-[60ch] leading-[1.5]`
 
 /** The domain, from the zones the API token can see; the zone id rides along. */
 function DomainPicker({ edit, zones }: { edit: SiteEdit; zones: ZoneList | null }) {

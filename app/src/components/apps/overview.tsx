@@ -121,9 +121,12 @@ export function Overview({
           {/* Three boards of one height when there is a picture of the last
             deploy: the picture fills its board, so it never leaves the tall/
             short pair the two fact lists used to make beside it. */}
-          {deployShot !== null && <PreviewBoard name={app.name} shot={deployShot} />}
+          {deployShot !== null && (
+            <PreviewBoard name={app.name} shot={deployShot} lastDeploy={lastDeploy} />
+          )}
           <DeploymentBoard
             app={app}
+            withLastDeploy={deployShot === null}
             lastDeploy={lastDeploy}
             pullBroken={pullBroken}
             build={d.build}

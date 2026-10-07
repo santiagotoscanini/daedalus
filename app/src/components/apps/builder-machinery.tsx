@@ -24,8 +24,15 @@ const MISSING: Record<NonNullable<Machinery['missing']>, string> = {
   stale: 'The builder snapshot has stopped refreshing.',
 }
 
+/** A check's verdict: the healthy answer is quiet text, the fault a red chip. */
 const yes = (v: boolean | null, ok: string, bad: string) =>
-  v === null ? <Chip>unknown</Chip> : <Chip tone={v ? 'ok' : 'bad'}>{v ? ok : bad}</Chip>
+  v === null ? (
+    <Chip>unknown</Chip>
+  ) : v ? (
+    <span className="text-muted-foreground">{ok}</span>
+  ) : (
+    <Chip tone="bad">{bad}</Chip>
+  )
 
 function unitTone(u: BuilderUnit): Tone {
   if (u.active === 'failed' || (u.result !== null && u.result !== 'success')) return 'bad'
@@ -126,10 +133,19 @@ export function MachineryBoard({ m }: { m: Machinery }) {
                     </>
                   )}
                 </span>
-                <Chip tone={unitTone(u)}>
-                  {u.active}
-                  {u.sub === '' ? '' : ` · ${u.sub}`}
-                </Chip>
+                {unitTone(u) === 'ok' || unitTone(u) === 'muted' ? (
+                  // Running or cleanly exited is the norm: quiet text. Only a
+                  // failure or a unit mid-transition keeps its chip.
+                  <span className="whitespace-nowrap text-[0.75rem] text-muted-foreground">
+                    {u.active}
+                    {u.sub === '' ? '' : ` · ${u.sub}`}
+                  </span>
+                ) : (
+                  <Chip tone={unitTone(u)}>
+                    {u.active}
+                    {u.sub === '' ? '' : ` · ${u.sub}`}
+                  </Chip>
+                )}
               </li>
             ))}
           </ul>
@@ -163,9 +179,11 @@ export function GithubBoard({ g }: { g: Github }) {
               ) : (
                 <span className="inline-flex items-center gap-2">
                   {inst.account !== null && <span>{inst.account.login}</span>}
-                  <Chip tone={inst.state === 'ok' && !inst.stale ? 'ok' : 'warn'}>
-                    {inst.stale ? `${inst.state}, stale` : inst.state}
-                  </Chip>
+                  {inst.state === 'ok' && !inst.stale ? (
+                    <span className="text-muted-foreground">ok</span>
+                  ) : (
+                    <Chip tone="warn">{inst.stale ? `${inst.state}, stale` : inst.state}</Chip>
+                  )}
                 </span>
               ),
           },

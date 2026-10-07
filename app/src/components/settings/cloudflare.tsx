@@ -52,9 +52,11 @@ export function Identified({
         </>
       ) : (
         <span className="inline-flex items-center gap-2">
-          <Chip tone={live.status === 'active' || live.status === 'healthy' ? 'ok' : 'warn'}>
-            {live.status || 'unknown'}
-          </Chip>
+          {live.status === 'active' || live.status === 'healthy' ? (
+            <span className="text-[0.78rem] text-muted-foreground">{live.status}</span>
+          ) : (
+            <Chip tone="warn">{live.status || 'unknown'}</Chip>
+          )}
           <Mono>{live.name}</Mono>
         </span>
       )}
@@ -75,7 +77,7 @@ export function Token({
   if (!check.ok) return <Bad>{check.reason ?? 'rejected'}</Bad>
   return (
     <span className="inline-flex items-center gap-2">
-      <Chip tone="ok">{check.value.status ?? 'active'}</Chip>
+      <span className="text-[0.78rem] text-muted-foreground">{check.value.status ?? 'active'}</span>
       <span className="text-[0.78rem] text-subdued">
         {check.value.expiresOn === null
           ? 'no expiry'

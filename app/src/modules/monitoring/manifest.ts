@@ -23,7 +23,7 @@ export const manifest = {
       boardSpans: [8, 4, 4, 8],
       nix: 'monitoring',
     },
-    { id: 'probes', label: 'Probes', probe: 'gatus', boardSpans: [8, 4, 6, 6], nix: 'gatus' },
+    { id: 'probes', label: 'Probes', probe: 'gatus', boardSpans: [6, 6, 4, 8], nix: 'gatus' },
     {
       id: 'metrics',
       label: 'Metrics',

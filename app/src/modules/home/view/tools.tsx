@@ -2,16 +2,20 @@ import { LogBoard } from '../../../components/logs'
 import { QuietState } from '../../../components/modules/parts'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { FOOT } from '../../../components/tokens'
-import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
-import { DASH } from '../../../lib/format'
+import { FOOT, NOTE } from '../../../components/tokens'
+import { BoardGrid, Chip } from '../../../components/viz'
 import type { HomeData } from '../data'
 
 // Home › Tools: Stirling-PDF — stateless, so a status, a version and a log.
+//
+// The status is one word, so it sits in the header beside the link rather
+// than in a board of its own: a two-fact board beside a five-release changelog
+// was a short panel standing next to a tall one.
 
 type Tools = Extract<HomeData, { tab: 'tools' }>
 
 export function ToolsView({ data: d }: { data: Tools }) {
+  const behind = d.gap.behind.length
   return (
     <>
       <ServiceHead
@@ -27,46 +31,48 @@ export function ToolsView({ data: d }: { data: Tools }) {
             there is nothing here to back up.
           </>
         }
-        actions={<Open name="Stirling-PDF" host="stirling-pdf" />}
+        actions={
+          <>
+            {d.status === null ? (
+              <span className={NOTE}>health unknown</span>
+            ) : d.status === 'UP' ? (
+              <QuietState>up</QuietState>
+            ) : (
+              <Chip tone="warn">{d.status.toLowerCase()}</Chip>
+            )}
+            <Open name="Stirling-PDF" host="stirling-pdf" />
+          </>
+        }
       />
 
       <BoardGrid>
-        <Board title="Status" icon="◔" span={4}>
-          <Facts
-            list
-            rows={[
-              {
-                k: 'Health',
-                v:
-                  d.status === null ? (
-                    DASH
-                  ) : d.status === 'UP' ? (
-                    <QuietState>up</QuietState>
-                  ) : (
-                    <Chip tone="warn">{d.status.toLowerCase()}</Chip>
-                  ),
-              },
-              {
-                k: 'Latest release',
-                v:
-                  d.gap.latest === null ? (
-                    DASH
-                  ) : d.gap.behind.length === 0 ? (
-                    <QuietState>up to date</QuietState>
-                  ) : (
-                    <Chip tone="warn">{d.gap.latest} available</Chip>
-                  ),
-              },
-            ]}
-          />
-          <p className={FOOT}>
-            Stateless: documents are processed in memory and dropped, which is why this tab is a
-            version and a log and stops there. It is also why this is the one application here that
-            could be deleted and rebuilt from nothing with no loss.
-          </p>
-        </Board>
-
-        <Changelog gap={d.gap} span={8} />
+        <Changelog
+          gap={d.gap}
+          span={12}
+          aside={
+            d.gap.latest === null ? (
+              <span className={NOTE}>github</span>
+            ) : behind === 0 ? (
+              <QuietState>up to date</QuietState>
+            ) : (
+              <Chip tone="warn">{d.gap.latest} available</Chip>
+            )
+          }
+          foot={
+            <>
+              <p className={FOOT}>
+                {behind === 0
+                  ? 'What the running version shipped. Parsed from the project’s own GitHub releases and shortened; open one for the detail.'
+                  : 'Everything between the running version and the newest release, oldest at the top. Parsed from the project’s own GitHub releases and shortened; open one for the detail, and the link inside goes to the full text.'}
+              </p>
+              <p className={FOOT}>
+                Stateless: documents are processed in memory and dropped, which is why this tab is a
+                version and a log and stops there. It is also why this is the one application here
+                that could be deleted and rebuilt from nothing with no loss.
+              </p>
+            </>
+          }
+        />
 
         <LogBoard source={{ container: 'stirling-pdf' }} title="Stirling-PDF logs" />
       </BoardGrid>

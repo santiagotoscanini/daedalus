@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { NixosRelease } from '../core/settings/types'
 import type { NixosFacts } from '../host/contract/domains/site'
+import { cn } from '../lib/cn'
 import { num } from '../lib/format'
 import { builtOn, type Support } from '../lib/nixos'
 import { fetchNixosRelease } from '../server/updates'
@@ -91,7 +92,13 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
               facts.revision === null ? (
                 <span className={NOTE}>not a git input</span>
               ) : (
-                <span className={MONO}>
+                // Two tokens that wrap as tokens: the date never splits mid-string.
+                <span
+                  className={cn(
+                    MONO,
+                    'inline-flex flex-wrap items-baseline [overflow-wrap:normal] [&>*]:whitespace-nowrap',
+                  )}
+                >
                   <a
                     href={`https://github.com/NixOS/nixpkgs/commit/${facts.revision}`}
                     target="_blank"

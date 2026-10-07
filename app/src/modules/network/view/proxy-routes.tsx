@@ -9,7 +9,7 @@ import {
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
-  TABLE_ROW,
+  TABLE_ROW_DENSE,
   TableGroup,
 } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
@@ -135,9 +135,9 @@ function Group({ title, rows, site }: { title: string; rows: ProxyData['routes']
     <>
       <TableGroup title={title} note={String(rows.length)} />
       {rows.map((r) => (
-        <li key={r.host} className={cn(GRID, TABLE_ROW)}>
+        <li key={r.host} className={cn(GRID, TABLE_ROW_DENSE)}>
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-mono text-[0.8rem] text-foreground">
+            <span className="truncate font-mono text-[0.76rem] text-foreground">
               {stripBaseDomain(site, r.host)}
             </span>
             {r.disabled && <Chip tone="bad">disabled</Chip>}

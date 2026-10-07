@@ -165,7 +165,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
         </div>
 
         <Board title="Pulls since zot started" icon="↓" span={12}>
-          <BarList items={d.pulls} empty="no pulls recorded" />
+          <BarList items={d.pulls} tone="muted" empty="no pulls recorded" />
           <p className={FOOT}>
             Each app’s deploy timer pulls by tag every two minutes and restarts only when the digest
             actually moved, so these climb steadily on a box where nothing is being deployed. A flat

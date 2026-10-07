@@ -54,7 +54,9 @@ function ControllerBoard({ c }: { c: Host['controller'] }) {
       title="Controller"
       icon="⌬"
       span={8}
-      aside={c.reachable ? <Chip tone="ok">running</Chip> : <Chip tone="bad">not reachable</Chip>}
+      aside={
+        c.reachable ? <span className={NOTE}>running</span> : <Chip tone="bad">not reachable</Chip>
+      }
     >
       {c.reachable ? (
         <Facts
@@ -220,7 +222,9 @@ function PressureBoard({ d }: { d: Host }) {
 function TheBoxBoard({ d }: { d: Host }) {
   return (
     <Board title="The box" icon="▣" span={4}>
-      <div className={PART}>
+      {/* Recognition, not a catalogue plate: the photo is held small so the
+          board stands at the height of the two fact boards beside it. */}
+      <div className={cn(PART, '[&>img]:w-[clamp(64px,28%,96px)]')}>
         <PartPhoto part={PARTS.case} />
         <div className={PART_ID}>
           <strong className={PART_NAME}>{PARTS.case.name}</strong>
@@ -330,7 +334,8 @@ function GenerationsBoard({ d }: { d: Host }) {
       <ul className={LIST}>
         {[...d.generations]
           .reverse()
-          .slice(0, 6)
+          // Eight, so the list runs the height of the Controller beside it.
+          .slice(0, 8)
           .map((g) => (
             <li key={g.id} className={ROW}>
               <span className={cn(ROW_MAIN, 'tabular-nums', !g.current && 'text-subdued')}>

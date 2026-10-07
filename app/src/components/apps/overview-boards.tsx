@@ -11,7 +11,7 @@ import { useNow } from '../poll'
 import { useRootAction } from '../root-action'
 import { EMPTY } from '../tokens'
 import { Button } from '../ui/button'
-import { Board, Chip, Facts } from '../viz'
+import { Board, Facts } from '../viz'
 import { CloneButton } from '../workspace'
 import { DetectionLine } from './builds'
 import { type AppRecord, GHOST_BTN, type LoaderData } from './shared'
@@ -42,9 +42,11 @@ function shortImage(ref: string): string {
 export function PreviewBoard({
   name,
   shot,
+  lastDeploy,
 }: {
   name: string
   shot: NonNullable<Frame['deployShot']>
+  lastDeploy: Frame['lastDeploy']
 }) {
   const now = useNow(false)
   return (
@@ -52,17 +54,18 @@ export function PreviewBoard({
       title="Last deploy"
       span={4}
       aside={
-        !shot.ok ? (
-          <Chip tone="bad">page errored</Chip>
-        ) : shot.at === null ? undefined : (
+        shot.at === null ? undefined : (
           <span className="text-muted-foreground">
             <Ago at={shot.at} />
           </span>
         )
       }
     >
+      {/* The capture's own 16:10 (shot-deploy passes --viewport 1280x800), so
+          the whole page is in frame: a frame stretched to the board's height
+          cropped its sides. */}
       <a
-        className="relative block min-h-[11rem] flex-1 overflow-hidden rounded-lg border border-hairline bg-foreground/[0.04]"
+        className="relative block aspect-16/10 overflow-hidden rounded-lg border border-hairline bg-foreground/[0.04]"
         href={`/api/deploy-shot/${name}?v=${shot.v}`}
         target="_blank"
         rel="noreferrer"
@@ -80,8 +83,43 @@ export function PreviewBoard({
           loading="lazy"
         />
       </a>
+      <Facts list rows={[...lastDeployRows(lastDeploy), pageRow(shot.ok)]} />
     </Board>
   )
+}
+
+/** What the camera saw: the norm is quiet, an error is loud. */
+function pageRow(ok: boolean) {
+  return {
+    k: 'page',
+    v: ok ? (
+      <span className={QUIET}>rendered</span>
+    ) : (
+      <span className="text-danger [font-weight:550]">errored</span>
+    ),
+  }
+}
+
+/** The running digest and how the last deploy ended — on the picture's board
+    when there is one, on Deployment's otherwise. */
+function lastDeployRows(lastDeploy: Frame['lastDeploy']) {
+  return lastDeploy
+    ? [
+        {
+          k: 'running digest',
+          v: <code>{lastDeploy.digest.replace('sha256:', '').slice(0, 12)}</code>,
+        },
+        {
+          k: 'last deploy',
+          v:
+            lastDeploy.result === 'ok' ? (
+              <span className={QUIET}>ok</span>
+            ) : (
+              <span className="text-danger [font-weight:550]">{lastDeploy.result}</span>
+            ),
+        },
+      ]
+    : []
 }
 
 /** What is deployed and how it gets there. A failure is the only coloured value. */
@@ -91,8 +129,11 @@ export function DeploymentBoard({
   pullBroken,
   build,
   span,
+  withLastDeploy,
 }: {
   app: AppRecord
+  /** Off when the Last deploy board beside it carries these rows. */
+  withLastDeploy: boolean
   lastDeploy: Frame['lastDeploy']
   pullBroken: Frame['pullBroken']
   build: Extract<AppTabData, { kind: 'overview' }>['build']
@@ -128,23 +169,7 @@ export function DeploymentBoard({
               </span>
             ),
           },
-          ...(lastDeploy
-            ? [
-                {
-                  k: 'running digest',
-                  v: <code>{lastDeploy.digest.replace('sha256:', '').slice(0, 12)}</code>,
-                },
-                {
-                  k: 'last deploy',
-                  v:
-                    lastDeploy.result === 'ok' ? (
-                      <span className={QUIET}>ok</span>
-                    ) : (
-                      <span className="text-danger [font-weight:550]">{lastDeploy.result}</span>
-                    ),
-                },
-              ]
-            : []),
+          ...(withLastDeploy ? lastDeployRows(lastDeploy) : []),
           ...(pullBroken
             ? [
                 {
@@ -202,7 +227,12 @@ export function WorkspaceBoard({
             {
               k: 'repo',
               v: (
-                <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
+                <a
+                  href={`https://github.com/${repo}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-foreground hover:text-primary"
+                >
                   {repo}
                 </a>
               ),

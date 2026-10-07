@@ -1,7 +1,13 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, ServiceHead, verdictOf } from '../../../components/service-head'
-import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import {
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW_DENSE,
+} from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../../../components/viz'
@@ -168,8 +174,8 @@ function TenantsTable({ rows }: { rows: Postgres['databases'] }) {
         const cacheLow = db.cacheHitPct !== null && db.cacheHitPct < CACHE_FLOOR
         const rollbackHigh = share !== null && share > ROLLBACK_CEILING
         return (
-          <li key={db.name} className={cn(TENANT_GRID, TABLE_ROW)}>
-            <span className="truncate font-mono text-[0.8rem] text-foreground">{db.name}</span>
+          <li key={db.name} className={cn(TENANT_GRID, TABLE_ROW_DENSE)}>
+            <span className="truncate font-mono text-[0.76rem] text-foreground">{db.name}</span>
             <span
               className={cn(
                 CELL_QUIET,

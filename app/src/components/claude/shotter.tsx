@@ -300,7 +300,10 @@ function ShotRunRow({ run }: { run: ShotRun }) {
         ) : bad === null ? (
           <span className={CELL_QUIET}>clean</span>
         ) : (
-          <Chip tone="warn">issues</Chip>
+          // Most runs over a live page have something underneath, so issues is
+          // the common case: amber ink, no chip. A chip is kept for the runner
+          // dying, which is the one that is actually rare.
+          <span className="text-[0.78rem] text-warning">issues</span>
         )}
       </span>
     </li>

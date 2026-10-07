@@ -152,14 +152,22 @@ export function Chip({
   className?: string
   title?: string
 }) {
+  // `ok` is the normal case, and the normal case is quiet: a green pill on
+  // every healthy row made colour mean nothing. It keeps the pill's shape
+  // (so a column of states still lines up) in neutral ink; only a state that
+  // differs from normal is tinted.
+  const quiet = tone === 'ok' || tone === 'muted'
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full bg-[color-mix(in_oklch,var(--tone)_13%,transparent)] px-2 py-px text-[0.7rem] leading-[1.15rem] whitespace-nowrap text-(--tone) font-[550] ring-1 ring-[color-mix(in_oklch,var(--tone)_24%,transparent)] ring-inset',
+        'inline-flex items-center gap-1 rounded-full px-2 py-px text-[0.7rem] leading-[1.15rem] whitespace-nowrap font-[550] ring-1 ring-inset',
+        quiet
+          ? 'text-muted-foreground ring-hairline'
+          : 'bg-[color-mix(in_oklch,var(--tone)_13%,transparent)] text-(--tone) ring-[color-mix(in_oklch,var(--tone)_24%,transparent)]',
         className,
       )}
       title={title}
-      style={toneStyle(tone)}
+      style={quiet ? undefined : toneStyle(tone)}
     >
       {children}
     </span>

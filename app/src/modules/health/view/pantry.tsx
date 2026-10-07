@@ -2,7 +2,7 @@ import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
 import { CAPTION, FOOT, NOTE } from '../../../components/tokens'
-import { Board, BoardGrid, Measures } from '../../../components/viz'
+import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { HealthData } from '../data'
 import { gapTitle, VersionAside } from './shared'
@@ -68,20 +68,13 @@ export function PantryView({ data: d }: { data: Pantry }) {
         </Board>
 
         <Board title="Chores & tasks" icon="✓" span={4}>
-          <Measures
-            items={[
+          <Facts
+            list
+            rows={[
               { k: 'Chores tracked', v: num(d.chores.total) },
-              {
-                k: 'Chores overdue',
-                v: num(d.chores.overdue),
-                tone: (d.chores.overdue ?? 0) > 0 ? 'warn' : undefined,
-              },
+              { k: 'Chores overdue', v: <Overdue n={d.chores.overdue} /> },
               { k: 'Open tasks', v: num(d.tasks.total) },
-              {
-                k: 'Tasks overdue',
-                v: num(d.tasks.overdue),
-                tone: (d.tasks.overdue ?? 0) > 0 ? 'warn' : undefined,
-              },
+              { k: 'Tasks overdue', v: <Overdue n={d.tasks.overdue} /> },
             ]}
           />
           {listsEmpty && (
@@ -119,4 +112,9 @@ export function PantryView({ data: d }: { data: Pantry }) {
       </BoardGrid>
     </>
   )
+}
+
+/** An overdue count: text ink at zero, the warning colour only when it is not. */
+function Overdue({ n }: { n: number | null }): string | React.JSX.Element {
+  return (n ?? 0) > 0 ? <span className="text-warning">{num(n)}</span> : num(n)
 }

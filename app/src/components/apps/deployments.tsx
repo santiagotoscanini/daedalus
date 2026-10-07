@@ -24,7 +24,7 @@ type DeployRow = Extract<AppTabData, { kind: 'deployments' }>['deployments'][num
     the digest step away first; revision, result and when never do. */
 const DEPLOY_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[minmax(7rem,1fr)_6rem_minmax(0,1.5fr)_3.5rem_7rem_3.5rem_7rem]',
+  'grid-cols-[minmax(7rem,1fr)_6rem_minmax(0,1.5fr)_3.5rem_7rem_3.5rem_9.5rem]',
   '@max-[60rem]/table:grid-cols-[minmax(7rem,1fr)_6rem_minmax(0,1.5fr)_7rem]',
   '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_6rem]',
 )

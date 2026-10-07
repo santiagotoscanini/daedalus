@@ -208,7 +208,7 @@ function Outcome({ outcome }: { outcome: DeployOutcome }) {
       return <span className="text-subdued">waiting for the deploy</span>
     case 'deployed':
       return (
-        <span className={outcome.result === 'ok' ? 'text-success' : 'text-danger'}>
+        <span className={outcome.result === 'ok' ? 'text-foreground' : 'text-danger'}>
           deployed, {outcome.result}
           {outcome.httpCode !== null ? ` (HTTP ${outcome.httpCode})` : ''} at {at(outcome.at)}
         </span>

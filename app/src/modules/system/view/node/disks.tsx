@@ -175,8 +175,8 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
       })}
 
       <Board title="How these are checked" icon="✓" span={t.drives.length === 1 ? 4 : 12}>
-        <Facts
-          list={t.drives.length === 1}
+        <CheckedFacts
+          stacked={t.drives.length === 1}
           rows={
             node.os === 'windows'
               ? [
@@ -226,5 +226,27 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
 
       <NotReadable t={t} />
     </BoardGrid>
+  )
+}
+
+/**
+ * How a drive is checked: three sentences. Across the page they sit three
+ * abreast; in the narrow board beside a single drive they stack, label over
+ * sentence, at reading size rather than the figure size `Facts` gives a value.
+ */
+function CheckedFacts({ rows, stacked }: { rows: { k: string; v: string }[]; stacked: boolean }) {
+  if (!stacked) return <Facts rows={rows} />
+  return (
+    <dl className="m-0 flex flex-col">
+      {rows.map((r) => (
+        <div
+          key={r.k}
+          className="flex flex-col gap-0.5 border-hairline border-t py-2.5 first:border-t-0 first:pt-0"
+        >
+          <dt className="text-[0.75rem] text-muted-foreground">{r.k}</dt>
+          <dd className="m-0 text-[0.82rem] text-foreground leading-[1.45]">{r.v}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }

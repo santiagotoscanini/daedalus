@@ -7,7 +7,13 @@ import {
   SOURCE_NOTE,
   verdictOf,
 } from '../../../components/service-head'
-import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import {
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW_DENSE,
+} from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { CAPTION, FOOT, MONO } from '../../../components/tokens'
 import { BoardGrid, Chip } from '../../../components/viz'
@@ -107,8 +113,8 @@ function ScheduledJobsBoard({ f }: { f: JobsFacts }) {
         </li>
         {d.jobs.length === 0 && <li className={TABLE_EMPTY}>no job declared</li>}
         {d.jobs.map((j) => (
-          <li key={j.unit} className={cn(JOB_GRID, TABLE_ROW)}>
-            <span className="truncate font-mono text-[0.8rem] text-foreground" title={j.unit}>
+          <li key={j.unit} className={cn(JOB_GRID, TABLE_ROW_DENSE)}>
+            <span className="truncate font-mono text-[0.76rem] text-foreground" title={j.unit}>
               {j.unit}
             </span>
             {/* Both ways of being watched are normal and recede; a switch
@@ -192,7 +198,7 @@ function DeadManSSwitchesBoard({ f }: { f: JobsFacts }) {
         </li>
         {d.checks.length === 0 && <li className={TABLE_EMPTY}>healthchecks did not answer</li>}
         {d.checks.map((c) => (
-          <li key={c.name} className={cn(CHECK_GRID, TABLE_ROW)}>
+          <li key={c.name} className={cn(CHECK_GRID, TABLE_ROW_DENSE)}>
             <span className="truncate text-foreground">{c.name}</span>
             <span>
               {c.status === 'up' ? (
@@ -238,8 +244,8 @@ function ArmedButNeverFiredBoard({ f }: { f: JobsFacts }) {
       >
         <ul className={TABLE} aria-label="Armed but never fired">
           {d.orphaned.map((u) => (
-            <li key={u} className={cn(TABLE_ROW, 'flex items-center gap-3 px-5')}>
-              <span className="min-w-0 flex-auto truncate font-mono text-[0.8rem] text-foreground">
+            <li key={u} className={cn(TABLE_ROW_DENSE, 'flex items-center gap-3 px-5')}>
+              <span className="min-w-0 flex-auto truncate font-mono text-[0.76rem] text-foreground">
                 {u}
               </span>
               <Chip tone="bad">no check</Chip>
