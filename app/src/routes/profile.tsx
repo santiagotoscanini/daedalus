@@ -26,7 +26,7 @@ function Page() {
   const { operator, profile } = Route.useLoaderData()
   return (
     <Measure>
-      <PageHead title="Profile">
+      <PageHead fold title="Profile">
         Who you are to every app on this box. Saved to your Pocket ID account as you go — nothing
         here rebuilds.
       </PageHead>

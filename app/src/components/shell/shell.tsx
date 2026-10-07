@@ -80,7 +80,7 @@ export function Shell({ children, theme, account, modules, engineOverride }: She
       <Rail {...rail} />
       <main
         className={cn(
-          'col-start-2 min-w-0 bg-background px-[clamp(1rem,3.2vw,3rem)] pt-10 pb-28 max-rail:pt-6 max-rail:pb-32',
+          'col-start-2 min-w-0 bg-background px-[clamp(1rem,3.2vw,3rem)] pt-8 pb-28 max-rail:pt-6 max-rail:pb-32',
           // The content is a panel inset into the canvas the rail sits on,
           // one grey lighter: the rail reads as chrome, the page as the work.
           'rail:my-2 rail:mr-2 rail:min-h-[calc(100vh-1rem)] rail:rounded-[14px] rail:border rail:border-hairline rail:shadow-board',

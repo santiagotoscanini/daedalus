@@ -120,7 +120,7 @@ export function Section({
           <ExplainToggle
             open={explain.open}
             onToggle={explain.toggle}
-            className="-my-1 hidden group-has-[.explain]/card:inline-flex"
+            className="-my-1 hidden group-has-[.explain]/card:inline-flex opacity-0 group-hover/card:opacity-100"
           />
         </CardTitle>
         {description !== undefined && <CardDescription>{description}</CardDescription>}

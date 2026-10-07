@@ -75,7 +75,7 @@ function AppsPage() {
 
   return (
     <>
-      <PageHead title="Apps">
+      <PageHead fold title="Apps">
         What this box runs of its own, what lives on someone else's infrastructure, the two
         registries everything here is built out of, and the builder that makes the images.
       </PageHead>

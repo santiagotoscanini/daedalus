@@ -49,9 +49,13 @@ export function ExplainToggle({
       title={open ? 'Hide the explanation' : 'Explain this'}
       className={cn(
         'size-6 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0',
-        'text-muted-foreground/70 transition-[color,background-color] duration-150',
+        'text-muted-foreground/70 transition-[color,background-color,opacity] duration-150',
         'hover:bg-foreground/[0.06] hover:text-foreground',
         'focus-visible:outline-2 focus-visible:outline-primary-dim focus-visible:outline-offset-2',
+        // Drawn at rest only where it is needed; a caller may hide it until
+        // its panel is hovered, so focus, an open state and a touch screen
+        // (no hover to reveal it) all force it back.
+        'focus-visible:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:opacity-100',
         open && 'bg-primary/12 text-primary hover:bg-primary/18 hover:text-primary',
         className,
       )}

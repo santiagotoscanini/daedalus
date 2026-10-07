@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { cn } from '../lib/cn'
+import { ExplainToggle, useExplain } from './explain'
 
 /**
  * The frame every page opens with: a title, and one paragraph saying what
@@ -13,23 +14,39 @@ import { cn } from '../lib/cn'
 export function PageHead({
   title,
   aside,
+  fold = false,
   children,
 }: {
   title: ReactNode
   /** A count, a status, an action — set beside the title on its baseline. */
   aside?: ReactNode
+  /**
+   * Fold the lede behind an ⓘ beside the title, as a board folds its prose.
+   * For the section pages a person visits daily, where the lede is the same
+   * sentence every time; an error or a one-off page keeps it in view.
+   */
+  fold?: boolean
   /** The lede. */
   children?: ReactNode
 }) {
+  const explain = useExplain()
+  const folded = fold && !explain.open
   return (
     <>
-      <header className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <h1 className="m-0 text-[1.75rem] leading-tight tracking-[-0.032em] [font-weight:640] max-[34rem]:text-[1.45rem]">
+      <header className="mb-6 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <h1 className="m-0 text-[1.5rem] leading-tight tracking-[-0.028em] [font-weight:620] max-[34rem]:text-[1.3rem]">
           {title}
         </h1>
+        {fold && children !== undefined && (
+          <ExplainToggle open={explain.open} onToggle={explain.toggle} className="inline-flex" />
+        )}
         {aside}
       </header>
-      {children !== undefined && <Lede className="-mt-4 mb-8">{children}</Lede>}
+      {children !== undefined && !folded && (
+        <Lede className={cn('-mt-4 mb-7', fold && 'animate-in fade-in-0 duration-200')}>
+          {children}
+        </Lede>
+      )}
     </>
   )
 }

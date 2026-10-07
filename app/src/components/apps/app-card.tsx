@@ -140,14 +140,15 @@ export const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.5] text-subdu
 export const CARD_FOOT = 'mt-auto flex items-center gap-2.5 pt-0.5 [&>svg]:ml-auto'
 
 /** The exposure chip, by stage — the label included, so the row has nothing
-    left to decide. `lab` is the fourth status colour: a fact about where the
-    app is reachable, not a verdict on it. A new app's chip is dashed, the same
+    left to decide. Neutral on every stage: where an app is reachable is a
+    fact, not a verdict, and green beside the health dot read as a second
+    "healthy". A new app's chip is dashed, the same
     visual the aside cards use for "listed here, not one of the things being
     run": it is where the app WILL run. */
 export const STAGE_CHIP: Record<AppStage, { tone: Tone; className: string; label: string }> = {
-  live: { tone: 'ok', className: CHIP, label: 'public' },
+  live: { tone: 'muted', className: CHIP, label: 'public' },
   lab: {
-    tone: 'info',
+    tone: 'muted',
     className: CHIP,
     label: 'lab',
   },

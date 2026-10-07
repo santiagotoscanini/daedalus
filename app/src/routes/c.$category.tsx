@@ -173,7 +173,9 @@ function CategoryPage() {
     <>
       {/* The same lede whichever machine is picked: a second sentence for a
           node once wrapped to two lines and moved every tab below it. */}
-      <PageHead title={spec.label}>{spec.lede}</PageHead>
+      <PageHead fold title={spec.label}>
+        {spec.lede}
+      </PageHead>
 
       {spec.machinePicker === true && <MachinePicker nodes={nodes} active={machine} tab={tab} />}
 

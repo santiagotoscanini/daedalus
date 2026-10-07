@@ -81,7 +81,7 @@ export function Board({
           <ExplainToggle
             open={explain.open}
             onToggle={explain.toggle}
-            className="-my-1 hidden group-has-[.explain]/board:inline-flex"
+            className="-my-1 hidden group-has-[.explain]/board:inline-flex opacity-0 group-hover/board:opacity-100"
           />
         </h3>
         {aside !== undefined && <div className="min-w-0 text-[0.78rem]">{aside}</div>}
@@ -178,7 +178,7 @@ export function Facts({ rows, list }: { rows: { k: string; v: ReactNode }[]; lis
               'm-0',
               list === true
                 ? 'min-w-0 text-right text-[0.84rem] [font-weight:450]'
-                : 'text-[1rem] tracking-[-0.01em] tabular-nums [font-weight:540] [overflow-wrap:anywhere]',
+                : 'text-[0.9375rem] tracking-[-0.01em] tabular-nums [font-weight:520] [overflow-wrap:anywhere]',
             )}
           >
             {r.v}

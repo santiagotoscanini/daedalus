@@ -214,7 +214,7 @@ function SettingsPage() {
 
   return (
     <Measure>
-      <PageHead title="Settings">
+      <PageHead fold title="Settings">
         How this box is configured, and how it looks. What nix builds from is edited here and
         applied as a rebuild; Machines and Appearance save to this control plane at once.
       </PageHead>
