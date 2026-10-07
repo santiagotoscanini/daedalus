@@ -66,7 +66,11 @@ export function SegmentPicker<T extends string>({
   className?: string
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className={cn(SEGMENT_TRACK, 'h-8.5', className)}>
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className={cn(SEGMENT_TRACK, 'h-8.5 max-[40rem]:h-10', className)}
+    >
       {options.map((o) => {
         const off = (disabled ?? o.disabled) === true
         return (

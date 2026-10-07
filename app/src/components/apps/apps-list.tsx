@@ -91,7 +91,7 @@ export function AppsList({ data }: { data: ListData }) {
   return (
     <>
       <div className={TOOLBAR}>
-        <div className="relative max-w-[17rem] flex-[1_1_10rem]">
+        <div className="relative max-w-[17rem] flex-[1_1_10rem] max-[40rem]:max-w-none max-[40rem]:basis-full">
           <SearchIcon
             aria-hidden="true"
             className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"

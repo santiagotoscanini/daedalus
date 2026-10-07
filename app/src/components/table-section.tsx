@@ -32,7 +32,7 @@ export function TableSection({
         <span className="truncate">{title}</span>
         <ExplainToggle className="-my-1 hidden group-has-[.explain]/tsec:inline-flex" />
         {aside !== undefined && (
-          <span className="ml-auto text-[0.75rem] text-muted-foreground [font-weight:400]">
+          <span className="ml-auto text-[0.75rem] text-muted-foreground [font-weight:400] max-[40rem]:ml-0 max-[40rem]:basis-full">
             {aside}
           </span>
         )}

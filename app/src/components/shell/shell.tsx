@@ -83,7 +83,7 @@ export function Shell({ children, theme, account, modules, engineOverride }: She
           'col-start-2 min-w-0 bg-background px-[clamp(1rem,3.2vw,3rem)] pt-8 pb-12 max-rail:pt-6 max-rail:pb-12',
           // The content is a panel inset into the canvas the rail sits on,
           // one grey lighter: the rail reads as chrome, the page as the work.
-          'rail:my-2 rail:mr-2 rail:min-h-[calc(100vh-1rem)] rail:rounded-[14px] rail:border rail:border-hairline rail:shadow-board',
+          'rail:my-2 rail:mr-2 rail:min-h-[calc(100vh-1rem)] max-rail:min-h-[calc(100dvh-3rem)] rail:rounded-[14px] rail:border rail:border-hairline rail:shadow-board',
           // A whisper of the accent at the panel's head — light, not paint.
           '[background-image:radial-gradient(44rem_22rem_at_15%_-6rem,var(--glow-a),transparent_70%),radial-gradient(48rem_24rem_at_95%_-8rem,var(--glow-b),transparent_70%)] bg-no-repeat',
         )}

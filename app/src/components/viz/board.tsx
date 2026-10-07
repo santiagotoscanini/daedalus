@@ -17,7 +17,7 @@ export const GLASS =
     every size. */
 export const BOARD = cn(
   GLASS,
-  'group/board relative flex min-w-0 flex-col overflow-hidden [grid-column:span_var(--span,6)] max-[78rem]:[grid-column:span_clamp(6,calc((var(--span,6)-6)*12),12)] max-[50rem]:[grid-column:span_12]',
+  'group/board relative flex min-w-0 flex-col overflow-hidden [grid-column:span_var(--span,6)] max-[78rem]:[grid-column:span_var(--span-md,clamp(6,calc((var(--span,6)-6)*12),12))] max-[50rem]:[grid-column:span_12]',
 )
 
 /** `Board`'s header row. No rule under it: the title's weight and the
@@ -55,6 +55,7 @@ export function Board({
   icon,
   aside,
   span,
+  spanMd,
   children,
 }: {
   title: string
@@ -66,10 +67,20 @@ export function Board({
   aside?: ReactNode
   /** Columns of the 12-wide `BoardGrid`. Defaults to 6 (half width). */
   span?: 3 | 4 | 6 | 8 | 9 | 12
+  /** Between the drawer and 78rem a board is 6 or 12 wide by its `span`;
+      `spanMd={12}` says this one fills the row there — for a board that
+      would otherwise sit alone beside nothing. */
+  spanMd?: 6 | 12
   children: ReactNode
 }) {
   return (
-    <section className={BOARD} style={{ ['--span' as string]: String(span ?? 6) }}>
+    <section
+      className={BOARD}
+      style={{
+        ['--span' as string]: String(span ?? 6),
+        ...(spanMd === undefined ? {} : { ['--span-md' as string]: String(spanMd) }),
+      }}
+    >
       <header className={BOARD_HEAD}>
         {/* Sentence case at reading weight, not an ALL-CAPS eyebrow: a page
             holds eight of these, and eight tracked-out capitals read as

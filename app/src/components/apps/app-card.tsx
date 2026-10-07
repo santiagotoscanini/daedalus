@@ -61,13 +61,13 @@ export const APP_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_4.5rem_7.5rem_5rem_8.5rem]',
   '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_8.5rem]',
-  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8.5rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_auto]',
 )
 const SITE_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_5rem_8.5rem]',
   '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8.5rem]',
-  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8.5rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_auto]',
 )
 /** A cell that steps away below a laptop half-window, and one below a phone. */
 export const WIDE = '@max-[64rem]/applist:hidden'
@@ -83,7 +83,8 @@ const STRETCH =
   'text-inherit no-underline outline-none after:absolute after:inset-0 hover:no-underline'
 
 const NAME = 'flex min-w-0 items-center gap-2 text-[0.875rem] text-foreground [font-weight:560]'
-const DESC = 'm-0 truncate text-[0.78rem] text-muted-foreground/85'
+const DESC =
+  'm-0 truncate text-[0.78rem] text-muted-foreground/85 @max-[38rem]/applist:line-clamp-2 @max-[38rem]/applist:whitespace-normal'
 const MONO_CELL = 'min-w-0 truncate font-mono text-[0.72rem] text-muted-foreground'
 const QUIET = 'text-[0.78rem] text-muted-foreground tabular-nums'
 

@@ -41,9 +41,12 @@ export function TabBar<Id extends string>({
   // hint that it moves reads as broken.
   const nav = useRef<HTMLElement>(null)
   const [more, setMore] = useState(false)
+  const [before, setBefore] = useState(false)
   const measure = useCallback(() => {
     const el = nav.current
-    if (el !== null) setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+    if (el === null) return
+    setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+    setBefore(el.scrollLeft > 4)
   }, [])
   useEffect(() => {
     const el = nav.current
@@ -66,8 +69,18 @@ export function TabBar<Id extends string>({
           // Navigation is an underline on a full-width hairline; the boxed
           // segmented control is reserved for FILTERS. Drawn alike, a page's
           // sections and a list's filters read as three equal toolbars.
-          '-mb-px flex max-w-full gap-6',
-          more && '[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]',
+          '-mb-px flex min-w-0 max-w-full gap-6',
+          // Fade whichever edge has more behind it, so a half-cut tab at
+          // either end reads as scrolling, not as a glitch.
+          more &&
+            !before &&
+            '[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]',
+          !more &&
+            before &&
+            '[mask-image:linear-gradient(to_left,black_calc(100%-2rem),transparent)]',
+          more &&
+            before &&
+            '[mask-image:linear-gradient(to_right,transparent,black_2rem,black_calc(100%-2rem),transparent)]',
           // Four tabs plus a dot do not fit on a phone; scroll them rather than
           // wrapping into a second row that pushes the content down everywhere.
           'overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
