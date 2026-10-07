@@ -79,7 +79,7 @@ export const BRAND = [
 
 /** A square hit target holding one icon and nothing else. */
 export const ICON_BUTTON = [
-  'inline-flex size-8 flex-none cursor-pointer items-center justify-center',
+  'inline-flex size-8 flex-none cursor-pointer items-center justify-center max-rail:size-11',
   'rounded-[7px] border-0 bg-transparent p-0 text-muted-foreground',
   'hover:bg-foreground/[0.06] hover:text-foreground',
   'focus-visible:outline-2 focus-visible:outline-primary-dim focus-visible:outline-offset-2',

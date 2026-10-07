@@ -1,5 +1,5 @@
 import { Link, type LinkProps } from '@tanstack/react-router'
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '../lib/cn'
 import { NavIcon, type NavIconName } from './nav-icon'
 
@@ -36,14 +36,38 @@ export function TabBar<Id extends string>({
   /** A control at the row's far end — the cog a service's page wears. */
   trailing?: ReactNode
 }) {
+  // More tabs than fit: the row scrolls (a phone), so it fades at the edge that
+  // has more and brings the open tab into view — a tab cut mid-word with no
+  // hint that it moves reads as broken.
+  const nav = useRef<HTMLElement>(null)
+  const [more, setMore] = useState(false)
+  const measure = useCallback(() => {
+    const el = nav.current
+    if (el !== null) setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+  }, [])
+  useEffect(() => {
+    const el = nav.current
+    if (el === null) return
+    el.querySelector(`[data-tab="${active}"]`)?.scrollIntoView({
+      inline: 'center',
+      block: 'nearest',
+    })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [measure, active])
   return (
     <div className="mb-5 flex items-end gap-3 border-hairline border-b">
       <nav
+        ref={nav}
+        onScroll={measure}
         className={cn(
           // Navigation is an underline on a full-width hairline; the boxed
           // segmented control is reserved for FILTERS. Drawn alike, a page's
           // sections and a list's filters read as three equal toolbars.
           '-mb-px flex max-w-full gap-6',
+          more && '[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]',
           // Four tabs plus a dot do not fit on a phone; scroll them rather than
           // wrapping into a second row that pushes the content down everywhere.
           'overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
@@ -64,8 +88,9 @@ export function TabBar<Id extends string>({
             )}
             <Link
               {...linkTo(t.id)}
+              data-tab={t.id}
               className={cn(
-                'inline-flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap border-transparent border-b-2 pt-1 pb-2.5 text-[0.8125rem] text-muted-foreground no-underline transition-colors duration-100 hover:text-foreground hover:no-underline [&>svg]:opacity-70',
+                'inline-flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap border-transparent border-b-2 pt-1 pb-2.5 text-[0.8125rem] max-[40rem]:pt-2.5 max-[40rem]:pb-3 text-muted-foreground no-underline transition-colors duration-100 hover:text-foreground hover:no-underline [&>svg]:opacity-70',
                 t.id === active &&
                   'border-foreground text-foreground [font-weight:550] [&>svg]:opacity-100',
                 t.muted === true && 'opacity-55 hover:opacity-90',

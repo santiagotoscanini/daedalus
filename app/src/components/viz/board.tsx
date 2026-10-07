@@ -17,12 +17,15 @@ export const GLASS =
     every size. */
 export const BOARD = cn(
   GLASS,
-  'group/board relative flex min-w-0 flex-col overflow-hidden [grid-column:span_var(--span,6)] max-[78rem]:[grid-column:span_min(12,calc(var(--span,6)*2))] max-[50rem]:[grid-column:span_12]',
+  'group/board relative flex min-w-0 flex-col overflow-hidden [grid-column:span_var(--span,6)] max-[78rem]:[grid-column:span_clamp(6,calc((var(--span,6)-6)*12),12)] max-[50rem]:[grid-column:span_12]',
 )
 
 /** `Board`'s header row. No rule under it: the title's weight and the
     space below it are the separation, as in a well-set page. */
-export const BOARD_HEAD = 'flex min-h-11 items-center justify-between gap-3 px-5 pt-3.5 pb-0'
+export const BOARD_HEAD =
+  // Wraps: on a narrow board the right-hand reading drops under the title
+  // instead of squeezing it to an ellipsis (titles must not truncate).
+  'flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-5 pt-3.5 pb-0'
 
 /** `Board`'s body. A query container, so controls inside a board lay
     themselves out from the width they actually got: one viewport width gives
@@ -35,7 +38,9 @@ export const BOARD_BODY = '@container/board flex flex-1 flex-col gap-3 px-5 pt-3
     taller depends on live data, on the width that decides how a list wraps,
     and on whether a reader has opened a <details> — so every per-board `fill`
     opt-in was a guess about a value that changes after the guess. */
-export const BOARD_GRID = 'grid grid-cols-12 gap-4'
+// Dense between the drawer and 78rem: boards there are 6 or 12 wide, and a lone
+// half-width board pulls the next half-width one up beside it.
+export const BOARD_GRID = 'grid grid-cols-12 gap-4 max-[78rem]:[grid-auto-flow:dense]'
 
 /** A board's title. Shared with the skeleton so nothing shifts on load. */
 export const BOARD_TITLE =
@@ -76,7 +81,7 @@ export function Board({
               {isGlyph(icon) ? <Glyph name={icon} /> : icon}
             </span>
           )}
-          <span className="truncate">{title}</span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">{title}</span>
           <ExplainToggle className="-my-1 hidden group-has-[.explain]/board:inline-flex opacity-0 group-hover/board:opacity-100" />
         </h3>
         {aside !== undefined && <div className="min-w-0 text-[0.78rem]">{aside}</div>}

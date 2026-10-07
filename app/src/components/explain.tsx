@@ -58,7 +58,7 @@ export function ExplainToggle({ className, content }: { className: string; conte
           aria-expanded={open}
           aria-label="What this means"
           className={cn(
-            'size-6 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0',
+            'size-6 flex-none cursor-help items-center justify-center rounded-full border-0 bg-transparent p-0 [@media(pointer:coarse)]:size-9',
             'text-muted-foreground/70 transition-[color,background-color,opacity] duration-150',
             'hover:bg-foreground/[0.06] hover:text-foreground',
             'focus-visible:outline-2 focus-visible:outline-primary-dim focus-visible:outline-offset-2',

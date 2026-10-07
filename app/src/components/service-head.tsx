@@ -120,7 +120,7 @@ function VersionCompare({
     <InfoHint
       // Position and size only — InfoHint owns the reveal and the card chrome.
       className="inline-flex cursor-default rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      cardClassName="top-[calc(100%+0.5rem)] left-0 flex w-max max-w-[19rem] flex-col gap-2.5 px-3 py-2.5"
+      cardClassName="top-[calc(100%+0.5rem)] left-0 flex w-max max-w-[19rem] flex-col gap-2.5 px-3 py-2.5 max-[40rem]:fixed max-[40rem]:inset-x-3 max-[40rem]:top-auto max-[40rem]:bottom-3 max-[40rem]:w-auto max-[40rem]:max-w-none"
       trigger={<Chip tone={tone}>{verdict.label}</Chip>}
     >
       {rows.map((r) => (

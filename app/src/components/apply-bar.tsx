@@ -163,7 +163,7 @@ export function ApplyBar({
             <>
               <strong>Apply failed at {status.phase}.</strong> The system was rolled back to the
               previous commit.
-              <pre className="mt-1.5 mb-0 max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
+              <pre className="mt-1.5 mb-0 max-h-28 overflow-auto max-[40rem]:max-h-[34vh] whitespace-pre-wrap text-[0.74rem] text-danger">
                 {status.error}
               </pre>
             </>

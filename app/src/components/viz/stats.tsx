@@ -9,13 +9,16 @@ import { Spark } from './charts'
 /** `StatStrip`'s box. The 1px grid gap IS the divider — the container's border
     colour showing through — which a per-cell border-left cannot promise once
     cells wrap. */
-export const STAT_STRIP = `${GLASS} mb-4 grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] overflow-hidden`
+// Flex-wrap with growing cells, not a fixed grid: whatever cells land on the last
+// row stretch to fill it, so six tiles at tablet width are never five and a lonely
+// one with three quarters of the row blank.
+export const STAT_STRIP = `${GLASS} mb-4 flex flex-wrap overflow-hidden`
 
 /** One `Stat` cell. Every cell reserves the third row under the value, so a
     strip mixing cells that have a sparkline with cells that have a caption —
     or neither — keeps one baseline instead of stepping. */
 export const STAT =
-  'grid min-w-0 grid-rows-[auto_auto_1rem] content-start gap-1 px-5 pt-4 pb-4 shadow-[-1px_0_0_var(--hairline),0_-1px_0_var(--hairline)] [&>svg]:w-full'
+  'grid min-w-0 flex-[1_1_10rem] grid-rows-[auto_auto_1rem] content-start gap-1 px-5 pt-4 pb-4 shadow-[-1px_0_0_var(--hairline),0_-1px_0_var(--hairline)] [&>svg]:w-full'
 
 /**
  * The row of live readings at the top of a page — one bordered strip with

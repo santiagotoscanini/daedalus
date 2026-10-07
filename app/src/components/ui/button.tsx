@@ -33,11 +33,12 @@ const buttonVariants = cva(
         link: 'border-0 text-primary underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-7.5 gap-1.5 rounded-[8px] px-3 text-[0.78rem] has-[>svg]:px-2.5',
-        default: 'h-8.5 px-3.5 py-1.5 has-[>svg]:px-3',
+        // 40px on a phone: a fingertip is not a cursor.
+        sm: 'h-7.5 gap-1.5 rounded-[8px] px-3 text-[0.78rem] has-[>svg]:px-2.5 max-[40rem]:min-h-10',
+        default: 'h-8.5 px-3.5 py-1.5 has-[>svg]:px-3 max-[40rem]:min-h-10',
         lg: 'h-10 rounded-[10px] px-5 has-[>svg]:px-4',
-        icon: 'size-8.5',
-        'icon-sm': 'size-7 rounded-[8px]',
+        icon: 'size-8.5 max-[40rem]:size-10',
+        'icon-sm': 'size-7 rounded-[8px] max-[40rem]:size-10',
       },
     },
     defaultVariants: {

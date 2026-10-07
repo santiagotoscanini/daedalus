@@ -7,7 +7,9 @@ function Switch({ className, ...props }: ComponentProps<typeof SwitchPrimitive.R
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        'peer inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent shadow-xs outline-none transition-all',
+        'peer relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent shadow-xs outline-none transition-all',
+        // A fingertip-sized hit area around the 36x20 visual, on touch only.
+        '[@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:-inset-3 [@media(pointer:coarse)]:after:content-[""]',
         'data-[state=checked]:bg-foreground data-[state=unchecked]:bg-input',
         'focus-visible:border-primary/55 focus-visible:ring-[3px] focus-visible:ring-primary/15',
         'disabled:cursor-not-allowed disabled:opacity-50',
