@@ -733,6 +733,7 @@ export function createScene(o: Options) {
     return POSES.deploy;
   }
 
+  const tmpV = new THREE.Vector3();
 
   function applyLight(f: number, t: number) {
     // the push: in from the mouth, trail left lit; before it, a quiet idle pulse
