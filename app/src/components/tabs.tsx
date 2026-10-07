@@ -2,7 +2,6 @@ import { Link, type LinkProps } from '@tanstack/react-router'
 import { Fragment, type ReactNode } from 'react'
 import { cn } from '../lib/cn'
 import { NavIcon, type NavIconName } from './nav-icon'
-import { SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from './tokens'
 
 // The tab row every multi-tab page draws: category sub-tabs, the app detail
 // tabs, the app-list registries. One component because the row carries rules
@@ -38,13 +37,13 @@ export function TabBar<Id extends string>({
   trailing?: ReactNode
 }) {
   return (
-    <div className="mb-7 flex items-center gap-3">
+    <div className="mb-6 flex items-end gap-3 border-hairline border-b">
       <nav
         className={cn(
-          // A segmented control on glass: the row is one pill, the selected tab
-          // a lit chip inside it. Reads as "one of these" at a glance, which an
-          // underline across a full-width rule did not.
-          SEGMENT_TRACK,
+          // Navigation is an underline on a full-width hairline; the boxed
+          // segmented control is reserved for FILTERS. Drawn alike, a page's
+          // sections and a list's filters read as three equal toolbars.
+          '-mb-px flex max-w-full gap-6',
           // Four tabs plus a dot do not fit on a phone; scroll them rather than
           // wrapping into a second row that pushes the content down everywhere.
           'overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
@@ -66,8 +65,9 @@ export function TabBar<Id extends string>({
             <Link
               {...linkTo(t.id)}
               className={cn(
-                SEGMENT_ITEM,
-                t.id === active && SEGMENT_ITEM_ON,
+                'inline-flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap border-transparent border-b-2 pt-1 pb-2.5 text-[0.8125rem] text-muted-foreground no-underline transition-colors duration-100 hover:text-foreground hover:no-underline [&>svg]:opacity-70',
+                t.id === active &&
+                  'border-foreground text-foreground [font-weight:550] [&>svg]:opacity-100',
                 t.muted === true && 'opacity-55 hover:opacity-90',
               )}
               aria-current={t.id === active ? 'page' : undefined}
@@ -86,7 +86,9 @@ export function TabBar<Id extends string>({
           </Fragment>
         ))}
       </nav>
-      {trailing !== undefined && <span className="ml-auto flex-none">{trailing}</span>}
+      {trailing !== undefined && (
+        <span className="ml-auto flex-none self-center pb-1.5">{trailing}</span>
+      )}
     </div>
   )
 }

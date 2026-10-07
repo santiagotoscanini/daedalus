@@ -8,14 +8,15 @@ import { PLATFORMS } from '../../lib/external-apps'
 import { APP_STAGES, type AppStage, STAGE_LABEL } from '../../lib/stage'
 import type { fetchAppsTab } from '../../routes/apps.index'
 import { ApplyBar } from '../apply-bar'
-import { AppIcon, type AppState, StateDot } from '../controls'
-import { Button } from '../ui/button'
+import { type AppState, StateDot } from '../controls'
 import { Input } from '../ui/input'
+import { Picker } from '../ui/picker'
 import {
   APP_TABLE,
   AppRow,
   AppTableHead,
   ExternalRow,
+  GroupRow,
   PLATFORM_ICONS,
   SiteTableHead,
 } from './app-card'
@@ -82,10 +83,6 @@ export function AppsList({ data }: { data: ListData }) {
         )
       : []
 
-  // The control plane's own row carries whether it serves an icon, so the
-  // section head borrows it rather than probing again.
-  const selfHasIcon = apps.find((a) => a.name === 'daedalus')?.hasIcon ?? false
-
   const changed = [
     ...apps
       .filter((a) => !a.managedInNix && a.drift.length > 0)
@@ -119,17 +116,23 @@ export function AppsList({ data }: { data: ListData }) {
           value={state}
           onChange={setState}
           label="Filter by state"
+          // An empty state is not offered: "Issues 0" is a permanent slot for
+          // nothing. It comes back the moment it counts, or while chosen.
           options={[
-            { value: 'all', label: 'All', count: apps.length },
-            { value: 'running', label: 'Running', count: counts.running },
-            { value: 'attention', label: 'Issues', count: counts.attention },
-            { value: 'stopped', label: 'Stopped', count: counts.stopped },
-          ]}
+            { value: 'all' as const, label: 'All', count: apps.length },
+            { value: 'running' as const, label: 'Running', count: counts.running },
+            { value: 'attention' as const, label: 'Issues', count: counts.attention },
+            { value: 'stopped' as const, label: 'Stopped', count: counts.stopped },
+          ].filter((o) => o.value === 'all' || o.count > 0 || o.value === state)}
         />
-        <SegmentPicker
+        {/* Second-order, so a dropdown: one control's width, not four. */}
+        <Picker
           value={exposure}
-          onChange={setExposure}
-          label="Filter by exposure"
+          onChange={(v) => {
+            setExposure(v as 'all' | AppStage)
+          }}
+          aria-label="Filter by exposure"
+          className="h-8.5 w-auto min-w-[9.5rem] data-[size=sm]:h-8.5"
           options={[
             { value: 'all', label: 'Any exposure' },
             ...APP_STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] })).reverse(),
@@ -146,15 +149,6 @@ export function AppsList({ data }: { data: ListData }) {
             <b className="font-[560] text-foreground tabular-nums">{counts.settingUp}</b> setting up
           </span>
         )}
-        {/* The create flow is a page rather than a dialog: it makes a GitHub
-            round trip per repo it checks, and a checklist you can leave open
-            in a tab while you go fix the repo is worth more than one that
-            closes when you click outside it. On the toolbar rather than in
-            the page header — the header is shared by all four tabs, and
-            adding an app is only this one's. */}
-        <Button asChild className="ml-auto">
-          <Link to="/apps/new">Add an app</Link>
-        </Button>
       </div>
 
       <ul className={APP_TABLE} aria-label="Apps on this box">
@@ -167,27 +161,17 @@ export function AppsList({ data }: { data: ListData }) {
             No apps match that filter.
           </li>
         )}
+        {/* The control plane is a group of its own at the foot of the table.
+            It is not one of the things being managed — it is the thing doing
+            the managing, declared by hand in Nix, every control on it
+            read-only — so it is set apart rather than mixed in. */}
+        {platform.length > 0 && (
+          <GroupRow title="Control plane" note="Declared in Nix, read-only here" />
+        )}
+        {platform.map((r) => (
+          <AppRow key={r.name} row={r} />
+        ))}
       </ul>
-
-      {/* The control plane sits in its own table rather than in the list.
-          It is not one of the things being managed — it is the thing doing
-          the managing, it is declared by hand in Nix, and every control on it
-          is read-only. Mixing it in invites you to try editing it. */}
-      {platform.length > 0 && (
-        <>
-          <GroupHead
-            icon={<AppIcon name="daedalus" hasIcon={selfHasIcon} size={15} />}
-            title="Control plane"
-            sub="declared in Nix, not editable here"
-          />
-          <ul className={APP_TABLE} aria-label="Control plane">
-            <AppTableHead />
-            {platform.map((r) => (
-              <AppRow key={r.name} row={r} />
-            ))}
-          </ul>
-        </>
-      )}
 
       {/* Projects hosted off the box, one table per platform, discovered
           from GitHub Pages and Vercel (core/offbox/). A platform that could

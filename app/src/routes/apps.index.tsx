@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { AppsList } from '../components/apps/apps-list'
 import { BuilderView } from '../components/apps/builder'
 import { GuardedAwait } from '../components/error'
@@ -6,6 +6,7 @@ import { PageHead } from '../components/page'
 import { ImagesView, PackagesView } from '../components/registries'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
+import { Button } from '../components/ui/button'
 import { siteBarFields } from '../lib/module-switch'
 import { fetchBuilderTab } from '../server/builds'
 import { fetchNodesChangeFn } from '../server/nodes'
@@ -75,7 +76,22 @@ function AppsPage() {
 
   return (
     <>
-      <PageHead fold title="Apps">
+      <PageHead
+        fold
+        title="Apps"
+        // The create flow is a page rather than a dialog: it makes a GitHub
+        // round trip per repo it checks, and a checklist you can leave open
+        // in a tab while you fix the repo is worth more than one that closes
+        // when you click outside it. Only on the Apps tab — adding an app is
+        // that tab's action, not the registries'.
+        aside={
+          tab === 'apps' ? (
+            <Button asChild size="sm" className="ml-auto h-8">
+              <Link to="/apps/new">Add an app</Link>
+            </Button>
+          ) : undefined
+        }
+      >
         What this box runs of its own, what lives on someone else's infrastructure, the two
         registries everything here is built out of, and the builder that makes the images.
       </PageHead>

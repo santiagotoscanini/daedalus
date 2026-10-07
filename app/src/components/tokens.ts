@@ -89,8 +89,8 @@ export const INPUT_ROW =
    filter row, a machine picker or a scheme switch uses the same three so
    every "one of these" on the page looks like one control. */
 export const SEGMENT_TRACK =
-  'inline-flex max-w-full items-center gap-0.5 rounded-[12px] border border-hairline bg-surface p-[3px] shadow-[inset_0_1px_0_var(--hairline-hi)]'
+  'inline-flex max-w-full items-center gap-0.5 rounded-[10px] border border-hairline bg-foreground/[0.035] p-[3px]'
 export const SEGMENT_ITEM =
-  'inline-flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[9px] border-0 bg-transparent px-3 py-[0.34rem] text-[0.82rem] text-muted-foreground no-underline transition-[background-color,color,box-shadow] duration-150 hover:bg-foreground/[0.04] hover:text-foreground hover:no-underline [&>svg]:opacity-70'
+  'inline-flex flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[7px] border-0 bg-transparent px-2.5 py-[0.3rem] text-[0.8rem] text-muted-foreground no-underline transition-[background-color,color,box-shadow] duration-150 hover:bg-foreground/[0.04] hover:text-foreground hover:no-underline [&>svg]:opacity-70'
 export const SEGMENT_ITEM_ON =
   'bg-card text-foreground [font-weight:550] shadow-[inset_0_1px_0_var(--hairline-hi),0_1px_3px_color-mix(in_oklch,var(--overlay)_14%,transparent)] hover:bg-card dark:bg-foreground/[0.09] dark:hover:bg-foreground/[0.09] [&>svg]:opacity-100'

@@ -52,32 +52,32 @@ export const APP_TABLE =
 
 /** Six columns wide, four in a laptop half-window, two on a phone. */
 export const APP_GRID = cn(
-  'grid items-center gap-x-5 px-5',
-  'grid-cols-[minmax(0,1fr)_minmax(0,12rem)_5.5rem_9rem_6.5rem_8rem]',
-  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_5.5rem_9rem_8rem]',
-  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8rem]',
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_4.5rem_7.5rem_5rem_6.5rem]',
+  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_6.5rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_6.5rem]',
 )
 const SITE_GRID = cn(
-  'grid items-center gap-x-5 px-5',
-  'grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,14rem)_6.5rem_8rem]',
-  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_8rem]',
-  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8rem]',
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_5rem_6.5rem]',
+  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6.5rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_6.5rem]',
 )
 /** A cell that steps away below a laptop half-window, and one below a phone. */
 export const WIDE = '@max-[64rem]/applist:hidden'
 export const MID = '@max-[38rem]/applist:hidden'
 
 const HEAD =
-  'h-9 border-hairline border-b text-[0.72rem] text-muted-foreground [font-weight:500] [&>span:last-child]:text-right'
+  'h-[2.125rem] border-hairline border-b bg-foreground/[0.02] text-[0.72rem] text-muted-foreground [font-weight:500]'
 
 /** A row: the whole of it is the link (`after:` stretches the name's anchor). */
 export const ROW =
-  'relative min-h-[3.75rem] border-hairline border-t py-2.5 transition-colors duration-100 [&:nth-child(2)]:border-t-0 hover:bg-foreground/[0.025] has-[a:focus-visible]:bg-foreground/[0.04]'
+  'relative min-h-[3.25rem] border-hairline border-t py-2 transition-colors duration-100 [&:nth-child(2)]:border-t-0 [[data-group]+&]:border-t-0 hover:bg-foreground/[0.025] has-[a:focus-visible]:bg-foreground/[0.04]'
 const STRETCH =
   'text-inherit no-underline outline-none after:absolute after:inset-0 hover:no-underline'
 
 const NAME = 'flex min-w-0 items-center gap-2 text-[0.875rem] text-foreground [font-weight:560]'
-const DESC = 'm-0 truncate text-[0.78rem] text-muted-foreground'
+const DESC = 'm-0 truncate text-[0.78rem] text-muted-foreground/85'
 const MONO_CELL = 'min-w-0 truncate font-mono text-[0.75rem] text-muted-foreground'
 const QUIET = 'text-[0.78rem] text-muted-foreground tabular-nums'
 
@@ -95,7 +95,7 @@ function Identity({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <span className="inline-flex size-8 flex-none overflow-hidden rounded-[9px] shadow-[0_0_0_1px_var(--hairline)]">
+      <span className="relative inline-flex size-7 flex-none overflow-hidden rounded-[7px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[7px] after:shadow-[inset_0_0_0_1px_var(--hairline)]">
         {icon}
       </span>
       <div className="min-w-0">
@@ -116,15 +116,47 @@ const STATE_LABEL: Record<AppState, string> = {
   unknown: 'Unknown',
 }
 
-/** Status, at the row's end: the dot and its word. */
+/** Status: the dot and its word. The healthy word is quiet — nine identical
+    "Running"s in full ink would drown the one row that differs. */
 function Status({ state, label }: { state: AppState; label?: string }) {
   const word = label ?? STATE_LABEL[state]
   return (
-    <span className="flex min-w-0 items-center justify-end gap-2 text-[0.78rem] text-subdued">
+    <span
+      className={cn(
+        'flex min-w-0 items-center gap-2 text-[0.78rem]',
+        state === 'running' ? 'text-muted-foreground' : 'text-foreground [font-weight:500]',
+      )}
+    >
       <StateDot state={state} label={word} />
       <span className="truncate">{word}</span>
     </span>
   )
+}
+
+/** An address with its shared domain receded: the label is what differs
+    between rows; the domain is the same on every one. */
+function Host({ host, className }: { host: string; className?: string }) {
+  const dot = host.indexOf('.')
+  return (
+    <code className={cn(MONO_CELL, 'text-subdued', className)}>
+      {dot < 0 ? host : host.slice(0, dot)}
+      {dot >= 0 && <span className="text-muted-foreground/55">{host.slice(dot)}</span>}
+    </code>
+  )
+}
+
+/** A description without the name it repeats ("Argus — internet …" → "internet …"). */
+function plainDescription(name: string, desc: string | null): string | null {
+  if (desc === null) return null
+  const m = /^\s*(.+?)\s+[—·:-]\s+(.+)$/.exec(desc)
+  if (m === null || m[1]?.trim().toLowerCase() !== name.toLowerCase()) return desc
+  const rest = m[2] ?? desc
+  return rest.charAt(0).toUpperCase() + rest.slice(1)
+}
+
+/** Whether a series moved at all. */
+function varies(values: number[]): boolean {
+  return values.length > 1 && Math.max(...values) - Math.min(...values) > 0.01
 }
 
 const EXPOSURE: Record<AppStage, { icon: ReactNode; label: string; title: string }> = {
@@ -165,8 +197,8 @@ export function AppRow({ row }: { row: Row }) {
   return (
     <li className={cn(APP_GRID, ROW)}>
       <Identity
-        icon={<AppIcon name={row.name} hasIcon={row.hasIcon} size={32} />}
-        desc={row.description}
+        icon={<AppIcon name={row.name} hasIcon={row.hasIcon} size={28} />}
+        desc={plainDescription(row.name, row.description)}
         link={
           // `tab` is a required search param on the detail route, so the list
           // names the landing tab explicitly.
@@ -195,16 +227,18 @@ export function AppRow({ row }: { row: Row }) {
         }
       />
 
-      <code className={cn(MONO_CELL, WIDE)}>{row.hostname}</code>
+      <Host className={WIDE} host={row.hostname} />
 
       <span
         className={cn(
           MID,
-          'inline-flex items-center gap-1.5 text-[0.78rem] text-subdued [&>svg]:size-3.5 [&>svg]:opacity-60',
+          'inline-flex items-center gap-1.5 text-[0.78rem] [&>svg]:size-3.5 [&>svg]:opacity-70',
+          // The common case recedes; an exception gets ink and its mark.
+          row.stage === 'live' && !row.isNew ? 'text-muted-foreground/85' : 'text-subdued',
         )}
         title={row.isNew ? 'Setting up: this is where it will run' : exposure.title}
       >
-        {row.isNew ? <LoaderIcon /> : exposure.icon}
+        {row.isNew ? <LoaderIcon /> : row.stage === 'live' ? null : exposure.icon}
         {row.isNew ? 'Setting up' : exposure.label}
       </span>
 
@@ -212,15 +246,19 @@ export function AppRow({ row }: { row: Row }) {
           state, and a coloured line on every healthy app would make the one
           red line harder to find, not easier. */}
       <span className={cn(MID, 'flex min-w-0 items-center gap-2.5')}>
-        <Spark
-          values={row.status.spark}
-          tone={row.status.state === 'attention' ? 'bad' : 'muted'}
-          width={56}
-          height={16}
-        />
-        <span className={cn(QUIET, 'ml-auto whitespace-nowrap')}>
-          {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)}/min`}
+        <span className={cn(QUIET, 'w-11 flex-none text-right')}>
+          {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)}/m`}
         </span>
+        {/* A line with no movement is a ruler, not a reading: drawn only when
+            the two hours actually varied. */}
+        {varies(row.status.spark) && (
+          <Spark
+            values={row.status.spark}
+            tone={row.status.state === 'attention' ? 'bad' : 'muted'}
+            width={52}
+            height={16}
+          />
+        )}
       </span>
 
       <span className={cn(QUIET, WIDE)} title={row.deployed?.digest}>
@@ -248,8 +286,8 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
   return (
     <li className={cn(SITE_GRID, ROW)}>
       <Identity
-        icon={<AppIcon name={entry.id} hasIcon={entry.hasIcon} size={32} />}
-        desc={entry.description}
+        icon={<AppIcon name={entry.id} hasIcon={entry.hasIcon} size={28} />}
+        desc={plainDescription(entry.name, entry.description)}
         link={
           <Link to="/apps/offbox/$id" params={{ id: entry.id }} className={cn(STRETCH, 'truncate')}>
             {entry.name}
@@ -299,6 +337,19 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
       </span>
 
       <Status state={SITE_DOT[entry.state]} label={entry.state === 'live' ? 'Live' : undefined} />
+    </li>
+  )
+}
+
+/** A group inside a table: a quiet band with a name and a note, no header of its own. */
+export function GroupRow({ title, note }: { title: string; note: string }) {
+  return (
+    <li
+      data-group=""
+      className="flex h-8 items-center gap-2.5 border-hairline border-y bg-foreground/[0.02] px-5 text-[0.75rem]"
+    >
+      <span className="text-foreground [font-weight:560]">{title}</span>
+      <span className="text-muted-foreground">{note}</span>
     </li>
   )
 }

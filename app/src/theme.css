@@ -183,8 +183,9 @@
   --hairline: color-mix(in oklch, var(--foreground) 8%, transparent);
   --hairline-hi: color-mix(in oklch, var(--card) 90%, transparent);
   --chrome: color-mix(in oklch, var(--background) 72%, transparent);
-  --glow-a: color-mix(in oklch, var(--primary) 6%, transparent);
-  --glow-b: color-mix(in oklch, var(--info) 6%, transparent);
+  /* None in light: on a white panel a tint reads as a smudge, not light. */
+  --glow-a: transparent;
+  --glow-b: transparent;
   --board-shadow:
     0 0 0 0.5px color-mix(in oklch, var(--foreground) 3%, transparent),
     0 1px 2px color-mix(in oklch, var(--overlay) 4%, transparent),
