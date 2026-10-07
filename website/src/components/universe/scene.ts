@@ -251,6 +251,8 @@ export interface Options {
   items: Item[];
   mobile: boolean;
   onReady: () => void;
+  /** the text zone, in stage pixels: nothing is drawn over it */
+  keepout?: () => { l: number; t: number; r: number; b: number } | null;
 }
 
 export async function createUniverse(o: Options) {
@@ -290,7 +292,7 @@ export async function createUniverse(o: Options) {
     if (it.focus) {
       // the few in focus: near the camera, in a row that begins at the middle of the frame
       const k = fi++;
-      river.push({ x0: k * (mobile ? 22 : 27), y: (k % 2 ? 1 : -1) * (mobile ? 5 : 2.4), z: mobile ? 8 : 14, v: 1.4, par: 190, focus: true, near: 1 });
+      river.push({ x0: k * (mobile ? 22 : 27), y: (k % 2 ? 1 : -1) * (mobile ? 5 : 2.4), z: mobile ? 2 : 4, v: 1.4, par: 190, focus: true, near: 1 });
       return;
     }
     const lane = Math.floor(R() * 6);
@@ -355,7 +357,7 @@ export async function createUniverse(o: Options) {
   scene.add(cubes);
 
   // streaks behind the cubes in the river, and a few of their own on the far lanes
-  const DECOR = mobile ? 26 : 56;
+  const DECOR = mobile ? 14 : 28;
   const sGeo = new THREE.PlaneGeometry(1, 1);
   sGeo.translate(0.5, 0, 0);
   const aAlpha = new THREE.InstancedBufferAttribute(new Float32Array(N + DECOR), 1).setUsage(THREE.DynamicDrawUsage);
@@ -532,8 +534,23 @@ export async function createUniverse(o: Options) {
       P.set(lerp(rp.x, fp.x + orb.x, e), lerp(rp.y, fp.y + orb.y, e), lerp(rp.z, fp.z + orb.z, e));
       // the field's cubes are larger, so a mark still reads from where the camera ends
       const grow = lerp(1, mobile ? 2.6 : 2.5, e);
-      const base = SIZE * (r.focus ? 1.2 : 0.8 + r.near * 0.25);
-      scl[i] = base * grow * (r.focus ? lerp(1, 0.8, e) : 1);
+      const base = SIZE * (r.focus ? 0.95 : 0.78 + r.near * 0.2);
+      scl[i] = base * grow * (r.focus ? lerp(1, 0.9, e) : 1);
+      // nothing is cropped by the frame's edges in the stream, and nothing stands on the text
+      tmpV.copy(P).project(camera);
+      const dd = P.distanceTo(camPos);
+      const half = (scl[i]! / (2 * dd * Math.tan((FOV * Math.PI) / 360))) * H * 0.9;
+      const scx = (tmpV.x * 0.5 + 0.5) * W;
+      const scy = (-tmpV.y * 0.5 + 0.5) * H;
+      const edge = 1 - smooth(span(Math.max(Math.abs(scx - W / 2) + half - W / 2, 0), 0, half * 1.4)) * (1 - e);
+      let clear = 1;
+      const kz = o.keepout?.();
+      if (kz) {
+        const dx = Math.max(kz.l - (scx + half), scx - half - kz.r, 0);
+        const dy = Math.max(kz.t - (scy + half), scy - half - kz.b, 0);
+        clear = smooth(span(Math.hypot(dx, dy), 0, 60));
+      }
+      scl[i] = scl[i]! * Math.max(0.0001, edge * clear);
       // slow tumble; the cubes in focus settle toward a readable face while they cross the middle
       const centre = r.focus ? (1 - e) * (1 - smooth(span(Math.abs(P.x), 10, 46))) : 0;
       const amp = lerp(1, 0.16, centre);
@@ -544,7 +561,7 @@ export async function createUniverse(o: Options) {
 
       // light: the river lights by nearness, the field by the wave of ignition, both breathing
       const dist = P.distanceTo(camPos);
-      const riverLit = 0.25 + 0.75 * r.near * (r.focus ? 1 : 0.8);
+      const riverLit = 0.4 + 0.6 * r.near * (r.focus ? 1 : 0.8);
       const lit = riverLit * (1 - e) + e * (0.5 + 0.5 * ignite(i));
       const breath = 0.9 + 0.1 * Math.sin(t * 0.9 + phase[i]!);
       aLit.setX(i, clamp(lit * breath));
@@ -567,7 +584,7 @@ export async function createUniverse(o: Options) {
       tmpQ.identity();
       tmpM.compose(tmpV.set(P.x + scl[i]! * 0.2, P.y, P.z - 0.5), tmpQ, tmpS.set(Math.max(len, 0.001), scl[i]! * 0.34, 1));
       streaks.setMatrixAt(streakI, tmpM);
-      aAlpha.setX(streakI, len > 1 ? 0.55 * (1 - e) * (0.4 + 0.6 * r.near) : 0);
+      aAlpha.setX(streakI, len > 1 ? 0.36 * (1 - e) * (0.4 + 0.6 * r.near) : 0);
       streakI++;
     }
     for (let d = 0; d < DECOR; d++) {
@@ -577,7 +594,7 @@ export async function createUniverse(o: Options) {
       tmpQ.identity();
       tmpM.compose(tmpV.set(x, q.y, q.z), tmpQ, tmpS.set(len, 0.35 + q.v * 0.02, 1));
       streaks.setMatrixAt(streakI, tmpM);
-      aAlpha.setX(streakI, q.a * 0.7 * (1 - wG));
+      aAlpha.setX(streakI, q.a * 0.45 * (1 - wG));
       streakI++;
     }
     cubes.instanceMatrix.needsUpdate = true;

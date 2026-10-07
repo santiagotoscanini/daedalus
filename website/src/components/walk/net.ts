@@ -40,7 +40,7 @@ const GLOBAL = {
   uDof: { value: 10 },
   uFocus: { value: 200 },
   uTime: { value: 0 },
-  uBuild: { value: 0 },
+  uBuild: { value: 1 },
   uInHead: { value: 1 },
   uInHeadOn: { value: 0 },
   uInTrail: { value: 0 },

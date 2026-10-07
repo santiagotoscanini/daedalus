@@ -84,7 +84,15 @@ export function Universe() {
           url: iconUrl(s.id),
           focus: s.focus,
         }));
-        const sc = await createUniverse({ canvas: el, items, mobile, onReady: () => setReady(true) });
+        const sc = await createUniverse({ canvas: el, items, mobile, onReady: () => setReady(true),
+          keepout: () => {
+            const h = box.querySelector(".uv-head");
+            if (!h) return null;
+            const b = box.getBoundingClientRect();
+            const q = h.getBoundingClientRect();
+            return { l: q.left - b.left - 16, t: q.top - b.top - 12, r: q.right - b.left + 16, b: q.bottom - b.top + 12 };
+          },
+        });
         if (cancelled) {
           sc.dispose();
           return;

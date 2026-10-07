@@ -435,13 +435,15 @@ html {
     position: sticky;
     top: 0;
   }
+  /* The handoff: the poster is a still of the scene's first frame. The canvas stays at 0 until that frame
+   * is drawn (data-ready), eases in over it, and only then does the poster go. The labels follow. */
   .net-canvas {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     opacity: 0;
-    transition: opacity 1.2s ease;
+    transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .net[data-ready] .net-canvas {
     opacity: 1;
@@ -449,14 +451,14 @@ html {
   .net-poster {
     position: absolute;
     inset: 0;
-    transition: opacity 1.2s ease 0.1s;
-    -webkit-mask-image: radial-gradient(ellipse 70% 70% at 55% 50%, #000 40%, transparent 100%);
-    mask-image: radial-gradient(ellipse 70% 70% at 55% 50%, #000 40%, transparent 100%);
+    display: block;
+    transition: opacity 0s linear 1s;
   }
-  .net-poster svg {
+  .net-poster img {
     width: 100%;
     height: 100%;
-    transform: translateX(8%);
+    object-fit: cover;
+    object-position: 50% 50%;
   }
   .net[data-ready] .net-poster {
     opacity: 0;
@@ -480,6 +482,11 @@ html {
   }
   .net[data-mode="pinned"] .net-layer {
     display: block;
+    opacity: 0;
+  }
+  .net[data-mode="pinned"][data-ready] .net-layer {
+    opacity: 1;
+    transition: opacity 0.8s ease 0.7s;
   }
   .net-lines {
     position: absolute;
@@ -728,6 +735,22 @@ html {
       linear-gradient(180deg, var(--color-app) 0%, rgba(8, 8, 10, 0.55) 10%, transparent 26%),
       linear-gradient(0deg, var(--color-app) 0%, rgba(8, 8, 10, 0.6) 9%, transparent 24%),
       radial-gradient(ellipse 80% 75% at 50% 50%, transparent 55%, rgba(8, 8, 10, 0.7) 100%);
+  }
+  .uv[data-mode="pinned"]:not([data-ready]) .uv-head,
+  .uv[data-mode="pinned"]:not([data-ready]) .uv-legal {
+    opacity: 0;
+  }
+  .uv-head,
+  .uv-legal {
+    transition: opacity 0.8s ease 0.5s;
+  }
+  .uv[data-mode="pinned"]:not([data-ready]) .uv-head,
+  .uv[data-mode="pinned"]:not([data-ready]) .uv-legal {
+    opacity: 0;
+  }
+  .uv-head,
+  .uv-legal {
+    transition: opacity 0.8s ease 0.5s;
   }
   .uv-label {
     position: absolute;

@@ -410,43 +410,15 @@ export function Walk() {
   );
 }
 
-/** What stands in for the canvas until it has drawn, and where there is no
- * GL: the graph as a drawing. Hairlines only, the box at the middle. */
+/** What stands in for the canvas until it has drawn, and where there is no GL: a still of the
+ * scene's own first frame (public/hero-*.png, rendered from the real scene at the hero pose with
+ * nothing else on it), so the canvas fades in over the same picture and nothing changes but
+ * the light. Regenerate both when the hero pose or the scene's first frame changes. */
 function Poster() {
-  const pts: Array<[number, number, string]> = [
-    [500, 300, "box"],
-    [150, 360, "mac"],
-    [850, 370, "pc"],
-    [700, 130, "pc2"],
-    [210, 130, "gh"],
-    [500, 520, "net"],
-  ];
   return (
-    <div className="net-poster" aria-hidden>
-      <svg viewBox="0 0 1000 600" fill="none" preserveAspectRatio="xMidYMid slice">
-        {pts.slice(1).map(([x, y]) => (
-          <path
-            key={`${x}${y}`}
-            d={`M500 300 Q ${(500 + x) / 2} ${Math.min(300, y) - 70} ${x} ${y}`}
-            stroke="var(--color-accent)"
-            strokeOpacity="0.4"
-            strokeWidth="1"
-          />
-        ))}
-        {pts.map(([x, y, k]) => (
-          <g key={k}>
-            <ellipse cx={x} cy={y} rx={k === "box" ? 46 : 26} ry={k === "box" ? 18 : 10} stroke="#c9ccd6" strokeOpacity="0.45" />
-            <rect
-              x={x - (k === "box" ? 14 : 8)}
-              y={y - (k === "box" ? 26 : 22)}
-              width={k === "box" ? 28 : 16}
-              height={k === "box" ? 22 : 18}
-              stroke="#c9ccd6"
-              strokeOpacity="0.7"
-            />
-          </g>
-        ))}
-      </svg>
-    </div>
+    <picture className="net-poster" aria-hidden>
+      <source media="(max-width: 767px)" srcSet="/hero-tall.png" width="390" height="844" />
+      <img src="/hero-wide.png" width="1440" height="900" alt="" decoding="async" fetchPriority="high" />
+    </picture>
   );
 }
