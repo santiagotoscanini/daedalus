@@ -23,7 +23,7 @@ const SHOT_IMG = 'block h-[150px] w-auto rounded-lg border border-hairline bg-fo
 /* An excerpt, not the artifact: it scrolls rather than grows, and keeps the
    runner's own line breaks. */
 const SHOT_LOG =
-  'm-0 max-h-36 overflow-auto rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2 font-mono text-[0.72rem] leading-[1.5] whitespace-pre-wrap text-muted-foreground'
+  'm-0 max-h-36 overflow-auto rounded-lg bg-foreground/[0.035] px-3 py-2 font-mono text-[0.72rem] leading-[1.5] whitespace-pre-wrap text-muted-foreground'
 
 const shotUrl = (run: string, file: string) => `/api/shot-run/${run}/${file}`
 
@@ -76,7 +76,10 @@ export function ShotterView({ data }: { data: ClaudeData }) {
             is the manual.
           </>
         }
-        actions={<Chip tone="muted">no daemon — runs on demand</Chip>}
+        // A fact, not a status: one pill in a head at most, and that is the verdict.
+        actions={
+          <span className="text-[0.78rem] text-muted-foreground">no daemon — runs on demand</span>
+        }
       />
 
       {!sh.available && (

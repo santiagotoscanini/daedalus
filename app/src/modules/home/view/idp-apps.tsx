@@ -1,15 +1,16 @@
 // The registration table: five deep until asked, a usage bar per client.
 
 import { useState } from 'react'
+import { NUM_CELL } from '../../../components/modules/parts'
 import {
-  BOARD_TABLE,
-  BOARD_TABLE_HEAD,
-  BOARD_TABLE_ROW,
-  NUM_CELL,
-} from '../../../components/modules/parts'
-import { CELL_QUIET, TABLE_ROW_LINK } from '../../../components/table'
+  CELL_QUIET,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TABLE_ROW_LINK,
+  TableMore,
+} from '../../../components/table'
 import { CAPTION, EMPTY } from '../../../components/tokens'
-import { Button } from '../../../components/ui/button'
 import { Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num } from '../../../lib/format'
@@ -17,10 +18,6 @@ import type { IdpData } from '../data/signin'
 
 /** How many registrations the table shows before it is asked for the rest. */
 const APPS_SHOWN = 5
-
-/* The "show all N" toggle under the table. Left-aligned with the names: it is
-   the continuation of the list, not a footer action. */
-const BTN_MORE = 'h-8 self-start text-[0.78rem]'
 
 /* One grid for the head and every row. The bar is the comparison and gives
    way first when the board is narrow; the name truncates, its full form on
@@ -35,7 +32,7 @@ const HIDE_NARROW = '@max-[36rem]/table:hidden'
 /* The row is a <details>; its summary is the grid, so the whole line opens it. */
 const SUMMARY = cn(
   GRID,
-  'min-h-[3.25rem] cursor-pointer list-none py-2 outline-none [&::-webkit-details-marker]:hidden',
+  'min-h-11 cursor-pointer list-none py-2 outline-none [&::-webkit-details-marker]:hidden',
   'focus-visible:shadow-[inset_0_0_0_2px_var(--brand-dim)]',
 )
 const NAME = 'flex min-w-0 items-center gap-2 text-[0.84rem] text-foreground [font-weight:520]'
@@ -46,7 +43,7 @@ const MARK =
 /* The usage bar: the list is ordered by recency, so volume is drawn here. */
 const TRACK = 'block h-1.5 overflow-hidden rounded-full bg-foreground/[0.07]'
 const FILL =
-  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none'
+  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-muted-foreground opacity-70 motion-reduce:animate-none'
 
 /* The opened row: who went in, as a nested list indented under the name. */
 const BODY = 'flex flex-col gap-2 pr-5 pb-4 pl-10'
@@ -70,32 +67,27 @@ export function AppList({ clients, max }: { clients: IdpData['clients']; max: nu
   const rest = clients.length - APPS_SHOWN
 
   return (
-    <>
-      <ul className={BOARD_TABLE}>
-        <li className={cn(GRID, BOARD_TABLE_HEAD)}>
-          <span>{all ? 'Every registration' : `Last ${String(APPS_SHOWN)} used`}</span>
-          <span className={HIDE_NARROW}>Use</span>
-          <span className={NUM_CELL}>Opens</span>
-          <span className={NUM_CELL}>Last opened</span>
-        </li>
-        {shown.map((c) => (
-          <AppRow key={c.id} c={c} max={max} />
-        ))}
-      </ul>
+    <ul className={TABLE}>
+      <li className={cn(GRID, TABLE_HEAD)}>
+        <span>{all ? 'Every registration' : `Last ${String(APPS_SHOWN)} used`}</span>
+        <span className={HIDE_NARROW}>Use</span>
+        <span className={NUM_CELL}>Opens</span>
+        <span className={NUM_CELL}>Last opened</span>
+      </li>
+      {shown.map((c) => (
+        <AppRow key={c.id} c={c} max={max} />
+      ))}
       {rest > 0 && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={BTN_MORE}
-          onClick={() => {
+        <TableMore
+          open={all}
+          onToggle={() => {
             setAll(!all)
           }}
-        >
-          {all ? 'Show fewer' : `Show all ${String(clients.length)}`}
-        </Button>
+          more={`Show all ${String(clients.length)}`}
+          less="Show fewer"
+        />
       )}
-    </>
+    </ul>
   )
 }
 
@@ -116,7 +108,7 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
   const idle = c.used === 0
 
   return (
-    <li className={cn(BOARD_TABLE_ROW, TABLE_ROW_LINK, 'py-0')}>
+    <li className={cn(TABLE_ROW, TABLE_ROW_LINK, 'py-0')}>
       <details className="group/app">
         <summary className={SUMMARY}>
           <span className={NAME}>

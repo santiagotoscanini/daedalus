@@ -53,25 +53,36 @@ const EXPOSURE = [
 export function ServiceSettingsButton({
   ids,
   size = 'sm',
+  label,
 }: {
   ids: readonly string[]
   size?: 'sm' | 'xs'
+  /** Draw a labelled outline button instead of the bare cog — for an empty
+      state, where the switch is the one thing to do. */
+  label?: string
 }) {
   const [open, setOpen] = useState(false)
   if (ids.length === 0) return null
   return (
     <ServiceSettingsDialog ids={ids} open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className={GHOST_BTN}
-          aria-label={`Settings for ${ids.join(', ')}`}
-          title={`Settings for ${ids.join(', ')}`}
-        >
-          <SettingsIcon className={size === 'xs' ? 'size-[0.95rem]' : 'size-[1.05rem]'} />
-        </Button>
+        {label !== undefined ? (
+          <Button type="button" variant="outline" size="sm">
+            <SettingsIcon />
+            {label}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={GHOST_BTN}
+            aria-label={`Settings for ${ids.join(', ')}`}
+            title={`Settings for ${ids.join(', ')}`}
+          >
+            <SettingsIcon className={size === 'xs' ? 'size-[0.95rem]' : 'size-[1.05rem]'} />
+          </Button>
+        )}
       </Dialog.Trigger>
     </ServiceSettingsDialog>
   )

@@ -56,11 +56,11 @@ export const CONTROL_H = 'h-8 py-0 data-[size=default]:h-8'
 
 /**
  * The inner tile a disclosed form, an armed confirm or a sub-list sits in
- * inside a panel: 12px, a hairline, the faintest fill — one radius step inside
+ * inside a panel: 12px and a faint fill, no border of its own (a bordered box
+ * inside a bordered panel is one frame too many) — one radius step inside
  * the panel's 16px, so it reads as part of it and not as a second card.
  */
-export const INSET =
-  'flex flex-col gap-3 rounded-xl border border-hairline bg-foreground/[0.02] p-4'
+export const INSET = 'flex flex-col gap-3 rounded-xl bg-foreground/[0.035] p-4'
 
 /** A section's panel: the house table's frame, so a form and a list share one surface. */
 const FRAME = cn(TABLE, 'flex flex-col')
@@ -82,7 +82,7 @@ export function Band({ children, className }: { children: ReactNode; className?:
 }
 
 const ROW_GRID = cn(
-  'grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] items-baseline gap-x-8',
+  'grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] items-baseline gap-x-6',
   'max-[40rem]:grid-cols-1 max-[40rem]:gap-y-1.5',
 )
 
@@ -210,7 +210,7 @@ export function Section({
           )}
         </h2>
         {description !== undefined && (
-          <div className="max-w-[72ch] text-[0.8rem] text-muted-foreground leading-relaxed">
+          <div className="max-w-[640px] text-[0.8rem] text-muted-foreground leading-relaxed">
             {description}
           </div>
         )}
@@ -231,12 +231,16 @@ export function Mono({ children, className }: { children: ReactNode; className?:
 /** A stated value in monospace, or an honest "not set". */
 export function Value({ v, unit }: { v: string | null | undefined; unit?: string }) {
   if (v === null || v === undefined || v === '') return <Unset />
-  return (
-    <Mono>
-      {v}
-      {unit !== undefined && <span className="text-muted-foreground"> {unit}</span>}
-    </Mono>
-  )
+  // A number with its unit is a quantity, not an identifier: no monospace.
+  if (unit !== undefined) {
+    return (
+      <span className="tabular-nums">
+        {v}
+        <span className="text-muted-foreground"> {unit}</span>
+      </span>
+    )
+  }
+  return <Mono>{v}</Mono>
 }
 
 /** A live value still being asked for. */
@@ -273,7 +277,9 @@ export function Commit({ rev, subject, at }: { rev: string; subject?: string; at
         <span className="text-[0.78rem] text-subdued [overflow-wrap:anywhere]">{subject}</span>
       )}
       {at !== undefined && at !== '' && (
-        <span className="text-[0.72rem] text-muted-foreground">{<When at={at} />}</span>
+        <span className="whitespace-nowrap text-[0.72rem] text-muted-foreground">
+          {<When at={at} />}
+        </span>
       )}
     </Stack>
   )

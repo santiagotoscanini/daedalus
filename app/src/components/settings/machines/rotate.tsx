@@ -85,7 +85,7 @@ export function RotateKey({ rotating }: { rotating: boolean }) {
   return (
     <ArmedConfirm
       ms={ARM_MS}
-      className={INSET}
+      className={cn(INSET, 'basis-full')}
       costClassName={NOTE_SHOWN}
       noteClassName={ASIDE}
       cost="The controller makes a new key now and serves both for the grace period. Every machine that connects in that time is handed the old key's signed statement, re-pins itself and reconnects under the new key — nothing to do on it. A machine that stays off the whole time is refused once the old key retires, until you re-run its install line there. The install lines below pin the new key from the moment you confirm."

@@ -3,18 +3,18 @@ import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-hea
 import { Button } from '../../../components/ui/button'
 import { BoardGrid } from '../../../components/viz'
 import type { IdpData } from '../data/signin'
-import { AppsBoard, DeclaredBoard, LogsBoard, SigningInBoard } from './idp-boards'
-import { DevicesBoard, WhoBoard } from './idp-who'
+import { AppsSection, DeclaredSection, LogsBoard, SigningInBoard } from './idp-boards'
+import { AccountsSection, DevicesSection, GroupsSection } from './idp-who'
 
 /**
  * Pocket ID: who can get in, and who did. The audit log is the panel — see
  * `loadIdp` on why it is the only record of a sign-in.
  *
- * Read top down: how much signing in happened and who has an account (the
- * two readings), then the applications it opened (the table the page is
- * for), then the two lists that only matter when they hold a surprise — a
- * device nobody recognises, a client nothing declares — then the releases
- * and the log.
+ * Read top down: how much signing in happened (the chart), who has an
+ * account, the groups and the devices that hold a key, then the applications
+ * it opened (the table the page is for), then the list that only matters when
+ * it holds a surprise — a client nothing declares — then the releases and the
+ * log.
  */
 export function IdpView({ data: d }: { data: IdpData }) {
   const { window: w } = d
@@ -56,7 +56,7 @@ export function IdpView({ data: d }: { data: IdpData }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href={d.url} target="_blank" rel="noreferrer">
               Open Pocket ID ↗
             </a>
@@ -72,13 +72,15 @@ export function IdpView({ data: d }: { data: IdpData }) {
 
       <BoardGrid>
         <SigningInBoard d={d} w={w} />
-        <WhoBoard d={d} />
 
-        <AppsBoard d={d} shared={shared} idle={idle} max={max} />
+        <AccountsSection d={d} />
+        <GroupsSection d={d} />
+        <DevicesSection d={d} />
 
-        <DevicesBoard d={d} />
+        <AppsSection d={d} shared={shared} idle={idle} max={max} />
+
         {/* The join nothing else can make — see `IdpData['nix']`. */}
-        <DeclaredBoard d={d} />
+        <DeclaredSection d={d} />
 
         <Changelog gap={d.gap} span={12} />
 

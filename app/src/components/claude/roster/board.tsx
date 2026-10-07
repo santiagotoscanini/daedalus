@@ -20,11 +20,11 @@ import { countByState, type RosterEntry, sessionRows } from '../../../lib/claude
 import { num } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { ARM_MS } from '../../armed-confirm'
-import { TableGroup } from '../../table'
-import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE } from '../../tokens'
+import { TABLE, TableGroup } from '../../table'
+import { TableSection } from '../../table-section'
+import { CAPTION, EMPTY, FOOT, MONO } from '../../tokens'
 import { useArmedKey } from '../../use-armed'
 import { useVerbRequest } from '../../verb-request'
-import { Board } from '../../viz'
 import { CycleSessionsControl } from '../controls/cycle-sessions'
 import { RosterRow } from './row'
 import { STATE_GROUP } from './tones'
@@ -87,15 +87,12 @@ export function RosterBoard({
   })
 
   return (
-    <Board
+    // A list, so its heading stands outside the frame like every other table
+    // on the page, and the rows run edge to edge inside it.
+    <TableSection
+      className="mt-6"
       title="Session roster"
-      icon="panels"
-      span={12}
-      aside={
-        <span className={NOTE}>
-          {missing !== null && rows.length === 0 ? 'no roster yet' : populationLine(rows)}
-        </span>
-      }
+      aside={missing !== null && rows.length === 0 ? 'no roster yet' : populationLine(rows)}
     >
       {/* Without a roster the connected sessions (from the report) are still
           drawn; what is missing is the rest — transcripts, agents, verbs. */}
@@ -116,7 +113,7 @@ export function RosterBoard({
           </p>
         )
       ) : (
-        <ul className={LIST}>
+        <ul className={TABLE}>
           {shown.map((r, i) => [
             // A band where the population changes: the rows arrive sorted by
             // state, so each group is named once instead of a chip per row.
@@ -125,7 +122,6 @@ export function RosterBoard({
                 key={`g-${r.state}`}
                 title={`${STATE_GROUP[r.state].title} · ${num(counts[r.state])}`}
                 note={STATE_GROUP[r.state].note}
-                className="-mx-5"
               />
             ),
             <RosterRow
@@ -204,7 +200,7 @@ export function RosterBoard({
         this board can honestly say: <b>resumable</b> means there is something to pick up, not that
         it finished.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 

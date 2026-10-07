@@ -70,7 +70,7 @@ export function ShelfmarkPage({ d }: { d: Downloaders }) {
               key: `${j.title}-${String(i)}`,
               name: j.title,
               pct: j.pct,
-              tone: j.state === 'error' ? 'bad' : 'accent',
+              tone: j.state === 'error' ? 'bad' : 'muted',
               active: j.state === 'downloading',
               // An error is the state to read; the rest are the machine working.
               detail:

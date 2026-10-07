@@ -81,7 +81,7 @@ export function ResolverView({
         }
         actions={
           admin !== null && (
-            <Button asChild size="sm">
+            <Button asChild size="sm" variant="outline">
               <a href={`${admin}/`} target="_blank" rel="noreferrer">
                 Open the admin ↗
               </a>
@@ -267,7 +267,6 @@ function ResolverItself({ d }: { d: Resolver }) {
             value: t.value,
             display: compact(t.value),
           }))}
-          tone="info"
           empty="no query types reported"
         />
         <p className={FOOT}>

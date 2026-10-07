@@ -10,9 +10,10 @@ import { MODEL_GRID, ModelRow, NARROW, NARROWEST } from './model-row'
 
 /* ── the model table ──────────────────────────────────────────────────── */
 
-/* Only present mid-download, so it is allowed to be loud. */
+/* Only present mid-download, so it stands above the table — tinted, not coloured. */
 const DOWNLOADS = 'm-0 mb-3 flex list-none flex-col gap-1 p-0'
-const DOWNLOAD = 'flex gap-2.5 rounded-lg bg-primary/10 px-3 py-1.5 text-[0.75rem] text-subdued'
+const DOWNLOAD =
+  'flex gap-2.5 rounded-lg bg-foreground/[0.04] px-3 py-1.5 text-[0.75rem] text-subdued'
 
 /* Build numbers for the runtimes named on the models. One line: that is all
    they are worth once the runtime itself is stated per model. */
@@ -167,7 +168,10 @@ export function ModelsBoard({ m }: { m: ProviderMachine }) {
                     <span className={MONO}>{b.version ?? DASH}</span>
                   ) : (
                     <a
-                      className={cn(MONO, 'text-muted-foreground no-underline hover:text-primary')}
+                      className={cn(
+                        MONO,
+                        'text-muted-foreground no-underline hover:text-foreground',
+                      )}
                       href={b.url}
                       target="_blank"
                       rel="noreferrer"
@@ -204,7 +208,7 @@ export function ModelsBoard({ m }: { m: ProviderMachine }) {
           {downloads.map((d) => (
             <li key={d.model} className={DOWNLOAD}>
               <span>{d.model}</span>
-              <span className={cn(MONO, 'ml-auto text-primary')}>
+              <span className={cn(MONO, 'ml-auto text-foreground')}>
                 {d.status}
                 {d.percent === null ? '' : ` · ${num(d.percent)}%`}
               </span>
@@ -214,7 +218,7 @@ export function ModelsBoard({ m }: { m: ProviderMachine }) {
       )}
 
       <ul className={TABLE} aria-label={`Models on ${m.name}`}>
-        <ModelHead />
+        {groups.length > 0 && <ModelHead />}
         {groups.length === 0 ? (
           <li className={TABLE_EMPTY}>
             {m.reachable ? 'The provider lists no models.' : 'Unknown until it answers.'}

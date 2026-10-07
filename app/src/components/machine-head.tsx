@@ -15,6 +15,11 @@ export const OS_MARK: Record<string, { src: string; invert: boolean }> = {
   linux: { src: '/icon-linux.svg', invert: true },
 }
 
+/* The compact strip: a caption that hugs the picker above it, and sits flush
+   when the picker draws it in its own identity slot (`nav` ancestor). */
+const COMPACT =
+  'm-0 -mt-2 mb-4 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8rem] text-muted-foreground leading-snug [nav_&]:m-0'
+
 /**
  * The strip above every System tab: the machine, its OS, and how it is.
  *
@@ -30,13 +35,31 @@ export function HeadStrip({
   chip,
   aside,
   line,
+  compact,
 }: {
   mark: { src: string; invert: boolean } | undefined
   name: string
   chip?: { label: string; tone: Tone }
   aside?: ReactNode
   line: ReactNode
+  /**
+   * One quiet line under (or, in its `identity` slot, beside) the machine
+   * picker: the picker already shows the mark and the name is the item it has
+   * selected, so the strip stops being a third level of navigation and
+   * becomes the picked machine's caption. System's heads use it.
+   */
+  compact?: boolean
 }) {
+  if (compact === true) {
+    return (
+      <p className={COMPACT}>
+        <span className="text-foreground [font-weight:520]">{name}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">{line}</span>
+        {chip !== undefined && <Chip tone={chip.tone}>{chip.label}</Chip>}
+        {aside !== undefined && <span>{aside}</span>}
+      </p>
+    )
+  }
   return (
     // The bottom margin matches HeadStripSkeleton's, so the tabs do not move on load.
     <div className="mb-[1.1rem] flex min-h-11 items-center gap-3 max-[44rem]:flex-wrap">

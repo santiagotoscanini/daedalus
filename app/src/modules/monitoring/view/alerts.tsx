@@ -3,7 +3,7 @@ import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
 import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW_DENSE } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
-import { CAPTION, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, since } from '../../../lib/format'
@@ -42,8 +42,8 @@ export function AlertsView({ data: d }: { data: Alerts }) {
       <BoardGrid>
         <Panel f={f} />
 
-        <Board title="Rules by folder" icon="rows" span={4}>
-          <BarList items={d.byFolder} tone="info" empty="no rules" />
+        <Board title="Rules by folder" icon="rows" span={6}>
+          <BarList items={d.byFolder} empty="no rules" />
           <p className={FOOT}>
             Folders are the provisioning files in{' '}
             <span className={MONO}>assets/provisioning/alerting/</span>. UI edits do not survive.
@@ -58,8 +58,7 @@ export function AlertsView({ data: d }: { data: Alerts }) {
 
         <WhereAnAlertGoesBoard f={f} />
 
-        {/* Beside the other two when the all-clear line leaves a full row of three. */}
-        <DeliberatelySilentBoard span={d.active.length === 0 ? 4 : 8} />
+        <DeliberatelySilentNote />
 
         <Panel2 f={f} />
 
@@ -101,7 +100,7 @@ function Panel({ f }: { f: AlertsFacts }) {
     <Board
       title="Firing now"
       icon="⚑"
-      span={8}
+      span={12}
       aside={<span className={NOTE}>{num(d.rules)} rules</span>}
     >
       <ul className={LIST}>
@@ -128,7 +127,7 @@ function Panel({ f }: { f: AlertsFacts }) {
 function WhereAnAlertGoesBoard({ f }: { f: AlertsFacts }) {
   const { d } = f
   return (
-    <Board title="Where an alert goes" icon="✉" span={4}>
+    <Board title="Where an alert goes" icon="✉" span={6}>
       <Facts
         rows={[
           { k: 'Contact points', v: num(d.delivery.contactPoints) },
@@ -141,27 +140,6 @@ function WhereAnAlertGoesBoard({ f }: { f: AlertsFacts }) {
         A firing rule reaches a person by email through the same relay smartd and every{' '}
         <span className={MONO}>OnFailure</span> unit use. There is no phone alert on this box. The
         escalation path is a mailbox.
-      </p>
-    </Board>
-  )
-}
-
-function DeliberatelySilentBoard({ span }: { span: 4 | 8 }) {
-  return (
-    <Board title="Deliberately silent" icon="🔇" span={span}>
-      {/* Not a fault, and the page has to say so — a muted alert path and an
-        alert path that was never built look identical from here. */}
-      <p className={CAPTION}>
-        Every Home Assistant alert path on this box is <b>switched off on purpose</b>, indefinitely.
-        Nothing above will ever mention Home Assistant while that holds, and a quiet board is not
-        evidence that it is well.
-      </p>
-      <p className={FOOT}>
-        The one that used to fire was the television being turned off, so{' '}
-        <span className={MONO}>media_player</span> and <span className={MONO}>remote</span> are
-        excluded. The 25 Tuya lights sitting unavailable in the floor are genuinely not healthy,
-        which is why the entity-count rule could not be re-armed with a higher threshold. Grep{' '}
-        <span className={MONO}>HA-MUTED</span> in the configuration checkout to find every switch.
       </p>
     </Board>
   )
@@ -208,13 +186,12 @@ function Panel2({ f }: { f: AlertsFacts }) {
             {
               k: 'Failures, 30d',
               v:
-                d.mail.failed30d === null ? (
-                  DASH
-                ) : d.mail.failed30d > 0 ? (
-                  <span className="text-warning">{num(d.mail.failed30d)}</span>
-                ) : (
-                  'none'
-                ),
+                d.mail.failed30d === null
+                  ? DASH
+                  : d.mail.failed30d > 0
+                    ? // Plain: the header chip already says it in amber, once.
+                      num(d.mail.failed30d)
+                    : 'none',
             },
           ]}
         />
@@ -278,7 +255,10 @@ function FailedSendsTable({ f }: { f: AlertsFacts }) {
             <span className="truncate font-mono text-[0.76rem] text-foreground" title={x.unit}>
               {x.unit}
             </span>
-            <span className={cn(CELL_QUIET, 'err truncate text-danger/90')} title={x.error}>
+            <span
+              className={cn(CELL_QUIET, 'err truncate', mailFailing && 'text-danger/90')}
+              title={x.error}
+            >
               {x.error}
             </span>
             <span className={cn(CELL_QUIET, 'text-right')}>{since(x.agoSeconds)}</span>
@@ -286,5 +266,24 @@ function FailedSendsTable({ f }: { f: AlertsFacts }) {
         ))}
       </ul>
     </TableSection>
+  )
+}
+
+/**
+ * The muted Home Assistant paths, as an inline note rather than a card: it is
+ * a standing fact about what this page will never show, not a reading.
+ */
+function DeliberatelySilentNote() {
+  return (
+    // Not a fault, and the page has to say so — a muted alert path and an
+    // alert path that was never built look identical from here.
+    <p
+      className="col-span-12 m-0 max-w-[40rem] px-1 text-[0.8rem] leading-[1.55] text-muted-foreground"
+      title="The one that used to fire was the television being turned off, so media_player and remote are excluded. The 25 Tuya lights sitting unavailable are genuinely not healthy, which is why the entity-count rule could not be re-armed with a higher threshold. Grep HA-MUTED in the configuration checkout to find every switch."
+    >
+      <span className="text-subdued [font-weight:560]">Deliberately silent.</span> Every Home
+      Assistant alert path on this box is switched off on purpose, indefinitely. Nothing here will
+      mention Home Assistant while that holds, and a quiet page is not evidence that it is well.
+    </p>
   )
 }

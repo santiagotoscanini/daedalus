@@ -9,7 +9,6 @@ import { SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from '../tokens'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
-import { Chip } from '../viz'
 import { Band, CONTROL_H, ERROR_NOTE, INSET, Mono, NOTE, NOTE_SHOWN, Section } from './shared'
 
 // Minting and revoking the credentials that reach /mcp.
@@ -78,7 +77,7 @@ export function McpTokens({ tokens }: { tokens: McpTokenRow[] }) {
                 <p className="m-0 text-[0.84rem] [font-weight:560]">
                   Copy this now. It is not stored and cannot be shown again.
                 </p>
-                <Mono className="block break-all rounded-lg border border-hairline bg-foreground/[0.05] px-3 py-2 select-all">
+                <Mono className="block break-all rounded-lg bg-foreground/[0.06] px-3 py-2 select-all">
                   {minted.token}
                 </Mono>
                 <p className={NOTE_SHOWN}>
@@ -192,7 +191,7 @@ const STEP = '@max-[52rem]/table:hidden'
 
 /**
  * One token. A live read token is the norm and stays quiet; a write token
- * wears its scope, because it can change the box; a revoked one recedes whole.
+ * says its scope in ink, because it can change the box; a revoked one recedes whole.
  */
 function TokenRow({ t, busy, onRevoke }: { t: McpTokenRow; busy: boolean; onRevoke: () => void }) {
   const revoked = t.revokedAt !== null
@@ -210,15 +209,15 @@ function TokenRow({ t, busy, onRevoke }: { t: McpTokenRow; busy: boolean; onRevo
         {revoked ? (
           <span className={CELL_QUIET}>revoked</span>
         ) : t.scope === 'write' ? (
-          <Chip tone="warn">write</Chip>
+          <span className="text-[0.78rem] text-foreground">write</span>
         ) : (
           <span className={CELL_QUIET}>{t.scope}</span>
         )}
       </span>
-      <span className={cn(CELL_QUIET, STEP)}>
+      <span className={cn(CELL_QUIET, STEP, 'whitespace-nowrap')}>
         <When at={t.createdAt} />
       </span>
-      <span className={CELL_QUIET}>
+      <span className={cn(CELL_QUIET, 'whitespace-nowrap')}>
         {t.lastUsedAt === null ? 'never used' : <When at={t.lastUsedAt} />}
       </span>
       <span className="text-right">

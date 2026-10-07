@@ -84,13 +84,15 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           }
         >
           <ul className={TABLE} aria-label="Recent requests">
-            <li aria-hidden="true" className={cn(REQ_GRID, TABLE_HEAD)}>
-              <span>Title</span>
-              <span>Status</span>
-              <span className={WIDE}>Kind</span>
-              <span className={WIDE}>Asked by</span>
-              <span className="text-right">Asked</span>
-            </li>
+            {d.requests.length > 0 && (
+              <li aria-hidden="true" className={cn(REQ_GRID, TABLE_HEAD)}>
+                <span>Title</span>
+                <span>Status</span>
+                <span className={WIDE}>Kind</span>
+                <span className={WIDE}>Asked by</span>
+                <span className="text-right">Asked</span>
+              </li>
+            )}
             {d.requests.length === 0 ? (
               <li className={TABLE_EMPTY}>Nothing has been requested.</li>
             ) : (
@@ -102,7 +104,9 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
                     {r.kind === 'tv' ? 'series' : 'film'}
                   </span>
                   <span className={cn(CELL_QUIET, WIDE, 'truncate')}>{r.by}</span>
-                  <span className={cn(CELL_QUIET, 'text-right')}>{daysAgo(r.ageDays)}</span>
+                  <span className={cn(CELL_QUIET, 'whitespace-nowrap text-right')}>
+                    {daysAgo(r.ageDays)}
+                  </span>
                 </li>
               ))
             )}

@@ -112,15 +112,12 @@ export function ImageRow({
     <li
       className={
         table === undefined
-          ? undefined
+          ? 'border-hairline border-t first:border-t-0'
           : cn(TABLE_ROW, 'min-h-0 py-0 [&:has(details[open])]:bg-foreground/[0.012]')
       }
     >
       <details
-        className={cn(
-          'group',
-          table === undefined && 'overflow-hidden rounded-xl border border-hairline',
-        )}
+        className={cn('group')}
         onToggle={(e) => {
           // A failed read is not cached: closing and reopening asks again.
           if (!e.currentTarget.open || (notes !== null && notes.error === null) || !r.hasNotes)
@@ -135,7 +132,7 @@ export function ImageRow({
             })
         }}
       >
-        <summary className={cn(SUMMARY, table === undefined && 'min-h-11 px-3')}>
+        <summary className={cn(SUMMARY, table === undefined && 'min-h-11 px-0.5')}>
           <span className="flex min-w-0 items-center">
             <span aria-hidden="true" className={CARET} />
             <span className={CELL_NAME}>{r.container}</span>
@@ -178,9 +175,7 @@ export function ImageRow({
         <div
           className={cn(
             'flex flex-col gap-3',
-            table === undefined
-              ? 'border-hairline border-t px-3 pt-3 pb-3'
-              : 'pt-1 pr-5 pb-5 pl-10',
+            table === undefined ? 'px-0.5 pt-1 pb-3 pl-5.5' : 'pt-1 pr-5 pb-5 pl-10',
           )}
         >
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />

@@ -1,10 +1,11 @@
 // One machine in full: its head, its actions, its models and what it offers.
 
 import { LogBoard, type LogNeighbour } from '../../../../components/logs'
-import { HeadStrip, OS_MARK, WipBoard } from '../../../../components/machine-head'
-import { FOOT, MONO } from '../../../../components/tokens'
+import { HeadStrip, OS_MARK } from '../../../../components/machine-head'
+import { CAPTION, FOOT, MONO } from '../../../../components/tokens'
 import { Button } from '../../../../components/ui/button'
-import { BoardGrid, Measures } from '../../../../components/viz'
+import { BoardGrid } from '../../../../components/viz'
+import { cn } from '../../../../lib/cn'
 import type { ProviderMachine, ProvidersData } from '../../data/providers'
 import { LifecycleBoard } from './lifecycle'
 import { ModelsBoard } from './models'
@@ -41,7 +42,7 @@ function OpenProvider({ m }: { m: ProviderMachine }) {
   const open = m.reachable ? m.ui : null
   if (open === null) return null
   return (
-    <Button asChild size="sm" className="mt-1.5 flex-none">
+    <Button asChild size="sm" variant="outline" className="mt-1.5 flex-none">
       <a href={open} target="_blank" rel="noreferrer">
         Open {m.kindName} ↗
       </a>
@@ -96,18 +97,13 @@ export function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersDa
         {m.machine !== 'box' && m.kind === 'lemonade' && <LifecycleBoard m={m} />}
 
         {/* Only for a machine that has an agent to wait on. This box has
-            none, and its provider runs on the CPU. */}
+            none, and its provider runs on the CPU. One muted line rather than a
+            board of blurred sample figures: it is a promise, not a reading. */}
         {m.machine !== 'box' && (
-          <WipBoard title="GPU right now" span={12} waits="waits on the agent’s GPU live figures">
-            <Measures
-              items={[
-                { k: 'Load', v: '41%' },
-                { k: 'Memory', v: '13.2 of 24 GB' },
-                { k: 'Die', v: '61 °C' },
-                { k: 'Clock', v: '2,410 MHz' },
-              ]}
-            />
-          </WipBoard>
+          <p className={cn(CAPTION, 'col-span-12 -mt-1')}>
+            GPU right now — load, memory, die temperature and clock — waits on the agent's GPU live
+            figures.
+          </p>
         )}
 
         <ModelsBoard m={m} />

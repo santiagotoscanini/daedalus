@@ -7,9 +7,13 @@ import { builtOn, type Support } from '../lib/nixos'
 import { fetchNixosRelease } from '../server/updates'
 import { Ago } from './ago'
 import { ReleaseNotes, UpgradeChain } from './release-notes'
+import { TableSection } from './table-section'
 import { CAPTION, MONO, NOTE } from './tokens'
 import { Skeleton } from './ui/skeleton'
-import { Board, Chip, Facts } from './viz'
+import { Chip, Facts, GLASS } from './viz'
+
+/** The panel under an out-of-card heading: a board without its own title. */
+const PANEL = cn(GLASS, 'flex flex-col gap-3 px-5 py-4')
 
 // The NixOS release this generation was built with — on System › Updates
 // beside the engine's pin, because it is the third thing on the box that can
@@ -64,91 +68,98 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
   const day = builtOn(facts.version)
 
   return (
-    <Board
+    // Titled outside its panel, as every section on the Updates page is. The
+    // channel's lead and the support window are the right meta: facts about
+    // where the release stands, not values of one row.
+    <TableSection
       title="NixOS"
-      span={12}
       aside={
         live.state === 'asking' ? (
           <Skeleton className="h-4 w-28" />
         ) : (
-          <SupportChip support={release?.support ?? null} />
+          <span className="inline-flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1">
+            <ChannelLead live={live} />
+            <SupportChip support={release?.support ?? null} />
+          </span>
         )
       }
     >
-      <Facts
-        rows={[
-          {
-            k: 'Release',
-            v: (
-              <span className={MONO}>
-                {facts.release}
-                {facts.codeName !== '' && <span className={ASIDE}>{facts.codeName}</span>}
-              </span>
-            ),
-          },
-          {
-            k: 'nixpkgs',
-            v:
-              facts.revision === null ? (
-                <span className={NOTE}>not a git input</span>
-              ) : (
-                // Two tokens that wrap as tokens: the date never splits mid-string.
-                <span
-                  className={cn(
-                    MONO,
-                    'inline-flex flex-wrap items-baseline [overflow-wrap:normal] [&>*]:whitespace-nowrap',
-                  )}
-                >
-                  <a
-                    href={`https://github.com/NixOS/nixpkgs/commit/${facts.revision}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {facts.revision.slice(0, 10)}
-                  </a>
-                  {day !== null && <span className={ASIDE}>{day}</span>}
+      <div className={PANEL}>
+        <Facts
+          rows={[
+            {
+              k: 'Release',
+              v: (
+                <span className={MONO}>
+                  {facts.release}
+                  {facts.codeName !== '' && <span className={ASIDE}>{facts.codeName}</span>}
                 </span>
               ),
-          },
-          { k: 'Channel', v: <Channel live={live} /> },
-          { k: 'Latest release', v: <Latest facts={facts} live={live} /> },
-          { k: 'Kernel', v: <span className={MONO}>{facts.kernel}</span> },
-          { k: 'State version', v: <span className={MONO}>{facts.stateVersion}</span> },
-        ]}
-      />
+            },
+            {
+              k: 'nixpkgs',
+              v:
+                facts.revision === null ? (
+                  <span className={NOTE}>not a git input</span>
+                ) : (
+                  // Two tokens that wrap as tokens: the date never splits mid-string.
+                  <span
+                    className={cn(
+                      MONO,
+                      'inline-flex flex-wrap items-baseline [overflow-wrap:normal] [&>*]:whitespace-nowrap',
+                    )}
+                  >
+                    <a
+                      href={`https://github.com/NixOS/nixpkgs/commit/${facts.revision}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {facts.revision.slice(0, 10)}
+                    </a>
+                    {day !== null && <span className={ASIDE}>{day}</span>}
+                  </span>
+                ),
+            },
+            { k: 'Channel', v: <Channel live={live} /> },
+            { k: 'Latest release', v: <Latest facts={facts} live={live} /> },
+            { k: 'Kernel', v: <span className={MONO}>{facts.kernel}</span> },
+            { k: 'State version', v: <span className={MONO}>{facts.stateVersion}</span> },
+          ]}
+        />
 
-      {release?.support?.state === 'ended' && next !== null && (
-        <p className={CAPTION}>
-          {facts.release} stopped receiving fixes on {release.support.eol}. Moving to {next} is a
-          change to the flake's nixpkgs input and a rebuild; its backward incompatibilities, below,
-          are what to read first.
-        </p>
-      )}
-
-      {live.state === 'failed' && (
-        <p className={CAPTION}>
-          Could not ask where the release stands{live.reason !== '' && `: ${live.reason}`}.
-        </p>
-      )}
-
-      {release !== null && (
-        <div className="flex flex-col gap-3">
-          {release.notes.length === 0 ? (
-            <p className={NOTE}>{release.note ?? 'no release notes could be read'}</p>
-          ) : (
-            <>
-              {next !== null && <UpgradeChain behind={[next]} />}
-              <ReleaseNotes releases={release.notes} running={facts.release} />
-            </>
-          )}
+        {release?.support?.state === 'ended' && next !== null && (
           <p className={CAPTION}>
-            {release.note !== null && `${release.note}. `}
-            From the NixOS manual's release notes in nixpkgs, first paragraphs only; open one for
-            the full list. Asked <Ago at={release.checkedAt} />, at most hourly.
+            {facts.release} stopped receiving fixes on {release.support.eol}. Moving to {next} is a
+            change to the flake's nixpkgs input and a rebuild; its backward incompatibilities,
+            below, are what to read first.
           </p>
-        </div>
-      )}
-    </Board>
+        )}
+
+        {live.state === 'failed' && (
+          <p className={CAPTION}>
+            Could not ask where the release stands{live.reason !== '' && `: ${live.reason}`}.
+          </p>
+        )}
+
+        {release !== null && (
+          <div className="flex flex-col gap-3">
+            {release.notes.length === 0 ? (
+              <p className={NOTE}>{release.note ?? 'no release notes could be read'}</p>
+            ) : (
+              <>
+                {next !== null && <UpgradeChain behind={[next]} />}
+                <ReleaseNotes releases={release.notes} running={facts.release} />
+              </>
+            )}
+            <p className={CAPTION}>
+              {release.note !== null && `${release.note}. `}
+              From the NixOS manual's release notes in nixpkgs, first paragraphs only; open one for
+              the full list. Asked <Ago at={release.checkedAt} />, at most hourly.
+            </p>
+          </div>
+        )}
+      </div>
+    </TableSection>
   )
 }
 
@@ -174,19 +185,19 @@ function Channel({ live }: { live: Live }) {
     <span className="inline-flex flex-col gap-0.5">
       <span className="inline-flex flex-wrap items-center gap-2">
         <span className={MONO}>{c.branch}</span>
-        {c.newer === null ? (
-          <Chip tone="muted">not compared</Chip>
-        ) : c.newer === 0 ? (
-          <span className={NOTE}>no newer commits</span>
-        ) : (
-          <Chip tone="warn">
-            {num(c.newer)} newer commit{c.newer === 1 ? '' : 's'}
-          </Chip>
-        )}
       </span>
       {c.head !== null && <span className={NOTE}>last commit {c.head.date}</span>}
     </span>
   )
+}
+
+/** How far the channel has moved past this build: the section's right meta. */
+function ChannelLead({ live }: { live: Live }) {
+  if (live.state !== 'answered') return null
+  const n = live.release.channel.newer
+  if (n === null) return <span>channel not compared</span>
+  if (n === 0) return <span>no newer commits</span>
+  return <Chip tone="warn">{num(n)} newer</Chip>
 }
 
 function Latest({ facts, live }: { facts: NixosFacts; live: Live }) {

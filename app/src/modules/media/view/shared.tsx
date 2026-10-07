@@ -1,16 +1,8 @@
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { Segmented } from '../../../components/controls'
-import { ExplainToggle, useExplain } from '../../../components/explain'
 import type { LogNeighbour } from '../../../components/logs'
-import {
-  CELL_QUIET,
-  SECTION_NOTE,
-  SECTION_TITLE,
-  TABLE,
-  TABLE_EMPTY,
-  TABLE_HEAD,
-  TABLE_ROW,
-} from '../../../components/table'
+import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import { TableSection as HouseTableSection } from '../../../components/table-section'
 import { EMPTY } from '../../../components/tokens'
 import { Progress, type Tone } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
@@ -98,10 +90,15 @@ export function HealthChecks({
     return <p className={EMPTY}>No warnings. Every check this service runs is passing.</p>
 
   return (
-    <ul className={`${LIST} gap-1.5`}>
+    <ul className={LIST}>
       {checks.map((c) => (
-        <li key={`${c.source}-${c.message}`} className={cn(CHECK_ROW, CHECK_TINT[c.level])}>
-          <span className="text-[0.75rem] text-muted-foreground">{c.source}</span>
+        <li key={`${c.source}-${c.message}`} className={CHECK_ROW}>
+          <span className="flex min-w-0 items-center gap-2 text-[0.75rem] text-muted-foreground">
+            <span aria-hidden="true" className={cn(CHECK_DOT, CHECK_INK[c.level])} />
+            <span className="truncate" title={c.source}>
+              {c.source}
+            </span>
+          </span>
           <span className="min-w-0 text-foreground [&_a]:whitespace-nowrap [&_a]:text-muted-foreground">
             {c.message}
             {c.url !== null && (
@@ -121,13 +118,14 @@ export function HealthChecks({
    for (which subsystem), the message is the part you read once you have found
    it. Below 34rem the two stack. */
 export const CHECK_ROW =
-  'grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-3 rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2 text-[0.8rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-0.5'
+  'grid grid-cols-[11rem_minmax(0,1fr)] items-baseline gap-3 border-hairline border-t py-2 text-[0.8125rem] first:border-t-0 first:pt-0 max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-0.5'
 
-/* Two levels, two literal strings — the fill is a different share of the panel
-   for each, so this is a table of two rather than a tone. */
-const CHECK_TINT: Record<'warn' | 'bad', string> = {
-  warn: 'border-warning/25 bg-warning/[0.07]',
-  bad: 'border-danger/25 bg-danger/[0.08]',
+/* Rows divided by hairlines, not a tinted box per row inside the board: the
+   level is the dot, two literal strings so the scanner sees them. */
+const CHECK_DOT = 'inline-block size-[7px] flex-none rounded-full'
+const CHECK_INK: Record<'warn' | 'bad', string> = {
+  warn: 'bg-warning',
+  bad: 'bg-danger',
 }
 
 /**
@@ -176,50 +174,29 @@ export const healthFailing = (checks: readonly unknown[], reachable: boolean) =>
 /* Hangs under the head's link row, indented to its text column like the links. */
 const HEALTH_LINE = '-mt-3 mb-6 ml-15 text-[0.75rem] text-muted-foreground max-[44rem]:ml-0'
 
-/* ── a table with a heading ───────────────────────────────────────────────
-   The section a list of things is drawn in: SECTION_TITLE over a TABLE, on the
-   board grid beside the boards. Its explanation folds behind an ⓘ in the
-   title, the way a Board's does. */
+/* ── a table with a heading ────────────────────────────────────────────────
+   The house TableSection (components/table-section.tsx), with the two things
+   these pages add: the air a section keeps from the boards around it on the
+   board grid, and a `foot` slot so the prose under a table (FOOT folds behind
+   the title's ⓘ, CAPTION stays) is written beside its title rather than after
+   a long table body. */
 
 export function TableSection({
-  title,
-  note,
-  aside,
   foot,
   children,
-}: {
-  title: string
-  /** A visible line under the title: counts, a state. */
-  note?: ReactNode
-  /** Right of the title: a live reading. */
-  aside?: ReactNode
-  /** Under the table: FOOT folds behind the ⓘ, CAPTION stays. */
-  foot?: ReactNode
-  children: ReactNode
-}) {
-  const explain = useExplain()
+  className,
+  ...rest
+}: ComponentProps<typeof HouseTableSection> & { foot?: ReactNode }) {
   return (
-    <section className={cn(TABLE_SECTION, explain.body)}>
-      <h3 className={cn(SECTION_TITLE, 'mt-0 min-h-6')}>
-        {title}
-        <ExplainToggle
-          open={explain.open}
-          onToggle={explain.toggle}
-          className="-my-1 hidden group-has-[.explain]/section:inline-flex"
-        />
-        {aside !== undefined && (
-          <span className="ml-auto text-[0.78rem] font-normal text-muted-foreground">{aside}</span>
-        )}
-      </h3>
-      {note !== undefined && <p className={SECTION_NOTE}>{note}</p>}
+    <HouseTableSection {...rest} className={cn(SECTION_AIR, className)}>
       {children}
-      {foot !== undefined && <div className="mt-3 flex flex-col gap-2">{foot}</div>}
-    </section>
+      {foot}
+    </HouseTableSection>
   )
 }
 
-/** Full width on the board grid, with a section's air above and below. */
-const TABLE_SECTION = 'group/section col-span-12 my-6 min-w-0 first:mt-0 last:mb-0'
+/** Between a section and the boards around it: 24px, the grid gap included. */
+const SECTION_AIR = 'my-2 first:mt-0 last:mb-0'
 
 /* ── a queue ──────────────────────────────────────────────────────────────
    Something on its way — a torrent, an NZB, a book, an import — is the same

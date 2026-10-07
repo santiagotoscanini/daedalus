@@ -1,20 +1,27 @@
-import { MONO, NOTE } from '../../../components/tokens'
+import { NOTE } from '../../../components/tokens'
+import { Chip } from '../../../components/viz'
 import type { VersionGap } from '../../../lib/dashboard/github'
 
 // What more than one Health tab draws with.
 
-/** `<label> — current` or `<label> — N releases behind`: the verdict in the title. */
-export function gapTitle(label: string, gap: VersionGap): string {
-  const n = gap.behind.length
-  if (n === 0) return `${label} — current`
-  return `${label} — ${String(n)} ${n === 1 ? 'release behind' : 'releases behind'}`
+/**
+ * A changelog's title: the project's short name and nothing else. The verdict
+ * moved to the board's corner (`VersionAside`), where a long title used to
+ * truncate it away.
+ */
+export function gapTitle(label: string, _gap: VersionGap): string {
+  return label
 }
 
-/** The running version as a board's aside. */
-export function VersionAside({ version }: { version: string | null }) {
+/**
+ * The running version and its verdict, as a board's aside: "2.0.1 · current"
+ * in muted ink, or the version beside an amber "N behind". Never broken.
+ */
+export function VersionAside({ version, behind }: { version: string | null; behind: number }) {
   return (
-    <span className={NOTE}>
-      {version === null ? 'version unknown' : <span className={MONO}>{version}</span>}
+    <span className={`${NOTE} inline-flex items-center gap-2 whitespace-nowrap`}>
+      <span className="font-mono text-[0.72rem]">{version ?? 'version unknown'}</span>
+      {behind === 0 ? <span>current</span> : <Chip tone="warn">{behind} behind</Chip>}
     </span>
   )
 }

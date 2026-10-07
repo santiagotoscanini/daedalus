@@ -66,9 +66,7 @@ const APPS: NodeTabSpec = { id: 'apps', label: 'Apps', boardSpans: [4, 4, 4, 12]
 const CLAUDE: NodeTabSpec = {
   id: 'claude',
   label: 'Claude',
-  icon: 'claude',
   boardSpans: [6, 6, 12, 6],
-  dividerBefore: true,
 }
 // The sessions' eyes, as Shotter is on the box: the Chromium-based
 // browsers the machine has, against what their vendors ship today.

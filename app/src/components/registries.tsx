@@ -111,7 +111,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
 
       <BoardGrid>
         <Board title="Storage by repository" icon="rows" span={8}>
-          <BarList items={d.byRepo} tone="info" empty="nothing stored" />
+          <BarList items={d.byRepo} tone="muted" empty="nothing stored" />
           <p className={FOOT}>
             A <code>cache/&lt;app&gt;</code> repository is the pull-through copy of an upstream base
             image, not something built here, which is why they usually outweigh the apps themselves.

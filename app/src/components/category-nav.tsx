@@ -11,7 +11,6 @@ import { GuardedAwait } from './error'
 import { ServiceSettingsButton } from './service-settings'
 import { BoardsSkeleton, HeadStripSkeleton, ServiceHeadSkeleton } from './skeleton'
 import { TabBar } from './tabs'
-import { Chip } from './viz'
 
 /**
  * The sub-tab row, optionally wearing each tab's status.
@@ -60,24 +59,23 @@ export function TabNav({
           id: t.id,
           label: t.label,
           dividerBefore: t.dividerBefore,
-          icon: t.icon,
           muted: isOff,
-          // An off tab wears "off" where its dot would go: a grey dot would
-          // claim "status unknown" of a service that was told not to answer.
+          // No icons in a tab row: the label names the tab. An off tab wears a
+          // grey dot titled "switched off" — the tab is dimmed too, so the
+          // dot and the dimming say it together without a pill in the label.
+          // A tab nothing probes gets no dot at all rather than a grey claim.
           extra: isOff ? (
-            <Chip tone="muted">off</Chip>
-          ) : dotted ? (
+            <StateDot state="stopped" label="off" title="switched off on this box" />
+          ) : dotted && isDotted(t) ? (
             <StateDot
               state={up === null ? 'unknown' : up ? 'running' : 'attention'}
               label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
               title={
-                !isDotted(t)
-                  ? 'nothing probes this yet'
-                  : up === null
-                    ? 'no reading from gatus'
-                    : up
-                      ? 'answering'
-                      : 'nothing has answered in the last few minutes'
+                up === null
+                  ? 'no reading from gatus'
+                  : up
+                    ? 'answering'
+                    : 'nothing has answered in the last few minutes'
               }
             />
           ) : undefined,

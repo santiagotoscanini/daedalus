@@ -5,7 +5,6 @@ import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { DASH, num } from '../../../../lib/format'
 import {
-  CELL_MONO,
   CELL_QUIET,
   FOOT,
   MONO,
@@ -76,17 +75,19 @@ export function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
           }
         >
           <ul className={TABLE} aria-label="Subtitle providers">
-            <li aria-hidden="true" className={cn(PROV_GRID, TABLE_HEAD)}>
-              <span>Provider</span>
-              <span>Status</span>
-              <span className="text-right">Retry</span>
-            </li>
+            {d.providers.length > 0 && (
+              <li aria-hidden="true" className={cn(PROV_GRID, TABLE_HEAD)}>
+                <span>Provider</span>
+                <span>Status</span>
+                <span className="text-right">Retry</span>
+              </li>
+            )}
             {d.providers.length === 0 ? (
               <li className={TABLE_EMPTY}>Could not read the provider list.</li>
             ) : (
               d.providers.map((p) => (
                 <li key={p.name} className={cn(PROV_GRID, TABLE_ROW)}>
-                  <span className={cn(CELL_MONO, 'text-[0.8rem] text-foreground')}>{p.name}</span>
+                  <span className="text-foreground">{p.name}</span>
                   {/* Answering is the norm: quiet. Throttled is the row to read. */}
                   <span>
                     {p.ok ? (

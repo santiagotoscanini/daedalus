@@ -34,26 +34,32 @@ export function RunnersView({ d }: { d: Runners }) {
     <>
       <StatStrip>
         <Stat
-          label="machines on the network"
+          label="Machines on the network"
           value={num(d.machines.length)}
           sub={`${num(online)} online${unknown > 0 ? ` · ${num(unknown)} unknown` : ''}`}
         />
         <Stat
-          label={`hosted jobs · 30 days`}
+          label={`Hosted jobs · 30 days`}
           value={num(demandTotal)}
           sub={`${num(minutesTotal)} wall minutes`}
         />
         {d.demand.map((x) => (
           <Stat
             key={x.os}
-            label={`ask for ${osWord(x.os)}`}
+            label={`Ask for ${osWord(x.os)}`}
             value={num(x.jobs)}
             sub={`${num(x.workflows)} in files`}
           />
         ))}
         <Stat
-          label="registered with GitHub"
-          value={d.canListRunners ? num(registered.length) : '—'}
+          label="Registered with GitHub"
+          value={
+            d.canListRunners ? (
+              num(registered.length)
+            ) : (
+              <span className="text-[0.95rem] text-muted-foreground [font-weight:450]">unread</span>
+            )
+          }
           sub={d.canListRunners ? undefined : 'needs the runners App'}
         />
       </StatStrip>

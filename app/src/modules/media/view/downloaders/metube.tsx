@@ -58,10 +58,12 @@ export function MetubePage({ d }: { d: Downloaders['metube'] }) {
           }
         >
           <ul className={TABLE} aria-label="MeTube, recent">
-            <li aria-hidden="true" className={cn(RECENT_GRID, TABLE_HEAD)}>
-              <span>Status</span>
-              <span>Title</span>
-            </li>
+            {d.recent.length > 0 && (
+              <li aria-hidden="true" className={cn(RECENT_GRID, TABLE_HEAD)}>
+                <span>Status</span>
+                <span>Title</span>
+              </li>
+            )}
             {d.recent.length === 0 ? (
               <li className={TABLE_EMPTY}>Nothing downloaded yet.</li>
             ) : (

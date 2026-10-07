@@ -33,7 +33,7 @@ export function CountriesBoard({ access }: { access: AccessData }) {
           count: c.count,
         }))}
         total={access.total}
-        tone="info"
+        tone="muted"
       />
     </Board>
   )
@@ -79,7 +79,7 @@ export function PathsBoard({ access }: { access: AccessData }) {
           count: p.count,
         }))}
         total={access.total}
-        tone="accent"
+        tone="muted"
       />
     </Board>
   )
@@ -95,7 +95,7 @@ export function AgentsBoard({ access }: { access: AccessData }) {
           count: a.count,
         }))}
         total={access.total}
-        tone="ok"
+        tone="muted"
       />
     </Board>
   )

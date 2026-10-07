@@ -36,7 +36,7 @@ export function loadTone(p: number | null): Tone {
   if (p === null) return 'muted'
   if (p >= 90) return 'bad'
   if (p >= 75) return 'warn'
-  return 'accent'
+  return 'muted'
 }
 
 export function share(used: number | null, total: number | null): number | null {
@@ -61,9 +61,9 @@ export function hours(h: number | null): string {
 export function BoxHead({ h }: { h: BoxHeadData }) {
   return (
     <HeadStrip
+      compact
       mark={{ src: '/icon-nixos.webp', invert: false }}
       name={h.hostname}
-      chip={{ label: 'this box', tone: 'muted' }}
       line={
         <>
           {h.os}
@@ -100,15 +100,22 @@ export function MachineHead({
 
   return (
     <HeadStrip
+      compact
       mark={OS_MARK[node.os]}
       name={node.name}
-      chip={awake}
+      // One pill at most, and only for the exception: a hold that should be on
+      // and is not. Every other state of the link is a word in the line.
+      chip={awake.tone === 'bad' ? awake : undefined}
       aside={
-        t === null ? undefined : (
-          <>
-            sampled <Ago at={t.sampled_at} />
-          </>
-        )
+        <>
+          {awake.tone !== 'bad' && awake.label}
+          {t !== null && (
+            <>
+              {awake.tone !== 'bad' && ' · '}
+              sampled <Ago at={t.sampled_at} />
+            </>
+          )}
+        </>
       }
       line={
         <>

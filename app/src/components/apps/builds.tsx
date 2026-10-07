@@ -60,21 +60,18 @@ export function requesterLabel(b: Pick<BuildSummary, 'requestedBy' | 'actor'>): 
 /** State · commit · who asked · took · when. Two columns step away on a phone. */
 const BUILD_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[7rem_5rem_minmax(0,1fr)_5.5rem_5.5rem]',
+  'grid-cols-[7rem_5rem_11rem_minmax(0,1fr)_5.5rem_5.5rem]',
+  '@max-[48rem]/table:grid-cols-[7rem_5rem_minmax(0,1fr)_5.5rem_5.5rem]',
   '@max-[36rem]/table:grid-cols-[7rem_5rem_minmax(0,1fr)]',
 )
 const NARROW_HIDE = '@max-[36rem]/table:hidden'
+const MID_HIDE = '@max-[48rem]/table:hidden'
 
 /** A build's state in a table cell: the norm (succeeded) is a quiet dot and
     word; anything else keeps its tinted chip, so the exception carries the ink. */
 function BuildStateCell({ state }: { state: BuildState }) {
   if (state !== 'succeeded') return <BuildStateChip state={state} />
-  return (
-    <span className="inline-flex items-center gap-2 text-[0.78rem] text-muted-foreground">
-      <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
-      succeeded
-    </span>
-  )
+  return <span className="text-[0.78rem] text-muted-foreground">succeeded</span>
 }
 
 /** The app's last ten box builds, as a table; a row opens its build page. */
@@ -131,16 +128,21 @@ export function BuildsBoard({
         </p>
       )}
 
-      {(builds.length > 0 || buildOnBox) && (
+      {builds.length === 0 && buildOnBox && (
+        <ul className={TABLE} aria-label="Builds">
+          <li className={TABLE_EMPTY}>No builds yet.</li>
+        </ul>
+      )}
+      {builds.length > 0 && (
         <ul className={TABLE} aria-label="Builds">
           <li className={cn(BUILD_GRID, TABLE_HEAD)}>
             <span>State</span>
             <span>Commit</span>
-            <span>Requested by</span>
+            <span className={MID_HIDE}>Requested by</span>
+            <span className={NARROW_HIDE}>Note</span>
             <span className={cn('text-right', NARROW_HIDE)}>Took</span>
             <span className={cn('text-right', NARROW_HIDE)}>Started</span>
           </li>
-          {builds.length === 0 && <li className={TABLE_EMPTY}>No builds yet.</li>}
           {builds.map((b) => {
             // An open build's running time waits for the browser's clock.
             const took = isOpenBuild(b.state) && now === null ? null : buildDurationMs(b, now ?? 0)
@@ -160,11 +162,21 @@ export function BuildsBoard({
                 >
                   {sha7(b.sha)}
                 </Link>
-                <span className="min-w-0 truncate text-muted-foreground">
-                  {requesterLabel(b)}
-                  {b.publish === 'candidate' && (
-                    <span className="text-foreground"> · candidate</span>
+                <span className="flex min-w-0 items-center gap-2 text-muted-foreground @max-[48rem]/table:hidden">
+                  <span className="truncate">{requesterLabel(b)}</span>
+                  {b.publish === 'candidate' && <Chip>candidate</Chip>}
+                </span>
+                {/* The flex column carries what is news about a build: why it
+                    failed, or where an open one is. A finished good build has
+                    nothing to say here. */}
+                <span
+                  className={cn(
+                    'min-w-0 truncate text-[0.78rem] text-muted-foreground',
+                    NARROW_HIDE,
+                    b.state === 'failed' && 'text-foreground',
                   )}
+                >
+                  {b.state === 'failed' ? (b.error ?? '') : isOpenBuild(b.state) ? b.phase : ''}
                 </span>
                 <span className={cn(CELL_QUIET, 'text-right', NARROW_HIDE)}>
                   {took === null ? DASH : ms(took)}

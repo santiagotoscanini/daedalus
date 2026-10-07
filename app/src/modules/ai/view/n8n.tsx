@@ -59,7 +59,7 @@ export function N8nView({ data }: { data: N8nData }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href={data.url} target="_blank" rel="noreferrer">
               Open n8n ↗
             </a>

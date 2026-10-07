@@ -1,15 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import {
-  CodeIcon,
-  FolderGit2Icon,
-  LayersIcon,
-  MonitorSmartphoneIcon,
-  NetworkIcon,
-  PaletteIcon,
-  PlugIcon,
-  SlidersHorizontalIcon,
-} from 'lucide-react'
-import type { ReactNode } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
 import { Measure, PageHead } from '../components/page'
@@ -72,27 +61,15 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // trusts and what it asks of them, which catalog modules it runs, how it
 // looks, and how it is driven.
 
-/** A tab's label with its icon: drawn quieter than the word, which carries the meaning. */
-function TabLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return (
-    <>
-      <span aria-hidden="true" className="inline-flex opacity-70 [&>svg]:size-[15px]">
-        {icon}
-      </span>
-      {children}
-    </>
-  )
-}
-
 const TABS = [
-  { id: 'general', label: <TabLabel icon={<SlidersHorizontalIcon />}>General</TabLabel> },
-  { id: 'network', label: <TabLabel icon={<NetworkIcon />}>Network</TabLabel> },
-  { id: 'integrations', label: <TabLabel icon={<PlugIcon />}>Integrations</TabLabel> },
-  { id: 'repository', label: <TabLabel icon={<FolderGit2Icon />}>Site</TabLabel> },
-  { id: 'machines', label: <TabLabel icon={<MonitorSmartphoneIcon />}>Machines</TabLabel> },
-  { id: 'modules', label: <TabLabel icon={<LayersIcon />}>Modules</TabLabel> },
-  { id: 'appearance', label: <TabLabel icon={<PaletteIcon />}>Appearance</TabLabel> },
-  { id: 'developer', label: <TabLabel icon={<CodeIcon />}>Developer</TabLabel> },
+  { id: 'general', label: 'General' },
+  { id: 'network', label: 'Network' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'repository', label: 'Site' },
+  { id: 'machines', label: 'Machines' },
+  { id: 'modules', label: 'Modules' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'developer', label: 'Developer' },
 ] as const
 
 type SettingsTab = (typeof TABS)[number]['id']

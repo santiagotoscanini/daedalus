@@ -39,7 +39,7 @@ export function MetricsView({ data: d }: { data: Metrics }) {
         <Targets d={d} />
 
         <Board title="Series, seven days" icon="panels" span={8}>
-          <Trend values={d.seriesTrend} tone="accent" height={110} />
+          <Trend values={d.seriesTrend} height={110} />
           <p className={FOOT}>
             Active series is what memory here is spent on. A step up that never comes back down is a
             new label with unbounded values. That is how a TSDB usually gets into trouble, and a

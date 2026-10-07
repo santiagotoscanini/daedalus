@@ -114,6 +114,7 @@ export function RosterRow({
     <li
       className={cn(
         ROW,
+        'px-5',
         // One grid for every row, so the facts and the verb sit in the same
         // columns down the whole roster: what it is (name, last prompt, its
         // metadata) · how it stands and its ids · the verb.

@@ -177,20 +177,31 @@ function CategoryPage() {
         {spec.lede}
       </PageHead>
 
-      {spec.machinePicker === true && <MachinePicker nodes={nodes} active={machine} tab={tab} />}
+      {/* The picked machine's one-line identity rides the picker's row, so the
+          page has two navigation levels (machine, tab), not three. */}
+      {spec.machinePicker === true && (
+        <MachinePicker
+          nodes={nodes}
+          active={machine}
+          tab={tab}
+          identity={
+            nodeTab !== null ? (
+              <NodeHead promise={node} resetKey={sectionKey} />
+            ) : boxHead !== null ? (
+              <BoxHead h={boxHead} />
+            ) : undefined
+          }
+        />
+      )}
 
       {nodeTab !== null ? (
         <>
-          {/* The strip first, then the tabs, as on the box. It waits for the
-              node's answer behind a skeleton of its own size, so the tabs
-              below never move and never wait. */}
-          <NodeHead promise={node} resetKey={sectionKey} />
           <TabBar
             tabs={nodeTabs.map((t) => ({
               id: t.id,
               label: t.label,
-              icon: t.icon,
-              dividerBefore: t.dividerBefore,
+              // No icons and no rules in a machine's tab row: one level of
+              // plain labels under the switcher.
             }))}
             active={nodeTab}
             linkTo={(id) => ({
@@ -244,7 +255,6 @@ function CategoryPage() {
         </>
       ) : (
         <>
-          {boxHead !== null && <BoxHead h={boxHead} />}
           {spec.tabs.length > 0 &&
             (tabStatus === null ? (
               <TabNav spec={spec} category={category} tab={tab} status={null} />

@@ -4,11 +4,13 @@
 import { Link } from '@tanstack/react-router'
 import { SearchIcon } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
+import { cn } from '../../lib/cn'
 import { PLATFORMS } from '../../lib/external-apps'
 import { APP_STAGES, type AppStage, STAGE_LABEL } from '../../lib/stage'
 import type { fetchAppsTab } from '../../routes/apps.index'
 import { ApplyBar } from '../apply-bar'
 import { type AppState, StateDot } from '../controls'
+import { SECTION_NOTE, SECTION_TITLE } from '../table'
 import { Input } from '../ui/input'
 import { Picker } from '../ui/picker'
 import {
@@ -31,11 +33,6 @@ export const APP_LIST = APP_TABLE
 
 /** Search, the two filters and the one action: one row, one height. */
 const TOOLBAR = 'mb-3 flex flex-wrap items-center gap-2'
-
-/** A group's name above its table, with its note. */
-const GROUP =
-  'mt-10 mb-3 flex flex-wrap items-center gap-x-2 text-[0.875rem] text-foreground [font-weight:600]'
-const GROUP_NOTE = 'basis-full pl-6 text-[0.8rem] font-normal text-muted-foreground'
 
 export function AppsList({ data }: { data: ListData }) {
   const { apps, applyStatus, external, offboxStatus } = data
@@ -123,7 +120,13 @@ export function AppsList({ data }: { data: ListData }) {
             { value: 'running' as const, label: 'Running', count: counts.running },
             { value: 'attention' as const, label: 'Issues', count: counts.attention },
             { value: 'stopped' as const, label: 'Stopped', count: counts.stopped },
-          ].filter((o) => o.value === 'all' || o.count > 0 || o.value === state)}
+          ].filter(
+            (o) =>
+              o.value === 'all' ||
+              o.value === state ||
+              // Nothing to filter by when a state holds every app, or none.
+              (o.count > 0 && o.count < apps.length),
+          )}
         />
         {/* Second-order, so a dropdown: one control's width, not four. */}
         <Picker
@@ -228,12 +231,14 @@ export function AppsList({ data }: { data: ListData }) {
 
 function GroupHead({ icon, title, sub }: { icon: ReactNode; title: string; sub: string }) {
   return (
-    <h2 className={GROUP}>
-      <span className="inline-flex text-muted-foreground" aria-hidden="true">
-        {icon}
-      </span>
-      {title}
-      <small className={GROUP_NOTE}>{sub}</small>
-    </h2>
+    <>
+      <h2 className={cn(SECTION_TITLE, 'mt-10 first:mt-10')}>
+        <span className="inline-flex text-muted-foreground" aria-hidden="true">
+          {icon}
+        </span>
+        {title}
+      </h2>
+      <p className={SECTION_NOTE}>{sub}</p>
+    </>
   )
 }

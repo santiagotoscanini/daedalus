@@ -7,7 +7,7 @@ import {
   leaseTimeError,
   upstreamsError,
 } from '../../lib/site-fields'
-import { Line, NOTE, NOTE_SHOWN, SECTIONS, Section, SourceNote, Value } from './shared'
+import { Line, NOTE, NOTE_SHOWN, SECTIONS, Section, SourceNote, Unset, Value } from './shared'
 import { SiteList, SiteSwitch, SiteText, SiteUnwritten } from './site-fields'
 
 /** Optional address: empty is null in the document, anything else is a quad. */
@@ -89,7 +89,15 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
         description="ddclient keeps the public record on the ISP's current address."
         rows={[
           { k: 'Record', v: <Value v={n.ddns.host} /> },
-          { k: 'Poll interval', v: <Value v={n.ddns.interval} /> },
+          {
+            k: 'Poll interval',
+            v:
+              n.ddns.interval === '' ? (
+                <Unset />
+              ) : (
+                <span className="tabular-nums">{n.ddns.interval}</span>
+              ),
+          },
         ]}
       />
 

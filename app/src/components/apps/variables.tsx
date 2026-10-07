@@ -140,11 +140,13 @@ export function Variables({
       )}
 
       <ul className={TABLE} aria-label="Variables">
-        <li className={cn(VAR_GRID, TABLE_HEAD)}>
-          <span>Name</span>
-          <span className="@max-[44rem]/table:hidden">Value</span>
-          <span />
-        </li>
+        {vars.length > 0 && (
+          <li className={cn(VAR_GRID, TABLE_HEAD)}>
+            <span>Name</span>
+            <span className="@max-[44rem]/table:hidden">Value</span>
+            <span />
+          </li>
+        )}
         {vars.length === 0 && form !== '' && (
           <li className={TABLE_EMPTY}>
             No variables. Everything this app sees comes from the platform, its image, or its

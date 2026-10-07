@@ -5,7 +5,6 @@ import { NixosCard } from '../../../components/nixos-card'
 import { TABLE, TABLE_EMPTY, TableGroup } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { FOOT, MONO } from '../../../components/tokens'
-import { BoardGrid } from '../../../components/viz'
 import { ceremonyFor } from '../../../lib/image-ceremony'
 import type { UpdateRow, UpdatesData } from '../data/updates'
 import { type QueueItem, QueuePanel } from './queue-panel'
@@ -103,23 +102,21 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
 
   return (
     <div className="flex flex-col gap-10">
-      <BoardGrid>
-        {/* The engine first: the one pin here that is not a container, and the
+      {/* The engine first: the one pin here that is not a container, and the
             one whose update restarts the page reporting it. Then the release the
             whole generation stands on. */}
-        <EngineCard e={d.engine} />
-        <NixosCard facts={d.nixos} />
-        <QueuePanel
-          queue={queue}
-          initialStatus={d.status}
-          onRemove={(c) => {
-            setQueue((q) => q.filter((i) => i.container !== c))
-          }}
-          onClear={() => {
-            setQueue([])
-          }}
-        />
-      </BoardGrid>
+      <EngineCard e={d.engine} />
+      <NixosCard facts={d.nixos} />
+      <QueuePanel
+        queue={queue}
+        initialStatus={d.status}
+        onRemove={(c) => {
+          setQueue((q) => q.filter((i) => i.container !== c))
+        }}
+        onClear={() => {
+          setQueue([])
+        }}
+      />
 
       {/* Every container in ONE table, grouped by verdict: the group names the
           verdict once, so a row carries a chip only where it differs from its

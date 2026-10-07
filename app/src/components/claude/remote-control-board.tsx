@@ -1,11 +1,13 @@
 // The Remote control board: what the server is, what it holds, and the two
 // verbs that act on it.
+
 import type { ClaudeData } from '../../lib/dashboard/claude'
 import { bytes, DASH, duration, num, text } from '../../lib/format'
 import { FOOT, MONO, NOTE, ROW_SIDE } from '../tokens'
 import { Board, Chip, Facts, type Tone } from '../viz'
 import { RestartServerControl } from './controls/restart-server'
 import { UpdateClaudeCodeControl } from './controls/update-claude-code'
+import { LEFT_FACTS } from './shared'
 
 export function RemoteControlBoard({
   data,
@@ -21,33 +23,35 @@ export function RemoteControlBoard({
     <Board
       title="Remote control"
       icon="panels"
-      span={6}
+      span={12}
       aside={
         <span className={NOTE}>
           {facts.remote.spawn_mode === null ? 'not announced' : facts.remote.spawn_mode}
         </span>
       }
     >
-      <Facts
-        list
-        rows={[
-          { k: 'Server', v: <ServerState data={data} /> },
-          {
-            k: 'Environment',
-            v: <span className={MONO}>{text(envId)}</span>,
-          },
-          { k: 'Default model', v: <span className={MONO}>{text(facts.settings.model)}</span> },
-          { k: 'Effort', v: text(facts.settings.effort_level) },
-          {
-            k: 'Memory',
-            v: bytes(facts.server.memoryBytes),
-          },
-          {
-            k: 'CPU',
-            v: facts.server.cpuNsec === null ? DASH : duration(facts.server.cpuNsec / 1e9),
-          },
-        ]}
-      />
+      <div className={LEFT_FACTS}>
+        <Facts
+          list
+          rows={[
+            { k: 'Server', v: <ServerState data={data} /> },
+            {
+              k: 'Environment',
+              v: <span className={MONO}>{text(envId)}</span>,
+            },
+            { k: 'Default model', v: <span className={MONO}>{text(facts.settings.model)}</span> },
+            { k: 'Effort', v: text(facts.settings.effort_level) },
+            {
+              k: 'Memory',
+              v: bytes(facts.server.memoryBytes),
+            },
+            {
+              k: 'CPU',
+              v: facts.server.cpuNsec === null ? DASH : duration(facts.server.cpuNsec / 1e9),
+            },
+          ]}
+        />
+      </div>
       <p className={FOOT}>
         The environment id is what a phone connects to, and it is minted per server start — the link
         in the header carries it, so a restart changes the link and the old one stops resolving.

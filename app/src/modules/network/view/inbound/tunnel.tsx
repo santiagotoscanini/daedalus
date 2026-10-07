@@ -53,7 +53,7 @@ export function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noreferrer">
               Cloudflare dashboard ↗
             </a>

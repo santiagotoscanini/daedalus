@@ -1,6 +1,7 @@
 // Network › Proxy's routing table: every published hostname, grouped by what
 // protects it, as the house table.
 
+import { GlobeIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Segmented } from '../../../components/controls'
 import {
@@ -69,7 +70,7 @@ export function PublishedTable({
   return (
     <TableSection
       title="What is published, and what protects it"
-      aside={`${String(d.routes.length)} hostnames · ${String(remote)} also off-LAN · requests over ${String(d.windowDays)} days`}
+      aside={`${String(d.routes.length)} hostnames · ${String(remote)} also on the internet · requests over ${String(d.windowDays)} days`}
     >
       {/* The filter IS the tally: "how many can the internet ask" and "show
           me those" are one control. */}
@@ -81,7 +82,7 @@ export function PublishedTable({
           className="h-8.5"
           options={[
             { value: 'all' as const, label: 'All', count: d.routes.length },
-            { value: 'remote' as const, label: 'Off-LAN', count: remote },
+            { value: 'remote' as const, label: 'Internet', count: remote },
             ...(disabled > 0 || filter === 'disabled'
               ? [{ value: 'disabled' as const, label: 'Disabled', count: disabled }]
               : []),
@@ -137,22 +138,35 @@ function Group({ title, rows, site }: { title: string; rows: ProxyData['routes']
       {rows.map((r) => (
         <li key={r.host} className={cn(GRID, TABLE_ROW_DENSE)}>
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-mono text-[0.76rem] text-foreground">
+            {/* The label is what differs between rows; the shared domain recedes,
+                as on the Apps list. */}
+            <span className="truncate whitespace-nowrap font-mono text-[0.76rem] text-foreground">
               {stripBaseDomain(site, r.host)}
+              {r.host !== stripBaseDomain(site, r.host) && (
+                <span className="text-muted-foreground/50">
+                  {r.host.slice(stripBaseDomain(site, r.host).length)}
+                </span>
+              )}
             </span>
             {r.disabled && <Chip tone="bad">disabled</Chip>}
           </span>
-          {/* Off-LAN is the exception that matters — the internet can ask —
-              so it is the only reach with ink. LAN-only is the quiet norm. */}
+          {/* Deliberate configuration, not a fault: neutral text and a mark,
+              like the Apps list's exposure. LAN-only is the quiet norm. */}
           <span>
             {r.remote ? (
-              <Chip tone="warn">off-LAN</Chip>
+              <span
+                className="inline-flex items-center gap-1.5 text-[0.78rem] text-subdued [&>svg]:size-3.5 [&>svg]:opacity-70"
+                title="Also published through the tunnel: the internet can ask"
+              >
+                <GlobeIcon aria-hidden="true" />
+                Internet
+              </span>
             ) : (
               <span className={CELL_QUIET}>LAN only</span>
             )}
           </span>
           <span className={cn(CELL_MONO, 'via')} title={r.via ?? undefined}>
-            {r.via ?? ''}
+            {r.via ?? <span className="text-muted-foreground/50">—</span>}
           </span>
           {/* An em dash is not zero: traefik labels no request counters for
               its own dashboard's router, and a 0 there would read as "nobody

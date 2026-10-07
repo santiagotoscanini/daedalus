@@ -28,7 +28,7 @@ import type { Wanted } from './shared'
 import { WANTED_NEIGHBOURS } from './shared'
 
 /* What is coming: a title with its episode under it, and a date on the right.
-   The date is brand-coloured because it is the reading; one already on disk
+   The date is in full ink because it is the reading; one already on disk
    goes grey, since there is nothing left to wait for. */
 const UPNEXT = LIST
 const UPNEXT_ROW =
@@ -162,7 +162,7 @@ function TheLibraryBoard({ f }: { f: ArrFacts }) {
                 ? ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100
                 : null
             }
-            tone="info"
+            tone="muted"
           />
           <p className={CAPTION}>
             {bytes(disk.freeBytes)} free of {bytes(disk.totalBytes)}
@@ -187,7 +187,9 @@ function Panel({ f }: { f: ArrFacts }) {
                 {u.title}
                 {u.sub !== null && <em className={UPNEXT_SUB}>{u.sub}</em>}
               </span>
-              <span className={cn(UPNEXT_WHEN, u.have ? 'text-muted-foreground' : 'text-primary')}>
+              <span
+                className={cn(UPNEXT_WHEN, u.have ? 'text-muted-foreground' : 'text-foreground')}
+              >
                 {u.have ? 'have it' : inDays(u.inDays)}
               </span>
             </li>
@@ -220,7 +222,7 @@ function QueueTableSection({ f }: { f: ArrFacts }) {
           key: `${q.title}-${String(i)}`,
           name: q.title,
           pct: q.pct,
-          tone: q.issue !== null ? 'bad' : 'accent',
+          tone: q.issue !== null ? 'bad' : 'muted',
           active: q.issue === null && q.pct < 100,
           detail: (
             <>
@@ -255,11 +257,13 @@ function LatelyTable({ f }: { f: ArrFacts }) {
       }
     >
       <ul className={TABLE} aria-label="Lately">
-        <li aria-hidden="true" className={cn(FEED_GRID, TABLE_HEAD)}>
-          <span className="@max-[34rem]/table:hidden">Event</span>
-          <span>Title</span>
-          <span className="text-right">When</span>
-        </li>
+        {d.history.length > 0 && (
+          <li aria-hidden="true" className={cn(FEED_GRID, TABLE_HEAD)}>
+            <span className="@max-[34rem]/table:hidden">Event</span>
+            <span>Title</span>
+            <span className="text-right">When</span>
+          </li>
+        )}
         {d.history.length === 0 ? (
           <li className={TABLE_EMPTY}>No recorded activity.</li>
         ) : (
@@ -277,7 +281,9 @@ function LatelyTable({ f }: { f: ArrFacts }) {
               <span className="truncate text-foreground" title={h.title}>
                 {h.title}
               </span>
-              <span className={cn(CELL_QUIET, 'text-right')}>{daysAgo(h.ageDays)}</span>
+              <span className={cn(CELL_QUIET, 'whitespace-nowrap text-right')}>
+                {daysAgo(h.ageDays)}
+              </span>
             </li>
           ))
         )}

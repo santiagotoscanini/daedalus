@@ -49,11 +49,13 @@ export function ConsumersView({ data }: { data: ConsumersData }) {
           }
         >
           <ul className={TABLE} aria-label="Apps holding a gateway key">
-            <li aria-hidden="true" className={cn(APP_GRID, TABLE_HEAD)}>
-              <span>App</span>
-              <span className="@max-[36rem]/table:hidden">Credential</span>
-              <span className="text-right">Delivered</span>
-            </li>
+            {data.apps.length > 0 && (
+              <li aria-hidden="true" className={cn(APP_GRID, TABLE_HEAD)}>
+                <span>App</span>
+                <span className="@max-[36rem]/table:hidden">Credential</span>
+                <span className="text-right">Delivered</span>
+              </li>
+            )}
             {data.apps.length === 0 ? (
               <li className={TABLE_EMPTY}>No app on this box asked for a gateway key.</li>
             ) : (

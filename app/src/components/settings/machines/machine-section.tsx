@@ -18,7 +18,7 @@ import {
 import { Chip } from '../../viz'
 import { ASIDE, Band, ERROR_NOTE, Mono, NOTE_SHOWN } from '../shared'
 import { Decision } from './decision'
-import { ClaudeCell, OsMark, StatusCell, TrustNote, TunnelCell } from './machine-cells'
+import { ClaudeCell, OsMark, osName, StatusCell, TrustNote, TunnelCell } from './machine-cells'
 import { Policy } from './policy'
 
 // One machine, as a row of the Machines table — what it is, how it stands,
@@ -163,17 +163,23 @@ export function MachineRow({
   const n = m.node
   if (n === null) return null
   const s = m.status
-  const edition = s?.os_name || (n.os ? n.os.charAt(0).toUpperCase() + n.os.slice(1) : 'unknown OS')
+  const edition = s?.os_name || osName(n.os)
   const version = s?.os_version ?? ''
   const arch = s?.arch || n.arch
   const agent = s?.version ?? n.agentVersion
 
   const facts: Fact[] = [
-    ...(s?.cpu ? [{ k: 'Processor', v: <Mono>{s.cpu}</Mono> }] : []),
-    ...(s?.memory_bytes != null ? [{ k: 'Memory', v: <Mono>{bytes(s.memory_bytes)}</Mono> }] : []),
+    ...(s?.cpu ? [{ k: 'Processor', v: <span>{s.cpu}</span> }] : []),
+    ...(s?.memory_bytes != null
+      ? [{ k: 'Memory', v: <span className="tabular-nums">{bytes(s.memory_bytes)}</span> }]
+      : []),
     {
       k: 'Machine up',
-      v: <Mono>{s?.os_uptime_secs == null ? '—' : duration(s.os_uptime_secs)}</Mono>,
+      v: (
+        <span className="tabular-nums">
+          {s?.os_uptime_secs == null ? '—' : duration(s.os_uptime_secs)}
+        </span>
+      ),
     },
     ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
     { k: 'Agent', v: <Mono>{agent}</Mono>, narrow: true },
@@ -284,7 +290,7 @@ export function PendingRow({
         name={p.hostname ?? p.id}
         sub={
           <>
-            {p.os ?? 'unknown OS'}
+            {osName(p.os)}
             {p.arch !== null && ` · ${p.arch}`}
           </>
         }

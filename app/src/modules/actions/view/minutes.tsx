@@ -34,25 +34,25 @@ export function MinutesView({ d }: { d: Minutes }) {
     <>
       <StatStrip>
         <Stat
-          label={`billed · ${d.month.label}`}
+          label={`Billed · ${d.month.label}`}
           value={num(t.billedThisMonth)}
           unit="min"
           tone={share > 80 ? 'warn' : undefined}
           sub={`of ${num(d.allowance)} on GitHub Free`}
         />
-        <Stat label={`billed · ${String(d.windowDays)} days`} value={num(t.billed)} unit="min" />
+        <Stat label={`Billed · ${String(d.windowDays)} days`} value={num(t.billed)} unit="min" />
         <Stat
-          label="wall minutes"
+          label="Wall minutes"
           value={num(t.raw.linux + t.raw.windows + t.raw.macos + t.raw.unknown)}
           unit="min"
         />
         <Stat
-          label="jobs counted"
+          label="Jobs counted"
           value={num(t.jobs)}
           sub={t.unread > 0 ? `${num(t.unread)} runs not read` : undefined}
         />
-        <Stat label="self-hosted" value={num(t.selfHosted)} unit="min" sub="bills nothing" />
-        <Stat label="a runner here would save" value={num(savingTotal)} unit="min" />
+        <Stat label="Self-hosted" value={num(t.selfHosted)} unit="min" sub="bills nothing" />
+        <Stat label="A runner here would save" value={num(savingTotal)} unit="min" />
       </StatStrip>
 
       <BoardGrid>

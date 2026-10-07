@@ -59,7 +59,7 @@ export function OpenWebUiView({ data }: { data: OpenWebUiData }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href={data.url} target="_blank" rel="noreferrer">
               Open the chat ↗
             </a>
@@ -137,10 +137,12 @@ function ReachTable({ data, busy }: { data: OpenWebUiData; busy: boolean }) {
       }
     >
       <ul className={TABLE} aria-label="What the chat can reach">
-        <li aria-hidden="true" className={cn(REACH_GRID, TABLE_HEAD)}>
-          <span>Name</span>
-          <span className="@max-[34rem]/table:hidden">What it is</span>
-        </li>
+        {data.reach.length > 0 && (
+          <li aria-hidden="true" className={cn(REACH_GRID, TABLE_HEAD)}>
+            <span>Name</span>
+            <span className="@max-[34rem]/table:hidden">What it is</span>
+          </li>
+        )}
         {data.reach.length === 0 ? (
           <li className={TABLE_EMPTY}>{data.note ?? 'Nothing registered.'}</li>
         ) : (

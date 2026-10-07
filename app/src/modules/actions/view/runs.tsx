@@ -14,23 +14,22 @@ export function RunsView({ d }: { d: Runs }) {
   return (
     <>
       <StatStrip>
-        <Stat label={`runs · ${String(d.windowDays)} days`} value={num(t.runs)} />
+        <Stat label={`Runs · ${String(d.windowDays)} days`} value={num(t.runs)} />
         <Stat
-          label="succeeded"
+          label="Succeeded"
           value={okRate === null ? DASH : pct(okRate)}
           tone={okRate !== null && okRate < 80 ? 'warn' : undefined}
           sub={`${num(t.ok)} of ${num(t.ok + t.failed)} finished`}
         />
-        <Stat label="failed" value={num(t.failed)} tone={t.failed > 0 ? 'bad' : undefined} />
+        <Stat label="Failed" value={num(t.failed)} tone={t.failed > 0 ? 'bad' : undefined} />
         <Stat
-          label="running now"
+          label="Running now"
           value={num(t.running)}
-          tone={t.running > 0 ? 'accent' : undefined}
           sub={t.queued > 0 ? `${num(t.queued)} queued` : undefined}
         />
-        <Stat label="median run" value={took(t.p50)} sub={`p95 ${took(t.p95)}`} />
+        <Stat label="Median run" value={took(t.p50)} sub={`p95 ${took(t.p95)}`} />
         <Stat
-          label="repositories read"
+          label="Repositories read"
           value={`${num(t.readable)} / ${num(t.watched)}`}
           tone={t.readable < t.watched ? 'warn' : undefined}
         />

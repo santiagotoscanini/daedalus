@@ -37,7 +37,7 @@ export function FilesView({ data: d }: { data: Files }) {
         <Board
           title="Sharing"
           icon="⇗"
-          span={8}
+          span={12}
           aside={<span className={NOTE}>{num(d.shares.total)} shares</span>}
         >
           <Measures
@@ -84,7 +84,7 @@ export function FilesView({ data: d }: { data: Files }) {
           </p>
         </Board>
 
-        <Board title="Contents" icon="rows" span={6}>
+        <Board title="Contents" icon="rows" span={4}>
           <Facts
             list
             rows={[
@@ -97,7 +97,7 @@ export function FilesView({ data: d }: { data: Files }) {
           />
         </Board>
 
-        <Board title="Underneath" icon="⚙" span={6}>
+        <Board title="Underneath" icon="⚙" span={4}>
           <Facts
             list
             rows={[

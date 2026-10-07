@@ -1,14 +1,10 @@
 import { LogBoard } from '../../../components/logs'
-import {
-  BOARD_TABLE,
-  BOARD_TABLE_HEAD,
-  BOARD_TABLE_ROW,
-  NUM_CELL,
-} from '../../../components/modules/parts'
+import { NUM_CELL, SECTION_SPAN, TABLE_NONE } from '../../../components/modules/parts'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { CELL_NAME, CELL_QUIET } from '../../../components/table'
-import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { CAPTION, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures, Progress, Ring } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, num, pct } from '../../../lib/format'
@@ -20,9 +16,7 @@ import type { HomeData } from '../data'
 type Photos = Extract<HomeData, { tab: 'photos' }>
 
 /* Who is backing up: the account, then three numbers read down their columns. */
-const USERS_GRID =
-  'grid grid-cols-[minmax(0,1fr)_4rem_4rem_4.5rem] items-center gap-x-3 px-5 @max-[18rem]/table:grid-cols-[minmax(0,1fr)_4.5rem_4.5rem]'
-const HIDE_NARROW = '@max-[18rem]/table:hidden'
+const USERS_GRID = 'grid grid-cols-[minmax(0,1fr)_6rem_6rem_6rem] items-center gap-x-6 px-5'
 
 export function PhotosView({ data: d }: { data: Photos }) {
   const total = (d.photos ?? 0) + (d.videos ?? 0)
@@ -64,7 +58,7 @@ export function PhotosView({ data: d }: { data: Photos }) {
               pct={total === 0 ? null : ((d.photos ?? 0) / total) * 100}
               value={num(d.photos)}
               label="stills"
-              tone="info"
+              tone="muted"
             />
             <Facts
               rows={[
@@ -87,41 +81,13 @@ export function PhotosView({ data: d }: { data: Photos }) {
           </p>
         </Board>
 
-        <Board title="Who is backing up" icon="◑" span={4}>
-          {d.users.length === 0 ? (
-            <p className={EMPTY}>could not read the user list</p>
-          ) : (
-            <ul className={BOARD_TABLE}>
-              <li className={cn(USERS_GRID, BOARD_TABLE_HEAD)}>
-                <span>Account</span>
-                <span className={NUM_CELL}>Stills</span>
-                <span className={cn(NUM_CELL, HIDE_NARROW)}>Videos</span>
-                <span className={NUM_CELL}>Size</span>
-              </li>
-              {d.users.map((u) => (
-                <li key={u.name} className={cn(USERS_GRID, BOARD_TABLE_ROW)}>
-                  <span className={CELL_NAME}>{u.name}</span>
-                  <span className={cn(CELL_QUIET, 'text-right')}>{num(u.photos)}</span>
-                  <span className={cn(CELL_QUIET, 'text-right', HIDE_NARROW)}>{num(u.videos)}</span>
-                  <span className={cn(NUM_CELL, 'text-[0.84rem] text-foreground')}>
-                    {bytes(u.usageBytes)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className={CAPTION}>
-            Quotas are unset on every account, so the only ceiling is the dataset below.
-          </p>
-        </Board>
-
         <Board
           title="Disk"
           icon="grid"
           span={4}
           aside={<span className={NOTE}>{pct(diskPct, 1)} used</span>}
         >
-          <Progress pct={diskPct} tone="info" />
+          <Progress pct={diskPct} tone="muted" />
           <Measures
             items={[
               { k: 'Used', v: bytes(d.disk.usedBytes) },
@@ -138,7 +104,35 @@ export function PhotosView({ data: d }: { data: Photos }) {
           </p>
         </Board>
 
-        <Changelog gap={d.gap} span={8} />
+        <TableSection title="Who is backing up" className={SECTION_SPAN[12]}>
+          {d.users.length === 0 ? (
+            <p className={TABLE_NONE}>could not read the user list</p>
+          ) : (
+            <ul className={TABLE}>
+              <li className={cn(USERS_GRID, TABLE_HEAD)}>
+                <span>Account</span>
+                <span className={NUM_CELL}>Stills</span>
+                <span className={NUM_CELL}>Videos</span>
+                <span className={NUM_CELL}>Size</span>
+              </li>
+              {d.users.map((u) => (
+                <li key={u.name} className={cn(USERS_GRID, TABLE_ROW)}>
+                  <span className="truncate text-[0.84rem] text-foreground">{u.name}</span>
+                  <span className={cn(CELL_QUIET, NUM_CELL)}>{num(u.photos)}</span>
+                  <span className={cn(CELL_QUIET, NUM_CELL)}>{num(u.videos)}</span>
+                  <span className={cn(NUM_CELL, 'text-[0.84rem] text-foreground')}>
+                    {bytes(u.usageBytes)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className={CAPTION}>
+            Quotas are unset on every account, so the only ceiling is the dataset above.
+          </p>
+        </TableSection>
+
+        <Changelog gap={d.gap} span={12} />
 
         <LogBoard
           source={{ stack: 'immich' }}

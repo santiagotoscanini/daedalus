@@ -7,7 +7,7 @@ import { Install } from './install'
 import { BACK } from './machine-cells'
 import { MachineRow, MachinesHead, PendingRow } from './machine-section'
 import { RotateKey, RotationState } from './rotate'
-import { SessionHost } from './session-host'
+import { SessionHost, SessionHostRestart } from './session-host'
 
 // Settings › Machines — the other computers that run the agent: what each
 // one is, whether the box trusts it, and what the box asks of it. One card
@@ -145,7 +145,12 @@ export function Machines({ d }: { d: MachinesData }) {
               ]
         }
       >
-        {c.reachable && <RotateKey rotating={c.rotation !== null} />}
+        {c.reachable && (
+          <div className="flex flex-wrap items-start gap-2">
+            <RotateKey rotating={c.rotation !== null} />
+            {d.sessionHost !== null && <SessionHostRestart line={d.sessionHost} />}
+          </div>
+        )}
       </Section>
 
       <Section

@@ -108,11 +108,13 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
       )}
 
       <ul className={TABLE} aria-label="Operator secrets">
-        <li className={cn(SECRET_GRID, TABLE_HEAD)}>
-          <span>Name</span>
-          <span className="@max-[44rem]/table:hidden">Set</span>
-          <span />
-        </li>
+        {keys.length > 0 && (
+          <li className={cn(SECRET_GRID, TABLE_HEAD)}>
+            <span>Name</span>
+            <span className="@max-[44rem]/table:hidden">Set</span>
+            <span />
+          </li>
+        )}
         {keys.length === 0 && form !== '' && (
           <li className={TABLE_EMPTY}>
             No operator secrets yet. The file is created by the first key you add.

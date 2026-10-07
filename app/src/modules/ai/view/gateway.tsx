@@ -74,12 +74,14 @@ export function GatewayView({ data }: { data: GatewayData }) {
             }
           >
             <ul className={TABLE} aria-label="Gateway routes">
-              <li aria-hidden="true" className={cn(ROUTE_GRID, TABLE_HEAD)}>
-                <span>Published as</span>
-                <span>Kind</span>
-                <span className={UPSTREAM}>Upstream model</span>
-                <span className={HOST}>Host</span>
-              </li>
+              {routing.routes.length > 0 && (
+                <li aria-hidden="true" className={cn(ROUTE_GRID, TABLE_HEAD)}>
+                  <span>Published as</span>
+                  <span>Kind</span>
+                  <span className={UPSTREAM}>Upstream model</span>
+                  <span className={HOST}>Host</span>
+                </li>
+              )}
               {ordered.map(([group, routes]) => (
                 <RouteGroup key={group} group={group} routes={routes} />
               ))}

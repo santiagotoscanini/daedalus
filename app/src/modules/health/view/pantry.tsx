@@ -87,7 +87,7 @@ export function PantryView({ data: d }: { data: Pantry }) {
           gap={d.mcp.gap}
           span={12}
           title={gapTitle('Grocy MCP', d.mcp.gap)}
-          aside={<VersionAside version={d.mcp.version} />}
+          aside={<VersionAside version={d.mcp.version} behind={d.mcp.gap.behind.length} />}
           foot={
             <p className={FOOT}>
               The same stock as a tool server on the LLM gateway, so a model can check what is in

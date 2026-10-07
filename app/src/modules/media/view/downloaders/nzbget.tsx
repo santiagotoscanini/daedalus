@@ -5,7 +5,7 @@ import { LIVE } from '../../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { bytes, num, rate, since } from '../../../../lib/format'
-import { EMPTY, FOOT, MONO, NOTE, PROV, PROVS, QueueTable, TableSection } from '../shared'
+import { EMPTY, FOOT, NOTE, PROV, PROVS, QueueTable, TableSection } from '../shared'
 import type { Downloaders } from './shared'
 import { TunnelBoard } from './shared'
 
@@ -66,7 +66,7 @@ export function NzbPage({ d }: { d: Downloaders }) {
               key: g.name,
               name: g.name,
               pct: g.pct,
-              tone: 'info',
+              tone: 'muted',
               active: !nzb.paused,
               detail: `${bytes(g.remainingBytes)} left`,
             }))}
@@ -93,7 +93,7 @@ export function NzbPage({ d }: { d: Downloaders }) {
                 <li key={s.id} className={PROV}>
                   {/* Active is the norm and says so quietly; inactive is the
                       fault this panel exists for. */}
-                  <span className={MONO}>server {s.id}</span>
+                  <span>server {s.id}</span>
                   {s.active ? (
                     <span className="text-[0.75rem] text-muted-foreground">active</span>
                   ) : (

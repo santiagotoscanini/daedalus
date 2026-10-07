@@ -1,20 +1,23 @@
 import { DAY_TIME, LocalTime } from '../../../components/ago'
 import { LogBoard } from '../../../components/logs'
-import {
-  BOARD_TABLE,
-  BOARD_TABLE_HEAD,
-  BOARD_TABLE_ROW,
-  NUM_CELL,
-} from '../../../components/modules/parts'
+import { NUM_CELL, SECTION_SPAN, TABLE_NONE } from '../../../components/modules/parts'
 import { ReleaseNotes, UpgradeChain } from '../../../components/release-notes'
 import { ServiceHead } from '../../../components/service-head'
-import { CELL_QUIET, TABLE_LINK, TABLE_ROW_LINK } from '../../../components/table'
-import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import {
+  CELL_QUIET,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_LINK,
+  TABLE_ROW,
+  TABLE_ROW_LINK,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import type { GamingData } from '../data'
-import { EventsTable } from './shared'
+import { EventsSection, Unknown } from './shared'
 
 /**
  * Live only at second hand — see `FactorioData['live']` in data/factorio.ts.
@@ -57,7 +60,7 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href={factorio.adminUrl} target="_blank" rel="noreferrer">
               Open server manager ↗
             </a>
@@ -68,7 +71,7 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
       <StatStrip>
         <Stat
           label="Game process"
-          value={live.game === null ? '—' : live.game}
+          value={live.game === null ? <Unknown /> : live.game}
           tone={live.game === 'stopped' ? 'warn' : undefined}
           sub={
             live.since === null ? (
@@ -83,7 +86,7 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
         />
         <Stat
           label="Manager"
-          value={live.containerUp === null ? '—' : live.containerUp ? 'up' : 'down'}
+          value={live.containerUp === null ? <Unknown /> : live.containerUp ? 'up' : 'down'}
           tone={live.containerUp === false ? 'bad' : undefined}
           sub="the ofsm container"
         />
@@ -93,9 +96,11 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
         <Stat
           label="Joins"
           value={
-            events.length === 0 && live.game === null
-              ? '—'
-              : events.filter((e) => e.kind === 'join').length
+            events.length === 0 && live.game === null ? (
+              <Unknown />
+            ) : (
+              events.filter((e) => e.kind === 'join').length
+            )
           }
           sub="last 30 days"
         />
@@ -104,9 +109,9 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
       <BoardGrid>
         <Panel f={f} />
 
-        <ComingsAndGoingsBoard f={f} />
+        <ComingsAndGoingsSection f={f} />
 
-        <FromTheDevsBoard f={f} />
+        <FromTheDevsSection f={f} />
 
         {/* Grafana itself rather than a log viewer of our own — see the note
             in components/logs.tsx; nix/modules/monitoring allows this
@@ -127,16 +132,13 @@ function factorioFacts({ data }: { data: Extract<GamingData, { tab: 'factorio' }
 
 type FactorioFacts = NonNullable<ReturnType<typeof factorioFacts>>
 
-/* The feed: the post, what kind it is, when. */
-const NEWS_GRID = 'grid grid-cols-[minmax(0,1fr)_5rem_7rem] items-center gap-x-6 px-5'
-
 function Panel({ f }: { f: FactorioFacts }) {
   const { data, factorio, behind, current } = f
   return (
     <Board
       title={current ? 'Release notes' : `${String(behind)} to apply`}
       icon="logs"
-      span={6}
+      span={12}
       aside={<span className={NOTE}>wiki.factorio.com</span>}
     >
       {/* The chain lives here rather than in a panel of its own, which
@@ -157,43 +159,39 @@ function Panel({ f }: { f: FactorioFacts }) {
   )
 }
 
-function FromTheDevsBoard({ f }: { f: FactorioFacts }) {
+/* The feed: the post and when. Its kind is said only when it is the exception. */
+const NEWS_GRID = 'grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-x-6 px-5'
+
+function FromTheDevsSection({ f }: { f: FactorioFacts }) {
   const { news } = f
   return (
-    <Board
-      title="From the devs"
-      icon="panels"
-      span={12}
-      aside={<span className={NOTE}>factorio.com/blog</span>}
-    >
+    <TableSection title="From the devs" aside="factorio.com/blog" className={SECTION_SPAN[12]}>
       {news.length === 0 ? (
-        <p className={EMPTY}>could not read the feed</p>
+        <p className={TABLE_NONE}>could not read the feed</p>
       ) : (
-        <ul className={BOARD_TABLE}>
-          <li className={cn(NEWS_GRID, BOARD_TABLE_HEAD)}>
+        <ul className={TABLE}>
+          <li className={cn(NEWS_GRID, TABLE_HEAD)}>
             <span>Post</span>
-            <span>Kind</span>
             <span className={NUM_CELL}>Published</span>
           </li>
           {news.map((n) => (
-            <li key={n.url} className={cn(NEWS_GRID, BOARD_TABLE_ROW, TABLE_ROW_LINK)}>
-              <a
-                href={n.url}
-                target="_blank"
-                rel="noreferrer"
-                className={cn(TABLE_LINK, 'truncate text-[0.84rem] text-foreground')}
-              >
-                {n.title}
-              </a>
-              {/* A release post is the exception; the Friday Facts are the norm. */}
-              <span>
-                {n.kind === 'release' ? (
-                  <Chip tone="ok">release</Chip>
-                ) : (
-                  <span className={CELL_QUIET}>{n.kind === 'fff' ? 'FFF' : 'post'}</span>
-                )}
+            <li key={n.url} className={cn(NEWS_GRID, TABLE_ROW, TABLE_ROW_LINK)}>
+              <span className="flex min-w-0 items-center gap-2">
+                <a
+                  href={n.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cn(TABLE_LINK, 'truncate text-[0.84rem] text-foreground')}
+                  title={
+                    n.kind === 'fff' ? 'Friday Facts' : n.kind === 'release' ? 'release' : 'post'
+                  }
+                >
+                  {n.title}
+                </a>
+                {/* A release post is the exception; the Friday Facts are the norm. */}
+                {n.kind === 'release' && <Chip tone="info">release</Chip>}
               </span>
-              <span className={cn(CELL_QUIET, 'text-right whitespace-nowrap')}>{n.date}</span>
+              <span className={cn(CELL_QUIET, NUM_CELL)}>{n.date}</span>
             </li>
           ))}
         </ul>
@@ -204,26 +202,19 @@ function FromTheDevsBoard({ f }: { f: FactorioFacts }) {
         The studio’s own feed, which points forward: Friday Facts are about what is being built.
         What has landed is the release-notes panel above.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 
-function ComingsAndGoingsBoard({ f }: { f: FactorioFacts }) {
-  const { events } = f
+function ComingsAndGoingsSection({ f }: { f: FactorioFacts }) {
   return (
-    <Board
-      title="Comings and goings"
-      icon="panels"
-      span={6}
-      aside={<span className={NOTE}>last 30 days</span>}
-    >
-      <EventsTable events={events} empty="nobody has joined this month" />
+    <EventsSection events={f.events} window="last 30 days" empty="nobody has joined this month">
       {/* Read from the log, as on Minecraft — see gameLines in data/factorio.ts. */}
       <p className={FOOT}>
         Parsed from the server’s log in Loki, newest first: the game announces every arrival and
         departure with a <span className={MONO}>[JOIN]</span>/<span className={MONO}>[LEAVE]</span>{' '}
         line. The panel below is the whole log; this is the part about people.
       </p>
-    </Board>
+    </EventsSection>
   )
 }

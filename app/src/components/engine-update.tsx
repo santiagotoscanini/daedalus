@@ -9,9 +9,13 @@ import type { EngineFacts, EngineVerdict } from '../modules/system/data/updates'
 import { fetchEngineUpdateStatus, requestEngineUpdateFn } from '../server/updates'
 import { RebootRequired } from './reboot-required'
 import { usePolledStatus } from './status'
+import { TableSection } from './table-section'
 import { FOOT, MONO, MONO_FACE, NOTE } from './tokens'
 import { Button } from './ui/button'
-import { Board, Chip, Facts, type Tone } from './viz'
+import { Chip, Facts, GLASS, type Tone } from './viz'
+
+/** The panel under an out-of-card heading: a board without its own title. */
+const PANEL = cn(GLASS, 'flex flex-col gap-3 px-5 py-4')
 
 // The card that moves the engine's own pin.
 //
@@ -79,102 +83,105 @@ export function EngineCard({ e }: { e: EngineFacts }) {
   const nothingToDo = e.verdict === 'current'
 
   return (
-    <Board
+    // Titled outside its panel, like the tables below it on the Updates page:
+    // one heading pattern for the page. Current is the norm and reads as a
+    // word in the right meta; anything else is a chip.
+    <TableSection
       title="Engine"
-      icon="logs"
-      span={12}
-      // Current is the norm and reads as a word; anything else is a chip.
-      aside={
-        nothingToDo ? <span className={NOTE}>{v.label}</span> : <Chip tone={v.tone}>{v.label}</Chip>
-      }
+      aside={nothingToDo ? v.label : <Chip tone={v.tone}>{v.label}</Chip>}
     >
-      <Facts
-        rows={[
-          {
-            k: 'Pinned',
-            v: (
-              <span className={cn(MONO_FACE, 'text-[0.8rem]')}>
-                {short(e.pinned?.rev)}
-                {e.pinned?.lastModified != null && (
-                  <span className="ml-2 text-muted-foreground">{day(e.pinned.lastModified)}</span>
-                )}
-              </span>
-            ),
-          },
-          {
-            k: 'Clone',
-            v:
-              e.clone === null ? (
-                <span className={NOTE}>no clone of {ENGINE_REPO} under the workspace root</span>
-              ) : (
+      <div className={PANEL}>
+        <Facts
+          rows={[
+            {
+              k: 'Pinned',
+              v: (
                 <span className={cn(MONO_FACE, 'text-[0.8rem]')}>
-                  {short(e.clone.head)}
-                  <span className="ml-2 text-muted-foreground">
-                    {e.clone.branch ?? DASH}
-                    {e.clone.dirty && ' · dirty'}
-                    {(e.clone.behind ?? 0) > 0 && ` · ${String(e.clone.behind)} behind origin`}
-                    {diverged && ` · ${String(e.clone.ahead)} not on origin`}
-                  </span>
+                  {short(e.pinned?.rev)}
+                  {e.pinned?.lastModified != null && (
+                    <span className="ml-2 text-muted-foreground">{day(e.pinned.lastModified)}</span>
+                  )}
                 </span>
               ),
-          },
-          {
-            k: 'Last fetch',
-            v: <span className={cn(MONO_FACE, 'text-[0.8rem]')}>{day(e.clone?.sync?.at)}</span>,
-          },
-        ]}
-      />
+            },
+            {
+              k: 'Clone',
+              v:
+                e.clone === null ? (
+                  <span className={NOTE}>no clone of {ENGINE_REPO} under the workspace root</span>
+                ) : (
+                  <span className={cn(MONO_FACE, 'text-[0.8rem]')}>
+                    {short(e.clone.head)}
+                    <span className="ml-2 text-muted-foreground">
+                      {e.clone.branch ?? DASH}
+                      {e.clone.dirty && ' · dirty'}
+                      {(e.clone.behind ?? 0) > 0 && ` · ${String(e.clone.behind)} behind origin`}
+                      {diverged && ` · ${String(e.clone.ahead)} not on origin`}
+                    </span>
+                  </span>
+                ),
+            },
+            {
+              k: 'Last fetch',
+              v: <span className={cn(MONO_FACE, 'text-[0.8rem]')}>{day(e.clone?.sync?.at)}</span>,
+            },
+          ]}
+        />
 
-      <div>
-        {running || startedHere ? (
-          <Run status={status} />
-        ) : (
-          <div className="flex flex-col items-start gap-2.5">
-            {e.override && (
-              <p className={NOTE}>
-                Refused while the engine override is on: the running system is built from the engine
-                clone, not from the pinned engine. Turn it off in{' '}
-                <Link to="/settings" search={{ tab: 'developer' }}>
-                  Settings › Developer
-                </Link>{' '}
-                and apply first.
-              </p>
-            )}
-            {diverged && (
-              <p className={NOTE}>
-                The clone has {String(e.clone?.ahead)} commit
-                {e.clone?.ahead === 1 ? '' : 's'} that are not on origin. One branch, main, always:
-                push them first — the update only fast-forwards, and will refuse a clone it cannot.
-              </p>
-            )}
-            {refusal !== null && <p className="m-0 text-[0.8rem] text-danger">{refusal}</p>}
-            <Button
-              type="button"
-              size="sm"
-              disabled={running || blocked}
-              onClick={() => {
-                setStartedHere(true)
-                start(async () => {
-                  const r = await requestEngineUpdateFn()
-                  // The outcome's `code` is for a machine caller; a person reads the sentence.
-                  return r.ok ? { ok: true, value: r.id } : { ok: false, reason: r.reason }
-                })
-              }}
-            >
-              {nothingToDo ? 'Re-check daedalus' : 'Update daedalus'}
-            </Button>
-          </div>
-        )}
+        <div>
+          {running || startedHere ? (
+            <Run status={status} />
+          ) : (
+            <div className="flex flex-col items-start gap-2.5">
+              {e.override && (
+                <p className={NOTE}>
+                  Refused while the engine override is on: the running system is built from the
+                  engine clone, not from the pinned engine. Turn it off in{' '}
+                  <Link to="/settings" search={{ tab: 'developer' }}>
+                    Settings › Developer
+                  </Link>{' '}
+                  and apply first.
+                </p>
+              )}
+              {diverged && (
+                <p className={NOTE}>
+                  The clone has {String(e.clone?.ahead)} commit
+                  {e.clone?.ahead === 1 ? '' : 's'} that are not on origin. One branch, main,
+                  always: push them first — the update only fast-forwards, and will refuse a clone
+                  it cannot.
+                </p>
+              )}
+              {refusal !== null && <p className="m-0 text-[0.8rem] text-danger">{refusal}</p>}
+              <Button
+                type="button"
+                size="sm"
+                // Filled only when it moves the pin; a re-check is idempotent.
+                variant={nothingToDo ? 'outline' : 'default'}
+                disabled={running || blocked}
+                onClick={() => {
+                  setStartedHere(true)
+                  start(async () => {
+                    const r = await requestEngineUpdateFn()
+                    // The outcome's `code` is for a machine caller; a person reads the sentence.
+                    return r.ok ? { ok: true, value: r.id } : { ok: false, reason: r.reason }
+                  })
+                }}
+              >
+                {nothingToDo ? 'Re-check daedalus' : 'Update daedalus'}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <p className={FOOT}>
+          The engine is a flake input of the configuration, pinned by commit in its lock. Updating
+          it fast-forwards the clone from origin, moves the lock to the clone's{' '}
+          <span className={MONO}>main</span>, builds, switches, and checks that this control plane
+          answers again — reverting the lock and switching back if it does not — then pushes the
+          lock commit. The page you are reading restarts along the way; it comes back on its own.
+        </p>
       </div>
-
-      <p className={FOOT}>
-        The engine is a flake input of the configuration, pinned by commit in its lock. Updating it
-        fast-forwards the clone from origin, moves the lock to the clone's{' '}
-        <span className={MONO}>main</span>, builds, switches, and checks that this control plane
-        answers again — reverting the lock and switching back if it does not — then pushes the lock
-        commit. The page you are reading restarts along the way; it comes back on its own.
-      </p>
-    </Board>
+    </TableSection>
   )
 }
 

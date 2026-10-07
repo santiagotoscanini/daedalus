@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { rollUp } from '../../lib/activity-lines'
 import { cn } from '../../lib/cn'
 import { ms } from '../../lib/format'
@@ -11,6 +12,7 @@ import {
   TABLE,
   TABLE_HEAD,
   TABLE_ROW,
+  TableMore,
 } from '../table'
 import { EMPTY, FOOT } from '../tokens'
 import { Board, BoardGrid, Chip } from '../viz'
@@ -28,6 +30,8 @@ const DEPLOY_GRID = cn(
   '@max-[60rem]/table:grid-cols-[minmax(7rem,1fr)_6rem_minmax(0,1.5fr)_7rem]',
   '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_6rem]',
 )
+/** Deploys shown before the list folds: the recent ones are what is read. */
+const DEPLOYS_FOLDED = 10
 const WIDE = '@max-[60rem]/table:hidden'
 const NARROW = '@max-[36rem]/table:hidden'
 
@@ -39,6 +43,7 @@ export function Deployments({
   td: Extract<AppTabData, { kind: 'deployments' }>
 }) {
   const local = app.sourceMode === 'local'
+  const [showAll, setShowAll] = useState(false)
   return (
     <>
       {/* Where the source is lives in the head above; what this tab adds for a
@@ -78,9 +83,19 @@ export function Deployments({
             <span className={cn('text-right', WIDE)}>HTTP</span>
             <span className={NARROW}>Source</span>
           </li>
-          {td.deployments.map((d) => (
+          {(showAll ? td.deployments : td.deployments.slice(0, DEPLOYS_FOLDED)).map((d) => (
             <DeployLine key={d.id} d={d} />
           ))}
+          {td.deployments.length > DEPLOYS_FOLDED && (
+            <TableMore
+              open={showAll}
+              onToggle={() => {
+                setShowAll((v) => !v)
+              }}
+              more={`Show all ${String(td.deployments.length)} deploys`}
+              less="Show the latest only"
+            />
+          )}
         </ul>
       )}
 
@@ -103,18 +118,11 @@ function DeployLine({ d }: { d: DeployRow }) {
         >
           {d.shortRevision ?? d.digest.slice(0, 12)}
         </code>
-        {d.isCurrent && (
-          <Chip tone="accent" className={CHIP}>
-            current
-          </Chip>
-        )}
+        {d.isCurrent && <Chip className={CHIP}>current</Chip>}
       </span>
       <span>
         {d.result === 'ok' ? (
-          <span className="inline-flex items-center gap-2 text-[0.78rem] text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
-            success
-          </span>
+          <span className="text-[0.78rem] text-muted-foreground">success</span>
         ) : (
           <Chip tone="bad" className={CHIP}>
             failed

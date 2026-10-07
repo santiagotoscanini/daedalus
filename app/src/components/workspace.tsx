@@ -1,5 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
+import { ArrowDownToLineIcon } from 'lucide-react'
 import { cloneWorkspaceFn } from '../server/registry'
+import { GHOST_BTN } from './apps/shared'
 import { useRootAction } from './root-action'
 import { Button } from './ui/button'
 
@@ -32,12 +34,15 @@ export function CloneButton({ repo, cloned }: { repo: string; cloned: boolean })
         type="button"
         variant="outline"
         size="sm"
+        className={GHOST_BTN}
         disabled={running}
         onClick={() => {
           start(() => cloneWorkspaceFn({ data: { repo } }))
         }}
       >
-        {running ? (cloned ? '⇣ pulling…' : '⇣ cloning…') : cloned ? '⇣ Pull now' : '⇣ Clone'}
+        {/* The same icon-and-word shape as Redeploy beside it. */}
+        <ArrowDownToLineIcon aria-hidden="true" className={running ? 'animate-pulse' : undefined} />
+        {running ? (cloned ? 'Pulling…' : 'Cloning…') : cloned ? 'Pull now' : 'Clone'}
       </Button>
     </span>
   )

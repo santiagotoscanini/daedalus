@@ -1,13 +1,21 @@
 import { type FormEvent, useState } from 'react'
 import { DAY, LocalTime } from '../../../components/ago'
-import { BOARD_TABLE, BOARD_TABLE_HEAD, BOARD_TABLE_ROW } from '../../../components/modules/parts'
-import { CELL_NAME, CELL_QUIET, CELL_SUB } from '../../../components/table'
-import { EMPTY, FOOT, INPUT_MONO, MONO, NOTE } from '../../../components/tokens'
+import { SECTION_SPAN, TABLE_NONE } from '../../../components/modules/parts'
+import {
+  CELL_NAME,
+  CELL_QUIET,
+  CELL_SUB,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { FOOT, INPUT_MONO, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Switch } from '../../../components/ui/switch'
 import { useAction } from '../../../components/use-action'
-import { Board, Chip } from '../../../components/viz'
+import { Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH } from '../../../lib/format'
 import { useShown } from '../../../lib/shown'
@@ -42,21 +50,16 @@ const INPUT = cn(INPUT_MONO, 'w-[13rem] max-w-full')
 export function RosterBoard({ rows }: { rows: Row[] }) {
   const allowed = rows.filter((r) => r.state !== 'removing').length
   return (
-    <Board
+    <TableSection
       title="Who gets in"
-      icon="panels"
-      span={12}
-      aside={
-        <span className={NOTE}>
-          {allowed === 0 ? 'nobody' : `${String(allowed)} allowed`} · Java accounts
-        </span>
-      }
+      className={SECTION_SPAN[12]}
+      aside={<>{allowed === 0 ? 'nobody' : `${String(allowed)} allowed`} · Java accounts</>}
     >
       {rows.length === 0 ? (
-        <p className={EMPTY}>nobody is on the list, so the server turns every login away</p>
+        <p className={TABLE_NONE}>nobody is on the list, so the server turns every login away</p>
       ) : (
-        <ul className={BOARD_TABLE}>
-          <li className={cn(GRID, BOARD_TABLE_HEAD)}>
+        <ul className={TABLE}>
+          <li className={cn(GRID, TABLE_HEAD)}>
             <span>Player</span>
             <span className={HIDE_NARROW}>Last joined</span>
             <span className={HIDE_NARROW}>Skin</span>
@@ -75,7 +78,7 @@ export function RosterBoard({ rows }: { rows: Row[] }) {
         it removes. Every name is checked with Mojang before it goes on the list, and the server
         lets players in by UUID, so a player who renames still gets in.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 
@@ -89,7 +92,7 @@ function PlayerRow({ r }: { r: Row }) {
     .filter(Boolean)
     .join(' · ')
   return (
-    <li className={cn(GRID, BOARD_TABLE_ROW, 'py-2.5', removing && 'opacity-60')}>
+    <li className={cn(GRID, TABLE_ROW, 'py-2.5', removing && 'opacity-60')}>
       <div className="flex min-w-0 items-center gap-3">
         {r.head === null ? (
           <span className={HEAD_BLANK} aria-hidden>
@@ -204,7 +207,7 @@ function AddPlayer() {
         op
         <Switch aria-label="Add as op" checked={op} disabled={busy} onCheckedChange={setOp} />
       </span>
-      <Button type="submit" size="sm" disabled={busy || name.trim() === ''}>
+      <Button type="submit" size="sm" variant="outline" disabled={busy || name.trim() === ''}>
         {busy ? 'Checking with Mojang…' : 'Add'}
       </Button>
       {(error ?? notice) !== null && (

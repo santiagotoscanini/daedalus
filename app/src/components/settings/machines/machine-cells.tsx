@@ -37,6 +37,14 @@ export function OsMark({ os }: { os: string }) {
   )
 }
 
+/** The OS family as its maker writes it: macOS, not Macos. */
+export function osName(os: string | null | undefined): string {
+  if (os === 'macos') return 'macOS'
+  if (os === 'windows') return 'Windows'
+  if (os === 'linux') return 'Linux'
+  return os ? os.charAt(0).toUpperCase() + os.slice(1) : 'unknown OS'
+}
+
 export type Verdict = { chip: string; tone: Tone }
 
 /**
@@ -87,12 +95,17 @@ export function verdict(m: Machine): Verdict {
  */
 export function StatusCell({ m }: { m: Machine }) {
   const v = verdict(m)
+  // Not connected is the one quiet verdict that still wants a look: a dot, not a chip.
+  const away = m.node !== null && m.node.state !== 'revoked' && m.node.connected === false
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-      {v.tone === 'ok' || v.tone === 'muted' ? (
-        <span className={cn('text-[0.78rem]', v.tone === 'ok' ? 'text-subdued' : ASIDE)}>
+      {away ? (
+        <span className="inline-flex items-center gap-1.5 text-[0.78rem] text-subdued">
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-warning" />
           {v.chip}
         </span>
+      ) : v.tone === 'ok' || v.tone === 'muted' ? (
+        <span className="text-[0.78rem] text-muted-foreground">{v.chip}</span>
       ) : (
         <Chip tone={v.tone}>{v.chip}</Chip>
       )}

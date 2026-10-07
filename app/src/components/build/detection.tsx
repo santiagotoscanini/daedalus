@@ -194,7 +194,7 @@ export function ImageBoard({ build }: { build: BuildView }) {
             value: size,
             display: bytes(size),
           }))}
-          tone="info"
+          tone="muted"
         />
       )}
       {layers.length > 0 && (

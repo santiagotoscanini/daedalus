@@ -29,11 +29,13 @@ const CALLER_GRID = cn(
 const WIDE = '@max-[60rem]/table:hidden'
 const MID = '@max-[38rem]/table:hidden'
 const NUM = cn(CELL_QUIET, 'text-right')
+/** No figure: a quiet dash, so a blank cell never reads as a rendering fault. */
+const NONE = <span className="text-muted-foreground/50">{DASH}</span>
 
 /** The bar is the comparison this table exists to make, so it is the one drawn thing in a row. */
 const BAR = 'block h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]'
 const BAR_FILL =
-  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none'
+  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-muted-foreground opacity-60 motion-reduce:animate-none'
 
 export function WhoIsCallingBoard({ f }: { f: LitellmFacts }) {
   const { data, total, todayDate } = f
@@ -72,15 +74,17 @@ export function WhoIsCallingBoard({ f }: { f: LitellmFacts }) {
       }
     >
       <ul className={TABLE} aria-label="Who is calling the gateway">
-        <li aria-hidden="true" className={cn(CALLER_GRID, TABLE_HEAD)}>
-          <span>Caller</span>
-          <span className="text-right">Requests</span>
-          <span className={cn(MID, 'text-right')}>Tokens</span>
-          <span className={cn(WIDE, 'text-right')}>Latency</span>
-          <span className={cn(MID, 'text-right')}>Failed</span>
-          <span className={WIDE}>Models</span>
-          <span className={cn(MID, 'text-right')}>Last call</span>
-        </li>
+        {data.callers.length > 0 && (
+          <li aria-hidden="true" className={cn(CALLER_GRID, TABLE_HEAD)}>
+            <span>Caller</span>
+            <span className="text-right">Requests</span>
+            <span className={cn(MID, 'text-right')}>Tokens</span>
+            <span className={cn(WIDE, 'text-right')}>Latency</span>
+            <span className={cn(MID, 'text-right')}>Failed</span>
+            <span className={WIDE}>Models</span>
+            <span className={cn(MID, 'text-right')}>Last call</span>
+          </li>
+        )}
         {data.callers.length === 0 ? (
           <li className={TABLE_EMPTY}>No keyed traffic in the window.</li>
         ) : (
@@ -126,18 +130,20 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
           {num(caller.requests)}
         </span>
       </span>
-      <span className={cn(NUM, MID)}>{caller.tokens > 0 ? compact(caller.tokens) : ''}</span>
-      <span className={cn(NUM, WIDE)}>{caller.latencyMs === null ? '' : ms(caller.latencyMs)}</span>
+      <span className={cn(NUM, MID)}>{caller.tokens > 0 ? compact(caller.tokens) : NONE}</span>
+      <span className={cn(NUM, WIDE)}>
+        {caller.latencyMs === null ? NONE : ms(caller.latencyMs)}
+      </span>
       <span className={cn(NUM, MID, caller.failed > 0 && 'text-danger')}>
-        {caller.failed > 0 ? num(caller.failed) : ''}
+        {caller.failed > 0 ? num(caller.failed) : NONE}
       </span>
       {/* One name and a count. A caller reaching a single model is the norm,
           and the master key reaches several — the rest is a hover away. */}
       <span className={cn(CELL_MONO, WIDE)} title={caller.models.join(', ')}>
-        {caller.models[0] ?? ''}
+        {caller.models[0] ?? NONE}
         {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
       </span>
-      <span className={cn(NUM, MID)}>{ledgerAgo(caller.last, today)}</span>
+      <span className={cn(NUM, MID, 'whitespace-nowrap')}>{ledgerAgo(caller.last, today)}</span>
     </li>
   )
 }

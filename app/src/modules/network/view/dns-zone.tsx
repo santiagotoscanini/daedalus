@@ -61,7 +61,7 @@ export function ZoneView({ d }: { d: Zone }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a
               href={`https://dash.cloudflare.com/?to=/:account/${d.domain}/dns`}
               target="_blank"

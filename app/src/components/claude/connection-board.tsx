@@ -3,8 +3,10 @@
 import { cn } from '../../lib/cn'
 import type { RcEvent } from '../../lib/dashboard/claude'
 import { Ago } from '../ago'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../tokens'
-import { Board, Chip, type Tone } from '../viz'
+import { TABLE } from '../table'
+import { TableSection } from '../table-section'
+import { EMPTY, FOOT, MONO, ROW, ROW_MAIN, ROW_SIDE } from '../tokens'
+import { Chip, type Tone } from '../viz'
 
 const EVENT_TONE: Record<RcEvent['kind'], Tone> = {
   session: 'ok',
@@ -24,19 +26,15 @@ const EVENT_LABEL: Record<RcEvent['kind'], string> = {
 
 export function ConnectionBoard({ events }: { events: RcEvent[] }) {
   return (
-    <Board
-      title="Connection"
-      icon="logs"
-      span={6}
-      aside={<span className={NOTE}>last 14 days</span>}
-    >
+    // A feed of lines, so a table under an out-of-card heading.
+    <TableSection className="mt-6" title="Connection" aside="last 14 days">
       {events.length === 0 ? (
         <p className={EMPTY}>
           Nothing in the window. Either the server has been up and connected throughout, or its
           journal has been rotated past. These lines are read back out of Loki.
         </p>
       ) : (
-        <ul className={LIST}>
+        <ul className={TABLE}>
           {events.slice(0, 14).map((e) => (
             <EventRow key={`${String(e.at)}-${e.text}`} event={e} />
           ))}
@@ -48,13 +46,13 @@ export function ConnectionBoard({ events }: { events: RcEvent[] }) {
         at <span className={MONO}>:00</span> are the box rather than the network — myspeed's hourly
         speedtest saturates the uplink for a minute or two.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 
 function EventRow({ event }: { event: RcEvent }) {
   return (
-    <li className={cn(ROW, 'grid grid-cols-[4.75rem_minmax(0,1fr)_4.5rem] gap-x-3')}>
+    <li className={cn(ROW, 'grid min-h-11 grid-cols-[4.75rem_minmax(0,1fr)_4.5rem] gap-x-4 px-5')}>
       {/* A drop is the one kind worth a colour; the rest are the link's normal
           life and read as a quiet word in their column. */}
       <span className="flex">

@@ -43,9 +43,10 @@ type Io = Disks['io'][number]
 // is kept for the drive that differs.
 
 const GRID = cn(
-  'grid items-center gap-x-6 px-5',
-  'grid-cols-[minmax(0,1.6fr)_4.5rem_3.5rem_5rem_4rem_5.5rem_5.5rem_5.5rem_3.5rem_5.5rem]',
-  '@max-[64rem]/table:grid-cols-[minmax(0,1.6fr)_4.5rem_3.5rem_5rem_5.5rem_5.5rem]',
+  'grid items-center gap-x-4 px-5',
+  // The drive keeps 16rem: a device, its family, never an ellipsis.
+  'grid-cols-[minmax(16rem,1fr)_4rem_3rem_4.5rem_3.5rem_4rem_4rem_5rem_5rem_3rem_3.5rem]',
+  '@max-[64rem]/table:grid-cols-[minmax(12rem,1fr)_4rem_3rem_4.5rem_4rem_4rem_3.5rem]',
   '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem]',
 )
 /** Steps away below a laptop half-window, and below a phone. */
@@ -66,7 +67,12 @@ export function DisksView({ d }: { d: Disks }) {
             <span className={N}>Temp</span>
             <span className={cn(N, MID)}>Powered on</span>
             <span className={cn(N, WIDE)}>Cycles</span>
-            <span className={cn(N, MID)}>Wear</span>
+            <span className={cn(N, MID)} title="Reallocated sectors, on a spinning disk">
+              Realloc.
+            </span>
+            <span className={cn(N, MID)} title="Rated endurance used, on an SSD">
+              Wear %
+            </span>
             <span className={cn(N, WIDE)}>Read</span>
             <span className={cn(N, WIDE)}>Written</span>
             <span className={cn(N, WIDE)}>Busy</span>
@@ -83,9 +89,8 @@ export function DisksView({ d }: { d: Disks }) {
         </ul>
         <p className={FOOT}>
           Temperature, age and wear from each drive&rsquo;s own SMART log, read by the host every
-          ten minutes. Wear is reallocated sectors on a spinning disk and the share of rated
-          endurance used on an NVMe one. Read, written and busy are node-exporter&rsquo;s 5-minute
-          averages.
+          ten minutes. A spinning disk wears in reallocated sectors, an SSD in the share of its
+          rated endurance used. Read, written and busy are node-exporter&rsquo;s 5-minute averages.
         </p>
       </TableSection>
 
@@ -156,16 +161,18 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
       <span className={cn(CELL_QUIET, N, MID)}>
         {disk.sizeBytes === null ? DASH : bytes(disk.sizeBytes)}
       </span>
-      <span className={cn(N, 'text-foreground')}>
+      <span className={cn(N, 'text-[0.8125rem] text-foreground')}>
         {disk.temperature === null ? DASH : `${String(disk.temperature)}°`}
       </span>
       <span className={cn(CELL_QUIET, N, MID)}>{hours(disk.powerOnHours)}</span>
       <span className={cn(CELL_QUIET, N, WIDE)}>{num(disk.powerCycles)}</span>
-      <span
-        className={cn(N, MID, worn ? 'text-warning' : CELL_QUIET)}
-        title={nvme ? 'Rated endurance used' : 'Reallocated sectors'}
-      >
-        {nvme ? `${pct(disk.percentageUsed)} used` : `${num(disk.reallocated)} realloc.`}
+      {/* Two measures, two columns, the unit in the head: a spinning disk
+          counts reallocated sectors, an SSD its share of rated endurance. */}
+      <span className={cn(N, MID, !nvme && worn ? 'text-warning' : CELL_QUIET)}>
+        {nvme ? DASH : num(disk.reallocated)}
+      </span>
+      <span className={cn(N, MID, nvme && worn ? 'text-warning' : CELL_QUIET)}>
+        {nvme ? (disk.percentageUsed === null ? DASH : num(disk.percentageUsed)) : DASH}
       </span>
       <span className={cn(CELL_QUIET, N, WIDE)}>
         {stats?.readBytes == null ? DASH : `${bytes(stats.readBytes)}/s`}
@@ -203,13 +210,9 @@ function DiskBoard({ disk }: { disk: Disk }) {
          stretch to a shared bottom edge, so the row is as tall as the drive
          with the most to say. */
       span={4}
-      aside={
-        disk.passed === null ? undefined : disk.passed ? (
-          <span className="text-[0.75rem] text-muted-foreground">SMART ok</span>
-        ) : (
-          <Chip tone="bad">SMART failing</Chip>
-        )
-      }
+      // The table says ok for every healthy drive; the board speaks only when
+      // its drive is the exception.
+      aside={disk.passed === false ? <Chip tone="bad">SMART failing</Chip> : undefined}
     >
       <div className="flex items-center gap-3.5 pb-1">
         {photo !== null && (
@@ -285,7 +288,7 @@ function DiskBoard({ disk }: { disk: Disk }) {
       />
       {!nvme && (disk.crcErrors ?? 0) > 0 && (
         // The distinction that decides what you'd actually do about it.
-        <p className={cn(CAPTION, 'text-warning')}>
+        <p className={CAPTION}>
           A link CRC error is the <em>cable</em>, not the platter: a transfer that had to be retried
           between the controller and the drive. It never decrements, so this is a lifetime count. A
           stable one is nothing. A climbing one means reseating a SATA cable.
@@ -322,7 +325,7 @@ function DiskBoard({ disk }: { disk: Disk }) {
       </ul>
 
       {failedTest !== undefined && (
-        <p className={cn(CAPTION, 'text-warning')}>
+        <p className={CAPTION}>
           The most recent <b>{failedTest.type ?? 'test'}</b> did not finish:{' '}
           {failedTest.status ?? 'unknown'}. An interrupted test is not a failing disk; a host reset
           or a power event ends one. It does mean that scheduled check verified nothing.

@@ -1,3 +1,4 @@
+import { LEFT_FACTS } from '../../../components/claude/shared'
 import { LogBoard } from '../../../components/logs'
 import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../../../components/part'
 import {
@@ -59,40 +60,42 @@ function ControllerBoard({ c }: { c: Host['controller'] }) {
       }
     >
       {c.reachable ? (
-        <Facts
-          list
-          rows={[
-            { k: 'Agent', v: <span className={MONO}>{c.version}</span> },
-            { k: 'Mode', v: c.mode },
-            { k: 'API', v: <span className={MONO}>v{c.api}</span> },
-            { k: 'Up', v: duration(c.uptimeSecs) },
-            { k: 'Telemetry', v: c.telemetry },
-            {
-              k: 'Claude, as it reports',
-              v:
-                c.claude === null
-                  ? DASH
-                  : !c.claude.wanted
-                    ? 'off here'
-                    : c.claude.reporting
-                      ? (c.claude.state ?? 'reporting')
-                      : 'not reporting',
-            },
-            {
-              k: 'Capabilities',
-              // One quiet line: a pill per capability, seven of them, was the
-              // loudest thing on a panel whose verdict is the chip above.
-              v:
-                c.capabilities.length === 0 ? (
-                  DASH
-                ) : (
-                  <span className={cn(MONO, 'text-muted-foreground')}>
-                    {c.capabilities.join(' · ')}
-                  </span>
-                ),
-            },
-          ]}
-        />
+        <div className={LEFT_FACTS}>
+          <Facts
+            list
+            rows={[
+              { k: 'Agent', v: <span className={MONO}>{c.version}</span> },
+              { k: 'Mode', v: c.mode },
+              { k: 'API', v: <span className={MONO}>v{c.api}</span> },
+              { k: 'Up', v: duration(c.uptimeSecs) },
+              { k: 'Telemetry', v: c.telemetry },
+              {
+                k: 'Claude, as it reports',
+                v:
+                  c.claude === null
+                    ? DASH
+                    : !c.claude.wanted
+                      ? 'off here'
+                      : c.claude.reporting
+                        ? (c.claude.state ?? 'reporting')
+                        : 'not reporting',
+              },
+              {
+                k: 'Capabilities',
+                // One quiet line: a pill per capability, seven of them, was the
+                // loudest thing on a panel whose verdict is the chip above.
+                v:
+                  c.capabilities.length === 0 ? (
+                    DASH
+                  ) : (
+                    <span className={cn(MONO, 'text-muted-foreground')}>
+                      {c.capabilities.join(' · ')}
+                    </span>
+                  ),
+              },
+            ]}
+          />
+        </div>
       ) : (
         <p className={EMPTY}>Controller not reachable: {c.error}</p>
       )}
@@ -189,7 +192,7 @@ function LoadBoard({ d }: { d: Host }) {
           ]}
         />
       </div>
-      <Trend values={d.cpuSpark} tone="accent" height={96} />
+      <Trend values={d.cpuSpark} tone="muted" height={96} />
       <p className={FOOT}>
         Six hours of cpu, and the load averages beside it for scale: on {num(d.cores)} threads a
         load of {num(d.cores)} is fully committed, not overloaded. What load cannot tell you is what

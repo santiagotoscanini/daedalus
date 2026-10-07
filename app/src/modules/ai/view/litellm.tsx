@@ -52,7 +52,7 @@ export function LitellmView({ data }: { data: LitellmData }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href={`${data.url}/ui`} target="_blank" rel="noreferrer">
               Open the admin UI ↗
             </a>

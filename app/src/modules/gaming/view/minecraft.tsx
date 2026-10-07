@@ -8,7 +8,7 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../../../compone
 import type { GamingData } from '../data'
 import { VersionBoard } from './minecraft-update'
 import { RosterBoard } from './roster'
-import { EventsTable } from './shared'
+import { EventsSection, Unknown } from './shared'
 
 /**
  * Paper, and the only tab here whose numbers are live.
@@ -73,13 +73,13 @@ export function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'mine
       <StatStrip>
         <Stat
           label="Players"
-          value={mc.players ?? '—'}
+          value={mc.players ?? <Unknown />}
           sub={mc.maxPlayers === null ? undefined : `of ${String(mc.maxPlayers)}`}
           spark={mc.online}
         />
         <Stat
           label="Ping"
-          value={mc.ping === null ? '—' : (mc.ping * 1000).toFixed(0)}
+          value={mc.ping === null ? <Unknown /> : (mc.ping * 1000).toFixed(0)}
           unit="ms"
           // Not decoration: the status ping runs on the main thread, so this
           // climbing is the first cheap sign of tick pressure — visible here
@@ -125,7 +125,7 @@ export function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'mine
 
         <Changelog
           build={builds}
-          span={6}
+          span={12}
           aside={<span className={NOTE}>papermc</span>}
           foot={
             <p className={FOOT}>
@@ -137,7 +137,7 @@ export function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'mine
           }
         />
 
-        <ComingsAndGoingsBoard f={f} />
+        <ComingsAndGoingsSection f={f} />
 
         <HowItIsRunBoard f={f} />
 
@@ -181,22 +181,15 @@ function Panel({ f }: { f: MinecraftFacts }) {
   )
 }
 
-function ComingsAndGoingsBoard({ f }: { f: MinecraftFacts }) {
-  const { events } = f
+function ComingsAndGoingsSection({ f }: { f: MinecraftFacts }) {
   return (
-    <Board
-      title="Comings and goings"
-      icon="panels"
-      span={6}
-      aside={<span className={NOTE}>last 7 days</span>}
-    >
-      <EventsTable events={events} empty="nobody has joined this week" />
+    <EventsSection events={f.events} window="last 7 days" empty="nobody has joined this week">
       {/* The log is the record — see joinsAndLeaves in data/minecraft.ts. */}
       <p className={FOOT}>
         Parsed from the server’s log in Loki, newest first. The panel below is the whole log; this
         is the part about people.
       </p>
-    </Board>
+    </EventsSection>
   )
 }
 

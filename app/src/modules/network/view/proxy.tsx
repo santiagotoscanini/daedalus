@@ -65,7 +65,7 @@ export function TraefikView({ data: d }: { data: ProxyData }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href={d.dashboardUrl} target="_blank" rel="noreferrer">
               Open the dashboard ↗
             </a>

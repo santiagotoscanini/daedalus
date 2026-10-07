@@ -38,11 +38,11 @@ export function LogsView({ data: d }: { data: Logs }) {
         <VolumeBoard f={f} />
 
         <Board title="By level" icon="◱" span={4}>
-          <BarList items={d.byLevel} tone="info" empty="nothing labelled" />
+          <BarList items={d.byLevel} empty="nothing labelled" />
         </Board>
 
         <Board title="Noisiest errors, 24h" icon="warn" span={4}>
-          <BarList items={d.noisiest} tone="warn" empty="no errors" />
+          <BarList items={d.noisiest} empty="no errors" />
           <p className={FOOT}>
             Host journal lines carry <span className={MONO}>unit</span> rather than{' '}
             <span className={MONO}>container</span>, so they group together rather than appearing as
@@ -96,7 +96,7 @@ function VolumeBoard({ f }: { f: LogsFacts }) {
       span={8}
       aside={<span className={NOTE}>{compact(d.lines1h)} lines in the last hour</span>}
     >
-      <Trend values={d.volumeHistory} tone="info" height={90} />
+      <Trend values={d.volumeHistory} height={90} />
       <h4 className={SUB}>Errors only, same day</h4>
       <Trend values={d.errorHistory} tone="bad" height={70} />
       <Measures
@@ -129,7 +129,7 @@ function CoverageBoard({ f }: { f: LogsFacts }) {
         )
       }
     >
-      <BarList items={d.byStack} tone="accent" empty="no stack labels" />
+      <BarList items={d.byStack} empty="no stack labels" />
       <p className={FOOT}>
         Every container&rsquo;s lines are labelled with the stack it belongs to, generated from{' '}
         <span className={MONO}>fleet.logStacks</span>; an unregistered container falls back to its

@@ -133,7 +133,8 @@ function Status({ state, label }: { state: AppState; label?: string }) {
         state === 'running' ? 'text-muted-foreground' : 'text-foreground [font-weight:500]',
       )}
     >
-      <StateDot state={state} label={word} />
+      {/* No dot for the normal case: a column of green dots says nothing. */}
+      {state !== 'running' && <StateDot state={state} label={word} />}
       <span className="truncate">{word}</span>
       {/* Where the row goes, said on hover only. */}
       <ChevronRightIcon

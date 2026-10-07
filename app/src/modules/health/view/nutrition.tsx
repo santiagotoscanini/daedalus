@@ -38,13 +38,18 @@ export function NutritionView({ data: d }: { data: Nutrition }) {
           gap={d.gap}
           span={12}
           title={gapTitle('yazio-mcp', d.gap)}
-          aside={<VersionAside version={d.version} />}
+          aside={<VersionAside version={d.version} behind={d.gap.behind.length} />}
         />
         <Changelog
           gap={d.supergateway.gap}
           span={12}
           title={gapTitle('supergateway', d.supergateway.gap)}
-          aside={<VersionAside version={d.supergateway.version} />}
+          aside={
+            <VersionAside
+              version={d.supergateway.version}
+              behind={d.supergateway.gap.behind.length}
+            />
+          }
         />
         <LogBoard source={{ container: 'mcp-yazio' }} title="Yazio MCP logs" />
       </BoardGrid>

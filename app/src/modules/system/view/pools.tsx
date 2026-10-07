@@ -56,7 +56,7 @@ export function PoolsView({ d }: { d: Pools }) {
               )
             }
           >
-            <Progress pct={p.capacityPct} tone={p.capacityPct > 80 ? 'warn' : 'info'} />
+            <Progress pct={p.capacityPct} tone={p.capacityPct > 80 ? 'warn' : 'muted'} />
             <Measures
               items={[
                 { k: 'used', v: bytes(p.allocBytes) },

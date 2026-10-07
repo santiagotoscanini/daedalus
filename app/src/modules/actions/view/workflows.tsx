@@ -25,16 +25,16 @@ export function WorkflowsView({ d }: { d: Workflows }) {
     <>
       <StatStrip>
         <Stat
-          label="workflows"
+          label="Workflows"
           value={num(t.workflows)}
           sub={`${num(d.repos.length)} repositories`}
         />
-        <Stat label="on push" value={num(t.onPush)} />
-        <Stat label="on pull request" value={num(t.onPullRequest)} />
-        <Stat label="scheduled" value={num(t.scheduled)} />
-        <Stat label="run by hand" value={num(t.dispatchable)} />
+        <Stat label="On push" value={num(t.onPush)} />
+        <Stat label="On pull request" value={num(t.onPullRequest)} />
+        <Stat label="Scheduled" value={num(t.scheduled)} />
+        <Stat label="Run by hand" value={num(t.dispatchable)} />
         <Stat
-          label="jobs on GitHub's machines"
+          label="Jobs on GitHub's machines"
           value={num(hosted)}
           sub={t.selfHosted > 0 ? `${num(t.selfHosted)} self-hosted` : 'none self-hosted'}
         />

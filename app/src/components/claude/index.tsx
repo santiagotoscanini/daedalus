@@ -59,17 +59,13 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
       <BoardGrid>
         <RemoteControlBoard data={data} live={live} />
 
-        {/* Paired by height rather than by subject: Remote control and its
-            link's history are the two long boards, Sign-in and the releases
-            the two short ones. Side by side, each pair shares a bottom edge
-            instead of leaving half a board of empty glass. */}
-        <ConnectionBoard events={data.events} />
-
+        {/* Sign-in beside the releases: the two short boards share a row. */}
         <SignInBoard credentials={facts.credentials} reporting={data.reporting} />
 
-        {/* Beside Sign-in rather than across the page: a version list is a
-            column of short rows that never needed 12. */}
         <ClaudeReleases gap={data.gap} note={verdict.note} />
+
+        {/* The link's history is a feed, so a table under its own heading. */}
+        <ConnectionBoard events={data.events} />
 
         {/* The reason to open this page, so it sits where the attention goes
             rather than at the foot. It is the page's only list of sessions:

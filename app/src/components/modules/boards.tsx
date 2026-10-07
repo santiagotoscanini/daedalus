@@ -90,10 +90,10 @@ function OffPanel({ module, tab }: { module: string; tab: string }) {
     <div
       className={cn(
         GLASS,
-        'flex flex-col items-center justify-center gap-4 px-6 py-10 text-center text-[0.875rem] text-muted-foreground [overflow-wrap:anywhere]',
+        'flex items-center gap-4 p-6 text-[0.875rem] text-muted-foreground [overflow-wrap:anywhere] max-[44rem]:flex-col max-[44rem]:items-start',
       )}
     >
-      <p className="m-0 max-w-[60ch] leading-[1.6]">
+      <p className="m-0 max-w-[640px] flex-1 leading-[1.6]">
         {ids.map((id, i) => (
           <span key={id}>
             {i > 0 && ', '}
@@ -103,7 +103,7 @@ function OffPanel({ module, tab }: { module: string; tab: string }) {
         {ids.length === 1 ? 'is' : 'are'} switched off on this box: nothing runs, nothing answers,
         and the data stays where it is. Switch it on from the cog, then Apply.
       </p>
-      <ServiceSettingsButton ids={ids} />
+      <ServiceSettingsButton ids={ids} label="Turn on in settings" />
     </div>
   )
 }

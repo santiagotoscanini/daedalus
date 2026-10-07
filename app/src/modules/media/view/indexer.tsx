@@ -6,7 +6,6 @@ import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { MediaData } from '../data'
 import {
-  CELL_MONO,
   CELL_NAME,
   CELL_QUIET,
   FOOT,
@@ -87,14 +86,16 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
           }
         >
           <ul className={TABLE} aria-label="Indexers">
-            <li aria-hidden="true" className={cn(IDX_GRID, TABLE_HEAD)}>
-              <span>Indexer</span>
-              <span className={WIDE}>Protocol</span>
-              <span className="text-right">Queries</span>
-              <span className={cn(MID, 'text-right')}>Grabs</span>
-              <span className={cn(WIDE, 'text-right')}>Response, ms</span>
-              <span className={cn(MID, 'text-right')}>Failed</span>
-            </li>
+            {d.indexers.length > 0 && (
+              <li aria-hidden="true" className={cn(IDX_GRID, TABLE_HEAD)}>
+                <span>Indexer</span>
+                <span className={WIDE}>Protocol</span>
+                <span className="text-right">Queries</span>
+                <span className={cn(MID, 'text-right')}>Grabs</span>
+                <span className={cn(WIDE, 'text-right')}>Response, ms</span>
+                <span className={cn(MID, 'text-right')}>Failed</span>
+              </li>
+            )}
             {d.indexers.length === 0 ? (
               <li className={TABLE_EMPTY}>No indexer statistics.</li>
             ) : (
@@ -130,7 +131,7 @@ const NUM = cn(CELL_QUIET, 'text-right')
 
 const BAR = 'block h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]'
 const BAR_FILL =
-  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none'
+  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-muted-foreground opacity-60 motion-reduce:animate-none'
 
 type Indexer = Extract<MediaData, { tab: 'indexer' }>['indexers'][number]
 
@@ -154,7 +155,7 @@ function IndexerRow({ i, max }: { i: Indexer; max: number }) {
           </Chip>
         )}
       </span>
-      <span className={cn(CELL_MONO, WIDE)}>{i.protocol}</span>
+      <span className={cn(CELL_QUIET, WIDE)}>{i.protocol}</span>
       <span className="flex min-w-0 items-center gap-3">
         <span className={BAR}>
           <span

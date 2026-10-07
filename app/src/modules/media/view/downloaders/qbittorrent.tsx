@@ -67,7 +67,7 @@ export function QbtPage({ d }: { d: Downloaders }) {
               key: t.name,
               name: t.name,
               pct: t.pct,
-              tone: t.active ? 'accent' : 'muted',
+              tone: 'muted',
               active: t.active,
               detail: (
                 <>

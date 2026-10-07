@@ -61,7 +61,7 @@ export function WireguardView({ data }: { data: Inbound['wireguard'] }) {
         }
         actions={
           data.url === null ? undefined : (
-            <Button asChild size="sm">
+            <Button asChild size="sm" variant="outline">
               <a href={data.url} target="_blank" rel="noreferrer">
                 Open wg-easy ↗
               </a>
@@ -201,7 +201,6 @@ function AnyoneHomeBoard({ f }: { f: WireguardFacts }) {
           value: d.peers,
           display: `${num(d.peers)} peer${d.peers === 1 ? '' : 's'} at peak`,
         }))}
-        tone="ok"
         height={112}
         empty="no history yet"
       />

@@ -22,14 +22,16 @@ import { Board, Chip } from './viz'
    exact idiom — same triangle, same hover, same open rotation — so that opening
    a container there and opening a release inside it read as one gesture a
    level apart. */
-const REL = 'group overflow-hidden rounded-xl border border-hairline'
+// Hairline-separated rows, not a bordered box per release: these sit inside
+// a card, and a box in a card is one frame too many.
+const REL = 'group border-hairline border-t first:border-t-0'
 const REL_SUMMARY = cn(
-  'flex min-w-0 cursor-pointer list-none items-baseline gap-2.5 px-3 py-2',
-  'hover:bg-foreground/[0.05] [&::-webkit-details-marker]:hidden',
+  'flex min-w-0 cursor-pointer list-none items-baseline gap-2.5 px-0.5 py-2.5',
+  'hover:bg-foreground/[0.025] [&::-webkit-details-marker]:hidden',
   "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
 )
-const REL_BODY = 'border-t border-hairline px-3 pt-0.5 pb-3 pl-6'
+const REL_BODY = 'px-0.5 pt-0 pb-3 pl-5'
 const REL_H5 = 'mt-3 mb-1 text-[0.75rem] text-foreground [font-weight:550]'
 const REL_ITEM = 'max-w-[90ch] text-[0.78rem] leading-[1.5] text-muted-foreground'
 
@@ -65,7 +67,7 @@ export function ReleaseNotes({
   if (releases.length === 0) return <p className={EMPTY}>{empty}</p>
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col">
       {releases.map((rel) => (
         <details key={rel.version} className={REL}>
           <summary className={REL_SUMMARY}>
@@ -104,7 +106,7 @@ export function ReleaseNotes({
             )}
             <p className="mt-3 mb-0 text-[0.75rem] text-muted-foreground">
               {rel.truncated && 'Shortened. '}
-              <a className="text-primary" href={rel.url} target="_blank" rel="noreferrer">
+              <a className="text-foreground" href={rel.url} target="_blank" rel="noreferrer">
                 Full notes ↗
               </a>
             </p>
@@ -189,7 +191,7 @@ export function Changelog({
           {build.behind.map((c) => (
             <li key={c.sha} className={COMMIT}>
               <a
-                className={cn(MONO, 'text-muted-foreground no-underline hover:text-primary')}
+                className={cn(MONO, 'text-muted-foreground no-underline hover:text-foreground')}
                 href={c.url}
                 target="_blank"
                 rel="noreferrer"

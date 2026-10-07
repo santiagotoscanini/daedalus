@@ -4,10 +4,11 @@
 // subgen is a container a rebuild manages.
 
 import { CircleAlertIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Ago } from '../../../../components/ago'
 import { FOOT, MONO, MONO_FACE } from '../../../../components/tokens'
 import { Alert, AlertDescription } from '../../../../components/ui/alert'
-import { Board, Chip, Facts, type Tone } from '../../../../components/viz'
+import { Board, Chip, type Tone } from '../../../../components/viz'
 import type { LifecyclePhase } from '../../../../host/controller/generated'
 import { cn } from '../../../../lib/cn'
 import { DASH } from '../../../../lib/format'
@@ -25,6 +26,25 @@ import { LifecycleControls, underWay } from './lifecycle-controls'
    board this wide a six-across fact grid wrapped every value onto two lines. */
 const SPLIT =
   'grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] items-start gap-x-10 gap-y-5 @max-[46rem]/board:grid-cols-1'
+
+/* Key/value on a label column: the board is wide, so values sit left beside
+   their labels rather than right-aligned a column-width away from them. */
+const KV = 'm-0 grid grid-cols-[11rem_minmax(0,1fr)] content-start'
+const KV_ROW =
+  'col-span-2 grid grid-cols-subgrid items-baseline gap-x-4 border-hairline border-t py-2 text-[0.8125rem] first:border-t-0 first:pt-0'
+
+function KeyValues({ rows }: { rows: { k: string; v: ReactNode }[] }) {
+  return (
+    <dl className={KV}>
+      {rows.map((r) => (
+        <div key={r.k} className={KV_ROW}>
+          <dt className="text-muted-foreground">{r.k}</dt>
+          <dd className="m-0 min-w-0 text-foreground [overflow-wrap:anywhere]">{r.v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 
 const STARTUP = { enabled: 'yes', disabled: 'no', missing: 'no entry' } as const
 
@@ -76,8 +96,7 @@ export function LifecycleBoard({ m }: { m: ProviderMachine }) {
       aside={<Chip tone={chip.tone}>{chip.label}</Chip>}
     >
       <div className={SPLIT}>
-        <Facts
-          list
+        <KeyValues
           rows={[
             {
               k: 'Install',
@@ -156,7 +175,7 @@ function Notices({ m }: { m: ProviderMachine }) {
 const LOG_SUMMARY =
   "cursor-pointer list-none text-[0.75rem] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden before:mr-1.5 before:content-['▸'] group-open:before:content-['▾']"
 const LOG =
-  'mt-2 max-h-[18rem] overflow-auto rounded-xl border border-hairline bg-foreground/[0.03] p-3 text-[0.72rem] leading-[1.5] text-subdued whitespace-pre-wrap'
+  'mt-2 max-h-[18rem] overflow-auto rounded-lg bg-foreground/[0.04] p-3 text-[0.72rem] leading-[1.5] text-subdued whitespace-pre-wrap'
 
 /** The last install or update, as the agent's journal holds it. */
 function LastInstall({ m }: { m: ProviderMachine }) {
@@ -167,7 +186,7 @@ function LastInstall({ m }: { m: ProviderMachine }) {
     <section className="border-hairline border-t pt-3">
       <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem]">
         <span className="text-muted-foreground">Last install</span>
-        <span className={MONO}>
+        <span className={cn(MONO, 'whitespace-nowrap')}>
           {l.from_version === null ? '' : `${l.from_version} → `}
           {l.version}
         </span>

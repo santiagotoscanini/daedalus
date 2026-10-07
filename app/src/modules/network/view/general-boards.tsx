@@ -54,7 +54,8 @@ function Direction({
           </span>
         </span>
       </div>
-      <Trend values={values} tone={tone} height={76} />
+      {/* A paired series: receive is the accent, send the info blue. */}
+      <Trend values={values} tone={tone ?? 'accent'} height={76} />
     </div>
   )
 }
@@ -193,7 +194,7 @@ export function TheRouterBoard({ f }: { f: GeneralFacts }) {
           it carries a picture — small, as identity, beside the type. */}
       <div className="flex items-center gap-4">
         <img
-          className="h-auto w-[clamp(64px,28%,104px)] flex-none object-contain"
+          className="h-16 w-[104px] flex-none object-cover"
           src="/router-axe75.png"
           alt=""
           width={150}
@@ -261,7 +262,7 @@ export function TheLineItselfBoard({ f }: { f: GeneralFacts }) {
       <div className="grid grid-cols-2 gap-5 @max-[30rem]/board:grid-cols-1">
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-[0.75rem] text-muted-foreground">Download, Mbps</span>
-          <Trend values={line.downHistory} height={72} />
+          <Trend values={line.downHistory} tone="accent" height={72} />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-[0.75rem] text-muted-foreground">Upload, Mbps</span>

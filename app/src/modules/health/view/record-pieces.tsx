@@ -2,15 +2,20 @@
 // table — the app and its relay, then the agent tools one build makes.
 
 import type { ReactNode } from 'react'
+import { QuietState, SECTION_SPAN } from '../../../components/modules/parts'
 import {
-  BOARD_TABLE,
-  BOARD_TABLE_HEAD,
-  BOARD_TABLE_ROW,
-  QuietState,
-} from '../../../components/modules/parts'
-import { CELL_MONO, CELL_NAME, CELL_QUIET, CELL_SUB, TableGroup } from '../../../components/table'
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  CELL_SUB,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableGroup,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
 import { CAPTION, FOOT, MONO } from '../../../components/tokens'
-import { Board, Chip } from '../../../components/viz'
+import { Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num } from '../../../lib/format'
 import type { HealthData } from '../data'
@@ -32,6 +37,8 @@ type Piece = {
   name: string
   /** The package, when it is not the piece's own name. */
   pkg?: string
+  /** A reading about the piece that is not a state: a count. */
+  detail?: string
   version: string | null
   where: ReactNode
   state?: ReactNode
@@ -39,12 +46,19 @@ type Piece = {
 
 function PieceRow({ p }: { p: Piece }) {
   return (
-    <li className={cn(GRID, BOARD_TABLE_ROW)}>
+    <li className={cn(GRID, TABLE_ROW)}>
       <div className="min-w-0">
         <div className={CELL_NAME}>{p.name}</div>
-        {p.pkg !== undefined && <p className={cn(CELL_SUB, 'font-mono text-[0.7rem]')}>{p.pkg}</p>}
+        {p.pkg !== undefined && (
+          <p className={CELL_SUB}>
+            <span className="font-mono text-[0.7rem]">{p.pkg}</span>
+            {p.detail !== undefined && <> · {p.detail}</>}
+          </p>
+        )}
       </div>
-      <span className={cn(CELL_MONO, 'text-[0.78rem] text-foreground')}>{p.version ?? DASH}</span>
+      <span className={cn(CELL_MONO, 'text-[0.78rem] whitespace-nowrap text-foreground')}>
+        {p.version ?? DASH}
+      </span>
       <span className={cn('min-w-0 truncate', HIDE_NARROW)}>{p.where}</span>
       <span className="flex min-w-0 justify-end">{p.state}</span>
     </li>
@@ -86,23 +100,21 @@ export function PiecesBoard({ d }: { d: Record_ }) {
           <Chip tone="bad">not answering</Chip>
         ) : kb.chunks === 0 ? (
           <Chip tone="muted">empty library</Chip>
-        ) : (
-          <QuietState>{num(kb.chunks)} chunks</QuietState>
-        ),
+        ) : undefined,
+      detail: kb === null || kb.chunks === 0 ? undefined : `${num(kb.chunks)} chunks`,
     },
     {
       name: 'Library manager',
       pkg: 'getbased-dashboard',
       version: d.agents.library.version,
-      where: <span className={CELL_MONO}>{d.agents.library.url}</span>,
-      state: (
+      where: (
         <a
-          className="text-[0.78rem] text-muted-foreground no-underline hover:text-foreground"
+          className={cn(CELL_MONO, 'hover:text-foreground')}
           href={d.agents.library.url}
           target="_blank"
           rel="noreferrer"
         >
-          open ↗
+          {d.agents.library.url} ↗
         </a>
       ),
     },
@@ -115,9 +127,9 @@ export function PiecesBoard({ d }: { d: Record_ }) {
   ]
 
   return (
-    <Board title="Where the record lives" icon="◱" span={12}>
-      <ul className={BOARD_TABLE}>
-        <li className={cn(GRID, BOARD_TABLE_HEAD)}>
+    <TableSection title="Where the record lives" className={cn(SECTION_SPAN[12], 'mt-0')}>
+      <ul className={TABLE}>
+        <li className={cn(GRID, TABLE_HEAD)}>
           <span>Piece</span>
           <span>Version</span>
           <span className={HIDE_NARROW}>Address</span>
@@ -160,6 +172,6 @@ export function PiecesBoard({ d }: { d: Record_ }) {
         manager, which asks for the same key. The MCP server reads what Agent Access publishes
         through the context gateway and decrypts it in its own container.
       </p>
-    </Board>
+    </TableSection>
   )
 }

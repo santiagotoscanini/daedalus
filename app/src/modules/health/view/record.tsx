@@ -6,7 +6,7 @@ import { BoardGrid } from '../../../components/viz'
 import type { Tone } from '../../../lib/tone'
 import type { HealthData } from '../data'
 import { PiecesBoard } from './record-pieces'
-import { gapTitle, VersionAside } from './shared'
+import { VersionAside } from './shared'
 
 // Health › Record: getbased — labs, genome, body and history in one record —
 // the relay that keeps its copies in step across devices, and the agent tools
@@ -18,14 +18,7 @@ type Record_ = Extract<HealthData, { tab: 'record' }>
 function commitVerdict(build: Record_['build']): { label: string; tone: Tone } {
   if (build.running === null || build.note !== null) return { label: 'unknown', tone: 'muted' }
   const n = build.behind.length
-  return n === 0
-    ? { label: 'current', tone: 'ok' }
-    : { label: `${String(n)} commits behind`, tone: 'warn' }
-}
-
-function commitTitle(label: string, build: Record_['build']): string {
-  const n = build.behind.length
-  return n === 0 ? `${label} — current` : `${label} — ${String(n)} commits since this build`
+  return n === 0 ? { label: 'current', tone: 'ok' } : { label: `${String(n)} behind`, tone: 'warn' }
 }
 
 const short = (sha: string | null): string | null => sha?.slice(0, 7) ?? null
@@ -47,7 +40,7 @@ export function RecordView({ data: d }: { data: Record_ }) {
           </>
         }
         actions={
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <a href={d.url} target="_blank" rel="noreferrer">
               Open getbased ↗
             </a>
@@ -60,17 +53,28 @@ export function RecordView({ data: d }: { data: Record_ }) {
 
         {/* Three projects, three release cycles: each says what it would
             bring rather than one changelog speaking for all. */}
-        <Changelog build={d.build} span={6} title={commitTitle('getbased', d.build)} />
+        <Changelog
+          build={d.build}
+          span={4}
+          title="getbased"
+          aside={<VersionAside version={short(d.build.running)} behind={d.build.behind.length} />}
+        />
         <Changelog
           gap={d.relay.gap}
-          span={6}
-          title={gapTitle('Relay and context gateway', d.relay.gap)}
-          aside={<VersionAside version={d.relay.version} />}
+          span={4}
+          title="Relay"
+          aside={<VersionAside version={d.relay.version} behind={d.relay.gap.behind.length} />}
         />
         <Changelog
           build={d.agents.build}
-          span={12}
-          title={commitTitle('getbased-agents', d.agents.build)}
+          span={4}
+          title="Agents"
+          aside={
+            <VersionAside
+              version={short(d.agents.build.running)}
+              behind={d.agents.build.behind.length}
+            />
+          }
         />
 
         <LogBoard

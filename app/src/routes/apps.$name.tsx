@@ -179,13 +179,9 @@ function AppDetail() {
 
   return (
     <>
-      <Crumbs>
-        <Link to="/apps" className="hover:text-foreground">
-          Apps
-        </Link>{' '}
-        <span aria-hidden="true">›</span> {app.name}
-      </Crumbs>
-
+      {/* No breadcrumb: the app rail's "All apps" is the way back, and a
+          trail saying "Apps › iris" above a title saying "iris" was the same
+          fact twice. */}
       <AppHero app={app} state={state} patch={patch} />
 
       {save.error !== null && (
@@ -254,7 +250,8 @@ function AppHero({
       <div className="min-w-0">
         <h1 className={HERO_TITLE}>
           {app.name}
-          <StatePill state={state} />
+          {/* Running is the norm: the pill appears only when it is news. */}
+          {state !== 'running' && <StatePill state={state} />}
           {readOnly && <Chip className={cn(CHIP, 'text-subdued')}>nix-managed</Chip>}
         </h1>
         <p className={HERO_DESC}>{app.description || 'No description.'}</p>

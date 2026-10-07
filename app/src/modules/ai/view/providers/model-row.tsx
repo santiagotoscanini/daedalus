@@ -6,7 +6,7 @@ import { Button } from '../../../../components/ui/button'
 import { useVerbRequest } from '../../../../components/verb-request'
 import { Chip, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
-import { compact, num } from '../../../../lib/format'
+import { compact, DASH, num } from '../../../../lib/format'
 import {
   fetchProviderActionFn,
   loadProviderModelFn,
@@ -44,6 +44,8 @@ export const NARROW = '@max-[62rem]/table:hidden'
 export const NARROWEST = '@max-[40rem]/table:hidden'
 
 const NUM = cn(CELL_QUIET, 'text-right')
+/** A figure not there yet: a quiet dash, so the column still reads as a column. */
+const NONE = <span className="text-muted-foreground/50">{DASH}</span>
 
 /* The row's verb: quiet until the row is wanted. The row is information first
    and an action second, and a column of always-lit buttons would compete with
@@ -81,7 +83,7 @@ export function GatewayName({ model }: { model: CatalogEntry }) {
  *
  * Muted text rather than a pill per fact: the recipe repeats down the table.
  * Pinned is the exception — it changes what Switch has to do — so it alone is
- * a chip.
+ * a chip, a neutral one: it is a deliberate setting, not something wrong.
  */
 function Attributes({ model }: { model: CatalogEntry }) {
   const parts = [
@@ -95,7 +97,7 @@ function Attributes({ model }: { model: CatalogEntry }) {
   return (
     <p className={cn(CELL_SUB, 'flex items-center gap-2')}>
       <span className="truncate">{parts.join(' · ')}</span>
-      {model.loaded?.pinned === true && <Chip tone="warn">pinned</Chip>}
+      {model.loaded?.pinned === true && <Chip>pinned</Chip>}
     </p>
   )
 }
@@ -151,13 +153,13 @@ export function ModelRow({
         <GatewayName model={model} />
       </span>
       <span className={cn(NUM, '@max-[40rem]/table:hidden')}>
-        {model.sizeGb === null ? '' : num(model.sizeGb, 1)}
+        {model.sizeGb === null ? NONE : num(model.sizeGb, 1)}
       </span>
       <span className={cn(NUM, '@max-[40rem]/table:hidden', resident && 'text-foreground')}>
-        {some(f?.tps) ? f.tps.toFixed(1) : ''}
+        {some(f?.tps) ? f.tps.toFixed(1) : NONE}
       </span>
-      <span className={cn(NUM, NARROW)}>{some(f?.ttftMs) ? num(f.ttftMs) : ''}</span>
-      <span className={cn(NUM, NARROW)}>{some(f?.requests) ? num(f.requests) : ''}</span>
+      <span className={cn(NUM, NARROW)}>{some(f?.ttftMs) ? num(f.ttftMs) : NONE}</span>
+      <span className={cn(NUM, NARROW)}>{some(f?.requests) ? num(f.requests) : NONE}</span>
       <span
         className={cn(NUM, NARROW)}
         title={
@@ -166,7 +168,7 @@ export function ModelRow({
             : undefined
         }
       >
-        {tokens > 0 ? compact(tokens) : ''}
+        {tokens > 0 ? compact(tokens) : NONE}
       </span>
       <span className="flex min-w-0 items-center justify-end gap-2">
         {m.manageable &&

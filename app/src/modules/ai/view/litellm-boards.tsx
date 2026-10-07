@@ -64,6 +64,7 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
           flag: d.failed > 0,
         }))}
         height={112}
+        tone="muted"
         empty="the gateway’s ledger is empty"
       />
       {daily.length > 0 && (
@@ -105,6 +106,9 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
 
 export function ToolsModelsCalledBoard({ f }: { f: LitellmFacts }) {
   const { data, total } = f
+  // A time column only while some tool has one: a column of dashes says
+  // nothing a missing column does not.
+  const timed = data.mcp.some((t) => t.latencyMs !== null && Number.isFinite(t.latencyMs))
   return (
     <Board
       title="Tools models called"
@@ -134,7 +138,7 @@ export function ToolsModelsCalledBoard({ f }: { f: LitellmFacts }) {
                   page that is NOT mostly the model server — a tool call is the
                   gateway talking to a container on this box, so tens of
                   milliseconds is what right looks like. */}
-              <span className={ITEM_SIDE}>{ms(t.latencyMs)}</span>
+              {timed && <span className={ITEM_SIDE}>{ms(t.latencyMs)}</span>}
               <span className={ITEM_N}>{num(t.calls)}</span>
             </li>
           ))}

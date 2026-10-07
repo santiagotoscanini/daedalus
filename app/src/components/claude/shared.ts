@@ -7,3 +7,10 @@
    chip, a clipped name and five ellipses, which is width spent to say nothing.
    Dropping the least important outright gives the rest room to be read. */
 export const NARROW_HIDE = 'max-[50rem]:hidden'
+
+/* Key/value rows in a board wider than a third of the page: the value sits on
+   a fixed label column, left-aligned, instead of being pushed to the far edge
+   where the eye has to cross the whole board to pair it with its label. A
+   wrapper over `Facts list`, which right-aligns for the narrow boards. */
+export const LEFT_FACTS =
+  '[&_dl>div]:justify-start [&_dl>div]:flex-nowrap [&_dt]:w-[12.5rem] [&_dd]:min-w-0 [&_dd]:text-left'

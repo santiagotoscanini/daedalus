@@ -157,7 +157,7 @@ export function OutboundView({ data }: { data: Outbound }) {
             title={
               data.gluetun.behind.length === 0
                 ? 'gluetun · current'
-                : `gluetun · ${String(data.gluetun.behind.length)} commits behind`
+                : `gluetun · ${String(data.gluetun.behind.length)} behind`
             }
             aside={
               <span className={NOTE}>
@@ -246,7 +246,6 @@ function StayingUpBoard({
           display: `${pct(d.uptime * 100, 2)} up`,
           flag: d.uptime < 0.999,
         }))}
-        tone="ok"
         height={112}
         empty="no history yet"
       />

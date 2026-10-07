@@ -157,7 +157,7 @@ function PlayingNow({ f }: { f: JellyfinFacts }) {
                 {s.paused && <Chip>paused</Chip>}
               </span>
               <span className={WIDE}>
-                <Progress pct={s.pct} tone={s.paused ? 'muted' : 'ok'} active={!s.paused} />
+                <Progress pct={s.pct} tone="muted" active={!s.paused} />
               </span>
             </li>
           ))
@@ -183,7 +183,7 @@ function LibraryBoard({ f }: { f: JellyfinFacts }) {
           }
           value={bytes(library.usedBytes)}
           label="/s2/tv"
-          tone="info"
+          tone="muted"
         />
         <Facts
           rows={[
@@ -195,7 +195,7 @@ function LibraryBoard({ f }: { f: JellyfinFacts }) {
         />
         <div className="min-w-0 @max-[56rem]/board:col-span-2">
           <p className="m-0 mb-1.5 text-[0.75rem] text-muted-foreground">Growth, 30 days</p>
-          <Trend values={library.growth} tone="info" height={70} />
+          <Trend values={library.growth} tone="muted" height={70} />
         </div>
       </div>
     </Board>

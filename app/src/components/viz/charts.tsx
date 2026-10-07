@@ -87,7 +87,7 @@ type BarItem = { label: string; value: number; display?: string; tone?: Tone }
  */
 export function BarList({
   items,
-  tone = 'accent',
+  tone = 'muted',
   max,
   empty = 'no data',
 }: {
@@ -204,7 +204,7 @@ export function RankRow({
           // Same growth as every other bar on these pages — `bar-grow` scales
           // on X from the left, so the origin has to be set for it to read as
           // filling rather than as sliding in.
-          className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none"
+          className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-muted-foreground/55 motion-reduce:animate-none"
           style={{ width: `${String(Math.max(1.5, (value / max) * 100))}%` }}
         />
       </span>
@@ -243,7 +243,7 @@ export type Column = {
  */
 export function Columns({
   points,
-  tone = 'accent',
+  tone = 'muted',
   height = 84,
   empty = 'no data',
 }: {
@@ -294,7 +294,7 @@ export function Columns({
  */
 export function Trend({
   values,
-  tone = 'accent',
+  tone = 'muted',
   height = 90,
   empty = 'no data',
 }: {

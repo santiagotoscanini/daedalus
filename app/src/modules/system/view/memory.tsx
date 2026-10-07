@@ -86,7 +86,7 @@ function MemoryBoard({ d }: { d: Memory }) {
       </div>
       <Progress
         pct={d.total === null || d.used === null ? null : (d.used / d.total) * 100}
-        tone="info"
+        tone="muted"
       />
       <Measures
         items={[
@@ -105,7 +105,7 @@ function MemoryBoard({ d }: { d: Memory }) {
       <h4 className={SUB}>ZFS cache</h4>
       <Progress
         pct={d.arc.size === null || d.arc.max === null ? null : (d.arc.size / d.arc.max) * 100}
-        tone="accent"
+        tone="muted"
       />
       <Measures
         items={[

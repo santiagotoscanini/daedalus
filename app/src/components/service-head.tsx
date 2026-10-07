@@ -77,18 +77,17 @@ export function ServiceHead({
           )}
           {verdict !== undefined && <VersionCompare verdict={verdict} rows={compare ?? []} />}
         </p>
-        {/* Out of the 74ch prose measure the rest of the app's ledes keep: this
-            is one sentence on a line with a 44px logo and a button beside it,
-            and the cap would fold it in half while a third of the header sat
-            empty. The header is the measure. */}
-        <p className="m-0 mt-0.5 max-w-none text-[0.84rem] leading-[1.5] text-muted-foreground">
+        {/* A 640px measure, two lines: a head that reads as a paragraph is a
+            page that has not decided what it is about. The rest of the
+            sentence is one hover away rather than cut. */}
+        <p className="m-0 mt-0.5 line-clamp-2 max-w-[40rem] text-[0.84rem] leading-[1.5] text-muted-foreground hover:line-clamp-none">
           {lede}
         </p>
       </div>
       {/* The status chip and the one action on the page, kept together at the
           far end. */}
       {actions !== undefined && (
-        <div className="ml-auto flex flex-none items-center gap-2 self-center max-[44rem]:ml-0 max-[44rem]:w-full">
+        <div className="ml-auto flex flex-none items-center gap-2 self-start max-[44rem]:ml-0 max-[44rem]:w-full">
           {actions}
         </div>
       )}
@@ -283,10 +282,9 @@ export const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
 export function Open({ name, host }: { name: string; host: string }) {
   const site = useSite()
   return (
-    // The default variant on purpose: the one thing you came to press is the
-    // primary action, and `Button` carries the argument for why that is the
-    // foreground colour rather than the brand.
-    <Button asChild size="sm">
+    // Outline, not the filled primary: leaving for another app is not a
+    // mutation, and a page keeps its one filled button for the one that is.
+    <Button asChild size="sm" variant="outline">
       <a href={`https://${host}.${site.baseDomain}`} target="_blank" rel="noreferrer">
         Open {name} ↗
       </a>

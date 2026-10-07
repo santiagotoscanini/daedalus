@@ -15,11 +15,11 @@ export const manifest = {
   // would be claims that nothing is being checked, which is false — the
   // checking is on the page.
   //
-  // The first rule separates the state of the machine NOW from what outlives
-  // it. Everything left of it is gone the moment the box is; Backups is the
-  // only tab here answering a question about tomorrow.
+  // No rules in the row either: one row of words reads as one row, and the
+  // order already says it — the machine now, then what outlives it
+  // (Backups), then who maintains it (Claude, Shotter).
   //
-  // `head: false` on every tab before the second rule, for the same reason as
+  // `head: false` on every tab before Claude, for the same reason as
   // the dots: these are layers of a machine, and a header saying "version
   // 6.12.93, current, Open ↗" is a claim about a service that is not there.
   // No `nix` anywhere: every tab here is the machine, and the machine is
@@ -79,20 +79,17 @@ export const manifest = {
       label: 'Backups',
       boardSpans: [12, 12, 12, 12],
       head: false,
-      dividerBefore: true,
     },
     // Who maintains it. The remote-control server that lets this machine be
     // worked on from anywhere is a fact about the machine, not a service
     // among the categories, and it exists on every machine on the network
-    // — which is why it is a tab here, after the second rule, rather than
-    // a page of its own on the rail. These two keep a head: unlike the
+    // — which is why it is a tab here rather than a page of its own on the
+    // rail. No icon and no rule before it: the row is one row of words. These two keep a head: unlike the
     // layers above, a server has a version and a verdict.
     {
       id: 'claude',
       label: 'Claude',
-      icon: 'claude',
       boardSpans: [4, 8, 12, 6, 6],
-      dividerBefore: true,
     },
     // The sessions' eyes: the headless browser a session drives to look at
     // a page. The box's alone — the browser lab is here.

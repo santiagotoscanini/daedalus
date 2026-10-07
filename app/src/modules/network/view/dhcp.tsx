@@ -176,7 +176,7 @@ export function DhcpView({ data }: { data: Dhcp }) {
         }
         actions={
           admin !== null && (
-            <Button asChild size="sm">
+            <Button asChild size="sm" variant="outline">
               <a href={`${admin}/settings-dhcp`} target="_blank" rel="noreferrer">
                 DHCP settings ↗
               </a>

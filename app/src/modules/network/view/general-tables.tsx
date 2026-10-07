@@ -157,7 +157,7 @@ export function WhatThisHouseAsksForBoard({ f }: { f: GeneralFacts }) {
             </span>
             <span className="bar flex h-1.5 min-w-0 overflow-hidden rounded-full bg-foreground/[0.06]">
               <span
-                className="rounded-full bg-primary/70"
+                className="rounded-full bg-muted-foreground/55"
                 style={{ width: `${String(Math.max(3, (d.value / ceiling) * 100))}%` }}
               />
             </span>

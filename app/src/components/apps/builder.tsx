@@ -5,8 +5,9 @@ import { bytes } from '../../lib/format'
 import { ImageRow } from '../image-row'
 import { EMPTY, FOOT, LIST, MONO, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
 import { Board, BoardGrid, Facts } from '../viz'
+import { GithubSection } from './builder-github'
 import { FailuresSection, HistorySection } from './builder-history'
-import { GithubBoard, MachineryBoard } from './builder-machinery'
+import { MachineryBoard } from './builder-machinery'
 import { NowBoard } from './builder-now'
 
 // Apps › Builder: the box's image builder, as one machine — what it is
@@ -36,9 +37,9 @@ export function BuilderView({ d }: { d: Builder }) {
         <BoardGrid>
           <ToolchainBoard d={d} />
           <MachineryBoard m={d.machinery} />
-          <GithubBoard g={d.github} />
         </BoardGrid>
       </div>
+      <GithubSection g={d.github} />
     </>
   )
 }

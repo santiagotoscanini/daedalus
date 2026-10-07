@@ -131,7 +131,7 @@ function LoadBoard({ f }: { f: HostFacts }) {
           ]}
         />
       </div>
-      <Trend values={d.cpuSpark} tone="accent" height={96} empty="no history yet" />
+      <Trend values={d.cpuSpark} tone="muted" height={96} empty="no history yet" />
       <p className={FOOT}>
         Six hours of processor, from this box&rsquo;s prometheus, which reads every machine&rsquo;s
         telemetry from the controller&rsquo;s <span className={MONO}>/nodes/metrics</span> every
@@ -215,7 +215,7 @@ function TemperatureBoard({ f }: { f: HostFacts }) {
                 { label: 'Chipset', value: 48, display: '48°' },
               ]
         }
-        tone="info"
+        tone="muted"
       />
     </WipBoard>
   )

@@ -32,7 +32,15 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
   return (
     <li className={cn(RUN_GRID, TABLE_ROW_DENSE, TABLE_ROW_LINK)}>
       <span>
-        <RunChip status={r.status} conclusion={r.conclusion} />
+        {/* In the failures table every row failed, so the state is a quiet
+            word there; the step name below carries the one red. */}
+        {showFailure ? (
+          <span className="text-[0.75rem] text-muted-foreground">
+            {r.conclusion?.replace(/_/g, ' ') ?? 'failed'}
+          </span>
+        ) : (
+          <RunChip status={r.status} conclusion={r.conclusion} />
+        )}
       </span>
       <span className="min-w-0">
         <a
@@ -51,9 +59,14 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
           )}
         </a>
         {showFailure && r.failed !== null && (
-          <p className={cn(CELL_SUB, 'text-danger')}>
-            {r.failed.job}
-            {r.failed.step !== null && ` › ${r.failed.step}`}
+          <p className={CELL_SUB}>
+            {r.failed.step === null ? (
+              <span className="text-danger">{r.failed.job}</span>
+            ) : (
+              <>
+                {r.failed.job} › <span className="text-danger">{r.failed.step}</span>
+              </>
+            )}
           </p>
         )}
       </span>

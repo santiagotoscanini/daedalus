@@ -28,12 +28,12 @@ export const manifest = {
       boardSpans: [8, 4, 4, 8],
       nix: 'home-assistant',
     },
-    { id: 'photos', label: 'Photos', probe: 'immich', boardSpans: [8, 4, 4, 8], nix: 'immich' },
+    { id: 'photos', label: 'Photos', probe: 'immich', boardSpans: [8, 4, 12, 12], nix: 'immich' },
     {
       id: 'files',
       label: 'Files',
       probe: 'nextcloud',
-      boardSpans: [8, 4, 6, 6],
+      boardSpans: [12, 4, 4, 4],
       nix: 'nextcloud',
     },
     // Pocket ID — ./view/idp.tsx says why it is a Home tab.
@@ -41,7 +41,7 @@ export const manifest = {
       id: 'signin',
       label: 'Sign-in',
       probe: 'pocket-id',
-      boardSpans: [8, 4, 12, 4, 8],
+      boardSpans: [12, 4, 4, 4, 12],
       nix: 'pocket-id',
     },
     // Past the rule: one person's, not the household's.

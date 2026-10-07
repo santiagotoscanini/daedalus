@@ -1,23 +1,25 @@
-// Home › Sign-in's boards: signing in, the applications, declared against
-// live, the logs. Who and the devices are in ./idp-who.tsx.
+// Home › Sign-in's boards and tables: signing in, the applications, declared
+// against live, the logs. Who and the devices are in ./idp-who.tsx.
 
 import { Fragment } from 'react'
 import { GrafanaLogs, LogDetails } from '../../../components/logs'
-import { BOARD_TABLE, BOARD_TABLE_HEAD, BOARD_TABLE_ROW } from '../../../components/modules/parts'
-import { CELL_MONO, TableGroup } from '../../../components/table'
-import { AXIS, CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { SECTION_SPAN, TABLE_NONE } from '../../../components/modules/parts'
+import { CELL_MONO, TABLE, TABLE_HEAD, TABLE_ROW, TableGroup } from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { AXIS, CAPTION, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, Columns, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { IdpData } from '../data/signin'
 import { AppList } from './idp-apps'
 
+/** The page's chart: a board of its own, full width — the one focal reading. */
 export function SigningInBoard({ d, w }: { d: IdpData; w: IdpData['window'] }) {
   return (
     <Board
       title="Signing in"
       icon="key"
-      span={8}
+      span={12}
       aside={<span className={NOTE}>last {w.days} days</span>}
     >
       <Measures
@@ -29,14 +31,15 @@ export function SigningInBoard({ d, w }: { d: IdpData; w: IdpData['window'] }) {
         ]}
       />
 
+      {/* One series, so neutral ink: colour on a chart is for a pair or a fault. */}
       <Columns
         points={d.daily.map((p) => ({
           label: p.date.slice(5),
           value: p.authorizations,
           display: `${num(p.authorizations)} app${p.authorizations === 1 ? '' : 's'} opened`,
         }))}
-        tone="ok"
-        height={176}
+        tone="muted"
+        height={120}
         empty="nothing in the window"
       />
       {d.daily.length > 0 && (
@@ -65,12 +68,12 @@ export function SigningInBoard({ d, w }: { d: IdpData; w: IdpData['window'] }) {
 }
 
 /**
- * The registrations, as a table. One board, not a chronological sign-in list
+ * The registrations, as a table. One table, not a chronological sign-in list
  * beside the per-app aggregate: both are the same audit log, and a
  * chronological list fills with whatever re-authorises on a timer. The
  * per-row drill-down keeps the part an aggregate loses — who, from what.
  */
-export function AppsBoard({
+export function AppsSection({
   d,
   shared,
   idle,
@@ -82,15 +85,10 @@ export function AppsBoard({
   max: number
 }) {
   return (
-    <Board
+    <TableSection
       title="Applications"
-      icon="rows"
-      span={12}
-      aside={
-        <span className={NOTE}>
-          {d.clients.length} registered · {num(idle)} not opened in {d.window.days} days
-        </span>
-      }
+      className={SECTION_SPAN[12]}
+      aside={`${String(d.clients.length)} registered · ${num(idle)} not opened in ${String(d.window.days)} days`}
     >
       <AppList clients={d.clients} max={max} />
 
@@ -119,7 +117,7 @@ export function AppsBoard({
         For a proxy-gated app that means nobody visited it, not that the registration is dead. Open
         a row for who went in and from what; the full log is in Pocket ID.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 
@@ -130,7 +128,7 @@ const DECLARED_GRID = cn(
   'grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]',
 )
 
-export function DeclaredBoard({ d }: { d: IdpData }) {
+export function DeclaredSection({ d }: { d: IdpData }) {
   const groups = [
     {
       title: `${num(d.nix.orphans.length)} orphan${d.nix.orphans.length === 1 ? '' : 's'}`,
@@ -145,29 +143,24 @@ export function DeclaredBoard({ d }: { d: IdpData }) {
   ].filter((g) => g.rows.length > 0)
   const none = groups.length === 0
   return (
-    <Board
+    <TableSection
       title={none ? 'Declared and live agree' : 'Declared vs live'}
-      icon="▣"
-      span={8}
-      aside={
-        <span className={NOTE}>
-          {num(d.nix.declared)} declared in nix · {num(d.clients.length)} live at the IdP
-        </span>
-      }
+      aside={`${num(d.nix.declared)} declared in nix · ${num(d.clients.length)} live at the IdP`}
+      className={SECTION_SPAN[12]}
     >
       {!d.nix.available ? (
-        <p className={EMPTY}>
+        <p className={TABLE_NONE}>
           /export/sso.json is not published, so the declared side of the diff is missing and nothing
           here can be called an orphan yet.
         </p>
       ) : none ? (
-        <p className={EMPTY}>
+        <p className={TABLE_NONE}>
           Every live client is declared in <span className={MONO}>fleet.ssoClients</span>, and every
           declaration exists at the IdP. Nothing has outlived its stack.
         </p>
       ) : (
-        <ul className={BOARD_TABLE}>
-          <li className={cn(DECLARED_GRID, BOARD_TABLE_HEAD)}>
+        <ul className={TABLE}>
+          <li className={cn(DECLARED_GRID, TABLE_HEAD)}>
             <span>Client</span>
             <span>Client id</span>
           </li>
@@ -176,10 +169,11 @@ export function DeclaredBoard({ d }: { d: IdpData }) {
               <TableGroup
                 title={g.title}
                 note={g.note}
+                tone="warn"
                 className={i === 0 ? 'border-t-0' : undefined}
               />
               {g.rows.map((c) => (
-                <li key={c.id} className={cn(DECLARED_GRID, BOARD_TABLE_ROW)}>
+                <li key={c.id} className={cn(DECLARED_GRID, TABLE_ROW)}>
                   <span className="truncate text-[0.84rem] text-foreground">{c.name}</span>
                   <span className={CELL_MONO} title={c.id}>
                     {c.id}
@@ -200,7 +194,7 @@ export function DeclaredBoard({ d }: { d: IdpData }) {
         board below. Matched on the client id, because the nix attr name IS the OIDC{' '}
         <span className={MONO}>client_id</span>.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 

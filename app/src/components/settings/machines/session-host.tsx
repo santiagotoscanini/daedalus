@@ -2,6 +2,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import type { SessionHostLine } from '../../../host/session-host'
+import { cn } from '../../../lib/cn'
 import { fetchSessionHostFn, restartSessionHostFn } from '../../../server/nodes'
 import { ArmedConfirm } from '../../armed-confirm'
 import { useRootAction } from '../../root-action'
@@ -18,7 +19,26 @@ import { ASIDE, ERROR_NOTE, INSET, Line, Mono, NOTE_SHOWN } from '../shared'
 /** Long enough to read the count; disarms on its own after. */
 const ARM_MS = 30_000
 
+/** How the session host stands: its verdict, the build that runs, what it holds. A row value. */
 export function SessionHost({ line }: { line: SessionHostLine }) {
+  return (
+    <span className="inline-flex flex-col items-start gap-1">
+      <Line>
+        <Chip tone={line.tone}>{line.chip}</Chip>
+        {line.restartPending && <Chip tone="warn">update installed, restart to apply</Chip>}
+        {line.version !== null && <Mono>{line.version}</Mono>}
+        {line.facts.length > 0 && <span className={ASIDE}>{line.facts.join(' · ')}</span>}
+      </Line>
+      {line.error !== null && <span className={ERROR_NOTE}>{line.error}</span>}
+    </span>
+  )
+}
+
+/**
+ * The restart, armed first. It sits with the section's other actions in its
+ * foot band, not inside the row: one place for a section's buttons.
+ */
+export function SessionHostRestart({ line }: { line: SessionHostLine }) {
   const router = useRouter()
   const [armed, arm, disarm] = useArmed(ARM_MS)
   // The confirm's own reading, taken as it arms; the loaded line until it lands.
@@ -29,48 +49,40 @@ export function SessionHost({ line }: { line: SessionHostLine }) {
     },
   })
 
+  if (armed) {
+    return (
+      <ArmedConfirm
+        ms={ARM_MS}
+        className={cn(INSET, 'basis-full')}
+        costClassName={NOTE_SHOWN}
+        noteClassName={ASIDE}
+        cost={(fresh ?? line).confirm}
+        confirm="Restart now"
+        onConfirm={() => {
+          disarm()
+          start(() => restartSessionHostFn())
+        }}
+        onCancel={disarm}
+      />
+    )
+  }
   return (
-    <span className="inline-flex flex-col items-start gap-2">
-      <Line>
-        <Chip tone={line.tone}>{line.chip}</Chip>
-        {line.restartPending && <Chip tone="warn">update installed, restart to apply</Chip>}
-        {line.version !== null && <Mono>{line.version}</Mono>}
-        {line.facts.length > 0 && <span className={ASIDE}>{line.facts.join(' · ')}</span>}
-      </Line>
-      {line.error !== null && <span className={ERROR_NOTE}>{line.error}</span>}
-      {armed ? (
-        <ArmedConfirm
-          ms={ARM_MS}
-          className={INSET}
-          costClassName={NOTE_SHOWN}
-          noteClassName={ASIDE}
-          cost={(fresh ?? line).confirm}
-          confirm="Restart now"
-          onConfirm={() => {
-            disarm()
-            start(() => restartSessionHostFn())
-          }}
-          onCancel={disarm}
-        />
-      ) : (
-        <span className="inline-flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={running}
-            onClick={() => {
-              setFresh(null)
-              arm()
-              void fetchSessionHostFn().then(setFresh, () => undefined)
-            }}
-          >
-            {running ? 'Restarting…' : 'Restart'}
-          </Button>
-          {answer !== null && answer.outcome !== 'done' && (
-            <span className={ERROR_NOTE}>
-              {answer.detail === '' ? `the restart ${answer.outcome}` : answer.detail}
-            </span>
-          )}
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={running}
+        onClick={() => {
+          setFresh(null)
+          arm()
+          void fetchSessionHostFn().then(setFresh, () => undefined)
+        }}
+      >
+        {running ? 'Restarting the session host…' : 'Restart the session host'}
+      </Button>
+      {answer !== null && answer.outcome !== 'done' && (
+        <span className={ERROR_NOTE}>
+          {answer.detail === '' ? `the restart ${answer.outcome}` : answer.detail}
         </span>
       )}
     </span>
