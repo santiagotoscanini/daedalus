@@ -141,7 +141,7 @@ export function WhatThisHouseAsksForBoard({ f }: { f: GeneralFacts }) {
     <TableSection
       className="col-span-4 max-[78rem]:col-span-12"
       title="What this house asks for"
-      aside={`${compact(dns.queries)} lookups today`}
+      aside={<span className="whitespace-nowrap">{compact(dns.queries)} lookups today</span>}
     >
       <ul className={TABLE} aria-label="Most looked-up names">
         <li className={cn(DOMAINS_GRID, TABLE_HEAD)}>

@@ -125,7 +125,7 @@ export function CertificatesBoard({ d }: { d: ProxyData }) {
         {d.certs.map((c) => (
           <li
             key={c.cn}
-            className="grid min-w-0 grid-cols-[minmax(6rem,12rem)_1fr_auto] items-center gap-3 text-[0.8rem]"
+            className="grid min-w-0 grid-cols-[minmax(0,12rem)_minmax(4rem,1fr)_auto] items-center gap-3 text-[0.8rem]"
             title={c.sans.join(', ')}
           >
             <span className={cn(MONO, 'truncate text-muted-foreground')}>{c.cn}</span>

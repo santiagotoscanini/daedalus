@@ -140,7 +140,7 @@ export function GithubSection({ g }: { g: Github }) {
                   <Link
                     to="/apps/$name/builds/$id"
                     params={{ name: b.app, id: b.id }}
-                    className={cn(TABLE_LINK, 'flex min-w-0 items-baseline gap-2')}
+                    className={cn(TABLE_LINK, 'flex min-w-0 items-baseline gap-2 pr-3')}
                   >
                     <span className="truncate text-foreground [font-weight:560]">{b.app}</span>
                     <code className={CELL_MONO}>{sha7(b.sha)}</code>

@@ -31,7 +31,7 @@ import { ASIDE, CONTROL_H, Mono } from './shared'
 // row's `dt` and the input carries it as `aria-label`; the `Field` wrapper
 // groups the control with its error the way the form rows elsewhere do.
 
-const INPUT = cn(INPUT_MONO, 'w-[15rem] max-w-full')
+const INPUT = cn(INPUT_MONO, 'w-[15rem] min-w-0 max-w-full')
 /** A one-line box or a picker: the same width and the one row height. */
 const BOX = cn(INPUT, CONTROL_H)
 
@@ -84,10 +84,10 @@ function Control({
   children: ReactNode
 }) {
   return (
-    <Field invalid={error !== null} className="w-full max-w-full items-start gap-1">
+    <Field invalid={error !== null} className="w-full min-w-0 max-w-full items-start gap-1">
       {/* The control first, then what is known about the value beside it: the
           eye lands on the field, and the pending chip reads as a remark on it. */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
         {children}
         <Provenance edit={edit} field={field} />
         {saving && <span className={ASIDE}>saving…</span>}

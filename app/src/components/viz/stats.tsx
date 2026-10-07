@@ -1,6 +1,6 @@
 // The stat strip, the progress bar, and the small parts: the pulse dot and the chip.
 
-import type { ReactNode } from 'react'
+import { Children, type ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { type Tone, toneStyle } from '../../lib/tone'
 import { GLASS } from './board'
@@ -12,13 +12,15 @@ import { Spark } from './charts'
 // Flex-wrap with growing cells, not a fixed grid: whatever cells land on the last
 // row stretch to fill it, so six tiles at tablet width are never five and a lonely
 // one with three quarters of the row blank.
-export const STAT_STRIP = `${GLASS} mb-4 flex flex-wrap overflow-hidden`
+export const STAT_STRIP = `${GLASS} @container/strip mb-4 flex flex-wrap overflow-hidden`
 
 /** One `Stat` cell. Every cell reserves the third row under the value, so a
     strip mixing cells that have a sparkline with cells that have a caption —
     or neither — keeps one baseline instead of stepping. */
+// Six cells are 3 + 3 below 54rem rather than 5 + a lone sixth stretched across a
+// whole row (the strip knows its count: data-n).
 export const STAT =
-  'grid min-w-0 flex-[1_1_10rem] grid-rows-[auto_auto_1rem] content-start gap-1 px-5 pt-4 pb-4 shadow-[-1px_0_0_var(--hairline),0_-1px_0_var(--hairline)] [&>svg]:w-full'
+  '[[data-n="6"]>&]:@max-[54rem]/strip:basis-1/3 grid min-w-0 flex-[1_1_9rem] grid-rows-[auto_auto_1rem] content-start gap-1 px-5 pt-4 pb-4 shadow-[-1px_0_0_var(--hairline),0_-1px_0_var(--hairline)] [&>svg]:w-full'
 
 /**
  * The row of live readings at the top of a page — one bordered strip with
@@ -32,7 +34,11 @@ export const STAT =
  * stands at twice the height of one carrying a caption.
  */
 export function StatStrip({ children }: { children: ReactNode }) {
-  return <div className={STAT_STRIP}>{children}</div>
+  return (
+    <div className={STAT_STRIP} data-n={Children.toArray(children).length}>
+      {children}
+    </div>
+  )
 }
 
 /**

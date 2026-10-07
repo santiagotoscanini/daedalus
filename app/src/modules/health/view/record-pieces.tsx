@@ -26,7 +26,7 @@ type Record_ = Extract<HealthData, { tab: 'record' }>
 const GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]',
-  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[44rem]/table:gap-y-1',
+  '@max-[44rem]/table:grid-cols-1 @max-[44rem]/table:gap-y-1',
 )
 const HIDE_NARROW = '@max-[44rem]/table:hidden'
 
@@ -56,15 +56,6 @@ function PieceRow({ p }: { p: Piece }) {
             {p.detail !== undefined && <> · {p.detail}</>}
           </p>
         )}
-        {/* The Address column steps away on a phone; its value lives here. */}
-        <p
-          className={cn(
-            CELL_MONO,
-            'hidden whitespace-normal [overflow-wrap:anywhere] @max-[44rem]/table:block',
-          )}
-        >
-          {p.addr}
-        </p>
       </div>
       <span className="flex min-w-0 items-center gap-2.5">
         <span
@@ -76,12 +67,12 @@ function PieceRow({ p }: { p: Piece }) {
       </span>
       <span className={cn('min-w-0 truncate', HIDE_NARROW)}>{p.where}</span>
       {/* The Address column steps away on a phone; its value takes a full row
-          under the piece, wide enough to keep a hostname in one piece. */}
+          under the piece and its version, as one line that only breaks if it must. */}
       {p.addr !== undefined && (
         <p
           className={cn(
             CELL_MONO,
-            'hidden whitespace-normal [overflow-wrap:anywhere] @max-[44rem]/table:col-span-full @max-[44rem]/table:block',
+            'hidden whitespace-normal [overflow-wrap:anywhere] @max-[44rem]/table:block',
           )}
         >
           {p.addr}
@@ -159,7 +150,7 @@ export function PiecesBoard({ d }: { d: Record_ }) {
       <ul className={TABLE}>
         <li className={cn(GRID, TABLE_HEAD)}>
           <span>Piece</span>
-          <span>Version</span>
+          <span className={HIDE_NARROW}>Version</span>
           <span className={HIDE_NARROW}>Address</span>
         </li>
         <TableGroup title="The record" note="its app and the relay" className="border-t-0" />

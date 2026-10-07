@@ -3,7 +3,7 @@ import type { BuilderData } from '../../lib/apps/builder'
 import { cn } from '../../lib/cn'
 import { bytes } from '../../lib/format'
 import { ImageRow } from '../image-row'
-import { EMPTY, FOOT, MONO, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
+import { EMPTY, FOOT, LIST, MONO, ROW, ROW_N, SUB } from '../tokens'
 import { Board, BoardGrid, Facts } from '../viz'
 import { GithubSection } from './builder-github'
 import { FailuresSection, HistorySection } from './builder-history'
@@ -74,13 +74,19 @@ function ToolchainBoard({ d }: { d: Builder }) {
       ) : facts.mise.length === 0 ? (
         <p className={EMPTY}>no app has a mise cache yet</p>
       ) : (
-        <ul className="grid grid-cols-1 gap-x-8 @min-[26rem]/board:grid-cols-2 @min-[26rem]/board:[&>li:nth-child(2)]:border-t-0">
+        <ul className={LIST}>
           {facts.mise.map((m) => (
-            <li key={m.app} className={ROW}>
-              <span className={cn(ROW_MAIN, MONO)}>{m.app}</span>
-              {!d.toolchain.apps.includes(m.app) && (
-                <span className={ROW_SIDE}>no app of that name: inert</span>
-              )}
+            <li key={m.app} className={cn(ROW, 'items-start')}>
+              {/* One clean line: name … size. The note is a second line under the
+                  name, so it never pushes the size around. */}
+              <span className="min-w-0 flex-auto">
+                <span className={cn(MONO, 'block text-foreground')}>{m.app}</span>
+                {!d.toolchain.apps.includes(m.app) && (
+                  <span className="block text-[0.72rem] text-muted-foreground">
+                    no app of that name: inert
+                  </span>
+                )}
+              </span>
               <span className={ROW_N}>{bytes(m.bytes)}</span>
             </li>
           ))}

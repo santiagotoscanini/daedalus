@@ -70,12 +70,14 @@ export function AllClear({
   note?: string
 }) {
   return (
-    <p className="col-span-12 m-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.84rem] text-muted-foreground">
+    <p className="col-span-12 m-0 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.84rem] text-muted-foreground">
       <Pulse on={false} tone="ok" />
       <span className="text-foreground [font-weight:560]">{title}</span>
       <span>{detail}</span>
       {aside !== undefined && (
-        <span className="ml-auto text-[0.75rem] text-muted-foreground">{aside}</span>
+        <span className="ml-auto min-w-0 max-w-full text-[0.75rem] text-muted-foreground [overflow-wrap:anywhere]">
+          {aside}
+        </span>
       )}
       {note !== undefined && (
         <span className="basis-full max-w-[40rem] text-[0.78rem] leading-[1.5] text-muted-foreground">

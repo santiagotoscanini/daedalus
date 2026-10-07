@@ -107,10 +107,10 @@ export function BarList({
           // Two rows can share a label — a machine running two claude.exe —
           // and the same label twice is still two rows.
           key={`${i.label}#${String(n)}`}
-          className="grid min-w-0 grid-cols-[minmax(4.5rem,8rem)_1fr_auto] items-center gap-2.5"
+          className="grid min-w-0 grid-cols-[minmax(5.5rem,40%)_1fr_auto] items-center gap-2.5"
           style={toneStyle(i.tone ?? tone)}
         >
-          <span className="truncate text-[0.78rem] text-subdued" title={i.label}>
+          <span className="min-w-0 break-words text-[0.78rem] text-subdued" title={i.label}>
             {i.label}
           </span>
           <span className="block h-1.5 min-w-0 overflow-hidden rounded-full bg-foreground/[0.08]">

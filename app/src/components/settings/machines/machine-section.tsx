@@ -115,7 +115,7 @@ function Summary({
         >
           {name}
         </span>
-        <span className={cn(CELL_SUB, '@max-[38rem]/table:whitespace-normal')}>{sub}</span>
+        <span className={cn(CELL_SUB, 'line-clamp-2 whitespace-normal')}>{sub}</span>
         {/* On a phone the status joins the name instead of taking a column. */}
         <span className="mt-0.5 hidden @max-[38rem]/table:block">{status}</span>
       </span>

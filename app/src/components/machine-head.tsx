@@ -18,7 +18,7 @@ export const OS_MARK: Record<string, { src: string; invert: boolean }> = {
 /* The compact strip: a caption that hugs the picker above it, and sits flush
    when the picker draws it in its own identity slot (`nav` ancestor). */
 const COMPACT =
-  'm-0 -mt-2 mb-4 flex min-h-5 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8rem] text-muted-foreground leading-snug max-[40rem]:flex-nowrap [nav_&]:m-0'
+  'm-0 -mt-2 mb-4 flex min-h-5 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8rem] text-muted-foreground leading-snug [nav_&]:m-0'
 
 /**
  * The strip above every System tab: the machine, its OS, and how it is.
@@ -60,7 +60,7 @@ export function HeadStrip({
         {/* One line on a phone, cut with an ellipsis; the full text is the hover
             and the long-press title, and every word of it is still on the page
             as the machine's own Host and Build tabs. */}
-        <span className="min-w-0 max-[40rem]:truncate sm:[overflow-wrap:anywhere]">{line}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">{line}</span>
         {chip !== undefined && <Chip tone={chip.tone}>{chip.label}</Chip>}
         {aside !== undefined && <span className="flex-none">{aside}</span>}
       </p>

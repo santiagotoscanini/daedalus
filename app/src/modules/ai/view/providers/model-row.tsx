@@ -36,7 +36,7 @@ export const MODEL_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_4rem_3.5rem_6.5rem_4.5rem_4rem_5.5rem]',
   '@max-[62rem]/table:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_4rem_3.5rem_5.5rem]',
-  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_5.5rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)] @max-[38rem]/table:gap-y-2 @max-[38rem]/table:py-3',
 )
 /** A column that steps away under 62rem. */
 export const NARROW = '@max-[62rem]/table:hidden'
@@ -55,7 +55,7 @@ const NONE = <span className="text-muted-foreground/50">{DASH}</span>
    and an action second, and a column of always-lit buttons would compete with
    the model that is actually running. */
 const QUIET_BTN =
-  'ml-auto h-7 flex-none px-2.5 text-[0.75rem] text-subdued opacity-70 transition-opacity duration-[0.12s] group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
+  'ml-auto h-7 flex-none px-2.5 @max-[38rem]/table:h-10 @max-[38rem]/table:w-full text-[0.75rem] text-subdued opacity-70 transition-opacity duration-[0.12s] group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100'
 
 /**
  * What the gateway calls this model, if it carries it at all.
@@ -198,7 +198,7 @@ export function ModelRow({
       >
         {tokens > 0 ? compact(tokens) : NONE}
       </span>
-      <span className="flex min-w-0 items-center justify-end gap-2">
+      <span className="flex min-w-0 items-center justify-end gap-2 empty:hidden @max-[38rem]/table:justify-stretch">
         {m.manageable &&
           (resident ? (
             <EvictButton model={model} m={m} />

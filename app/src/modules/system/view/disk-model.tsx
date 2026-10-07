@@ -99,10 +99,10 @@ type Segment = {
 /** Alternating weight, not five hues, and no accent — spelled per key because
     an interpolated class name is a class Tailwind never sees. */
 const SEG_INK: Record<Segment['key'], string> = {
-  maker: 'text-subdued',
+  maker: 'text-foreground',
   capacity: 'text-foreground',
-  class: 'text-subdued',
-  variant: 'text-subdued',
+  class: 'text-foreground',
+  variant: 'text-foreground',
   config: 'text-foreground',
 }
 

@@ -111,6 +111,8 @@ function RouteGroup({ group, routes }: { group: string; routes: Route[] }) {
   return (
     <>
       <TableGroup
+        // On a phone the label stacks over its detail rather than wrapping beside it.
+        className="@max-[38rem]/table:h-auto @max-[38rem]/table:flex-col @max-[38rem]/table:items-start @max-[38rem]/table:gap-0.5 @max-[38rem]/table:py-2"
         title={byHand ? 'config.yaml' : group}
         note={
           <>

@@ -95,6 +95,10 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
   const newer = behind.filter((r) => r.verdict === 'newer-tag')
   const unknown = rest.filter((r) => r.verdict === 'unknown')
   const current = rest.filter((r) => r.verdict === 'current')
+  // On a phone a group's description stacks under its title instead of colliding.
+  const GROUP_STACK =
+    'max-[40rem]:h-auto max-[40rem]:flex-col max-[40rem]:items-start max-[40rem]:gap-0.5 max-[40rem]:py-2 [&>span:first-child]:whitespace-nowrap'
+
   const group = (rows: UpdateRow[]) =>
     rows.map((r) => (
       <ImageRow key={r.container} r={r} status={d.status} queue={bind(r)} table="grouped" />
@@ -147,6 +151,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             <TableGroup
               title={`Tag moved · ${String(moved.length)}`}
               note="same tag, a new image behind it"
+              className={GROUP_STACK}
             />
           )}
           {group(moved)}
@@ -154,6 +159,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             <TableGroup
               title={`Newer tag · ${String(newer.length)}`}
               note="a higher release of the same shape is published"
+              className={GROUP_STACK}
             />
           )}
           {group(newer)}
@@ -161,6 +167,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             <TableGroup
               title={`No verdict · ${String(unknown.length)}`}
               note="the registry did not answer, or there is nothing to compare against"
+              className={GROUP_STACK}
             />
           )}
           {group(unknown)}
@@ -168,6 +175,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             <TableGroup
               title={`On the newest tag · ${String(current.length)}`}
               note="nothing to do"
+              className={GROUP_STACK}
             />
           )}
           {group(current)}

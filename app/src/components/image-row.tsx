@@ -8,7 +8,7 @@ import { errorText } from '../lib/redact'
 import { fetchUpdateNotes } from '../server/updates'
 import { UpdateControl } from './image-update'
 import { Changelog } from './release-notes'
-import { CELL_MONO, CELL_NAME, CELL_QUIET, TABLE_HEAD, TABLE_ROW } from './table'
+import { CELL_NAME, CELL_QUIET, TABLE_HEAD, TABLE_ROW } from './table'
 import { EMPTY, MONO, MONO_FACE, NOTE } from './tokens'
 import { Chip, type Tone } from './viz'
 
@@ -177,7 +177,7 @@ export function ImageRow({
           <span className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center">
               <span aria-hidden="true" className={CARET} />
-              <span className={CELL_NAME}>{r.container}</span>
+              <span className={cn(CELL_NAME, 'pr-1')}>{r.container}</span>
               {/* Pinned and queued sit beside the name where the table has no
                   state column. */}
               {table === 'grouped' && r.kind === 'container' && !r.updatable && (
@@ -211,10 +211,17 @@ export function ImageRow({
               )}
             </span>
           </span>
-          <MidTrunc
-            text={runningText}
-            className={cn(CELL_MONO, 'text-[0.75rem]', NARROW, table === undefined && CARD_NARROW)}
-          />
+          {/* The running version wraps rather than being cut: a long tag is the
+              identifying part of a pin. */}
+          <span
+            className={cn(
+              'min-w-0 font-mono text-[0.75rem] text-muted-foreground [overflow-wrap:anywhere]',
+              NARROW,
+              table === undefined && CARD_NARROW,
+            )}
+          >
+            {runningText}
+          </span>
           {/* For a moved CHANNEL pin both tags are the same string, so the
               only honest thing the digests can say is "new digest" — unless
               the image states its own version, in which case that IS the

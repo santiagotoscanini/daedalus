@@ -160,7 +160,7 @@ function PeersTable({ f }: { f: WireguardFacts }) {
           <li key={p.name} className={cn(PEER_GRID, TABLE_ROW)}>
             <span className="flex min-w-0 flex-col">
               <span className="flex min-w-0 items-center gap-2">
-                <span className={CELL_NAME} title={p.name}>
+                <span className={cn(CELL_NAME, 'pr-0.5')} title={p.name}>
                   {p.name}
                 </span>
                 {/* Deliberately switched off is not a warning at all — it

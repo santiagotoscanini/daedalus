@@ -179,7 +179,7 @@ export function Facts({ rows, list }: { rows: { k: string; v: ReactNode }[]; lis
           <dt
             className={cn(
               'text-muted-foreground',
-              list === true ? 'flex-none text-[0.82rem]' : 'truncate text-[0.75rem]',
+              list === true ? 'flex-none text-[0.82rem]' : 'text-[0.75rem]',
             )}
           >
             {r.k}

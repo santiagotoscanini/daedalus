@@ -29,7 +29,7 @@ const ROW_BTN = 'ml-auto h-7 shrink-0 px-2.5 text-[0.75rem]'
 /* The side column: how the row stands on its first line, the ids the CLI and
    claude.ai go by on its second. Right-aligned, so the ids form a column. */
 const SIDE =
-  'flex min-w-0 flex-col items-end gap-1 pt-0.5 max-[40rem]:col-span-2 max-[40rem]:row-start-2 max-[40rem]:items-start'
+  'flex min-w-0 flex-col items-end gap-1 pt-0.5 max-[40rem]:col-span-2 max-[40rem]:row-start-2 max-[40rem]:items-start max-[26.25rem]:col-span-1 max-[26.25rem]:row-start-auto'
 const SIDE_LINE =
   'flex min-w-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-0.5 max-[40rem]:justify-start [&>span]:max-w-none [overflow-wrap:anywhere]'
 
@@ -123,6 +123,9 @@ export function RosterRow({
         // A phone stacks the row: the name and the verb on top, how it stands
         // and its ids as a full-width line beneath.
         'max-[40rem]:grid-cols-[minmax(0,1fr)_auto] max-[40rem]:gap-y-2',
+        // Under ~420px the verb is no longer cramped beside a long title: it
+        // takes a row of its own, below the facts.
+        'max-[26.25rem]:grid-cols-1',
       )}
       title={row.id ?? undefined}
     >
@@ -168,7 +171,7 @@ export function RosterRow({
           It is hidden while armed because Confirm and Cancel take its place
           below — two buttons for one row at once is the ambiguity the
           two-step exists to avoid. */}
-      <div className="flex justify-end">
+      <div className="flex justify-end max-[26.25rem]:justify-start">
         {control.kind !== 'none' && !busy && !armed && (
           <Button
             type="button"
