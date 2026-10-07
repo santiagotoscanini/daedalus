@@ -52,7 +52,7 @@ export const NAV_ITEM = [
 /* The lit row: a quiet fill and full ink. No accent — the selected row is
    the one the eye passes every glance, and colour there is noise. */
 export const NAV_ITEM_ACTIVE =
-  'bg-foreground/[0.08] font-medium text-foreground [&>svg]:opacity-100'
+  'bg-foreground/[0.055] font-medium text-foreground dark:bg-foreground/[0.08] [&>svg]:opacity-100'
 
 /** The label, which the collapsed rail hides in favour of the tooltip. */
 export const NAV_LABEL = 'min-w-0 overflow-hidden text-ellipsis nav-collapsed:hidden'

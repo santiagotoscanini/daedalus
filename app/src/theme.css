@@ -229,6 +229,13 @@
   }
 }
 
+/* Between the drawer and 70rem the rail is icons regardless (app.css). */
+@media (52rem <= width < 70rem) {
+  :root {
+    --sidebar-w: 60px;
+  }
+}
+
 /* The rail is out of flow below the breakpoint — a drawer, not a column —
    so it occupies no width at all, and `--sidebar-w` is what tells the
    grid and the apply bar so. Keyed on the same media query the `rail:`

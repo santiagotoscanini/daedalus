@@ -128,7 +128,7 @@ function RailHead({
         type="button"
         className={cn(
           ICON_BUTTON,
-          'size-8 text-muted-foreground max-rail:hidden nav-collapsed:[&>svg]:rotate-180',
+          'size-8 text-muted-foreground max-rail:hidden max-[70rem]:hidden nav-collapsed:[&>svg]:rotate-180',
         )}
         onClick={onToggleCollapse}
         aria-pressed={collapsed}

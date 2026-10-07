@@ -6,7 +6,13 @@
 // list's own width (`@container/applist`): columns step away as it narrows;
 // the app and its status never do.
 import { Link } from '@tanstack/react-router'
-import { CircleOffIcon, FlaskConicalIcon, GlobeIcon, LoaderIcon } from 'lucide-react'
+import {
+  ChevronRightIcon,
+  CircleOffIcon,
+  FlaskConicalIcon,
+  GlobeIcon,
+  LoaderIcon,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import type { Platform, SiteState } from '../../lib/external-apps'
@@ -72,13 +78,13 @@ const HEAD =
 
 /** A row: the whole of it is the link (`after:` stretches the name's anchor). */
 export const ROW =
-  'relative min-h-[3.25rem] border-hairline border-t py-2 transition-colors duration-100 [&:nth-child(2)]:border-t-0 [[data-group]+&]:border-t-0 hover:bg-foreground/[0.025] has-[a:focus-visible]:bg-foreground/[0.04]'
+  'group/row relative min-h-[3.25rem] border-hairline border-t py-2 transition-colors duration-100 [&:nth-child(2)]:border-t-0 [[data-group]+&]:border-t-0 hover:bg-foreground/[0.025] has-[a:focus-visible]:bg-foreground/[0.04] has-[a:focus-visible]:shadow-[inset_0_0_0_2px_var(--brand-dim)]'
 const STRETCH =
   'text-inherit no-underline outline-none after:absolute after:inset-0 hover:no-underline'
 
 const NAME = 'flex min-w-0 items-center gap-2 text-[0.875rem] text-foreground [font-weight:560]'
 const DESC = 'm-0 truncate text-[0.78rem] text-muted-foreground/85'
-const MONO_CELL = 'min-w-0 truncate font-mono text-[0.75rem] text-muted-foreground'
+const MONO_CELL = 'min-w-0 truncate font-mono text-[0.72rem] text-muted-foreground'
 const QUIET = 'text-[0.78rem] text-muted-foreground tabular-nums'
 
 /** The first column: icon, name (with its badges), description. */
@@ -129,6 +135,11 @@ function Status({ state, label }: { state: AppState; label?: string }) {
     >
       <StateDot state={state} label={word} />
       <span className="truncate">{word}</span>
+      {/* Where the row goes, said on hover only. */}
+      <ChevronRightIcon
+        aria-hidden="true"
+        className="ml-auto size-3.5 flex-none text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-70"
+      />
     </span>
   )
 }
@@ -138,9 +149,9 @@ function Status({ state, label }: { state: AppState; label?: string }) {
 function Host({ host, className }: { host: string; className?: string }) {
   const dot = host.indexOf('.')
   return (
-    <code className={cn(MONO_CELL, 'text-subdued', className)}>
+    <code className={cn(MONO_CELL, className)}>
       {dot < 0 ? host : host.slice(0, dot)}
-      {dot >= 0 && <span className="text-muted-foreground/55">{host.slice(dot)}</span>}
+      {dot >= 0 && <span className="text-muted-foreground/50">{host.slice(dot)}</span>}
     </code>
   )
 }
@@ -171,7 +182,9 @@ export function AppTableHead() {
       <span>App</span>
       <span className={WIDE}>Address</span>
       <span className={MID}>Exposure</span>
-      <span className={MID}>Traffic</span>
+      <span className={MID}>
+        <span className="inline-block w-12 text-right">Req/min</span>
+      </span>
       <span className={WIDE}>Deployed</span>
       <span>Status</span>
     </li>
@@ -213,11 +226,6 @@ export function AppRow({ row }: { row: Row }) {
         }
         badges={
           <>
-            {row.managedInNix && (
-              <Chip tone="muted" className={CHIP} title="Declared by hand in Nix, read-only here">
-                nix
-              </Chip>
-            )}
             {!row.managedInNix && row.drift.length > 0 && (
               <Chip tone="warn" className={CHIP} title={`Changed: ${row.drift.join(', ')}`}>
                 unapplied
@@ -246,8 +254,8 @@ export function AppRow({ row }: { row: Row }) {
           state, and a coloured line on every healthy app would make the one
           red line harder to find, not easier. */}
       <span className={cn(MID, 'flex min-w-0 items-center gap-2.5')}>
-        <span className={cn(QUIET, 'w-11 flex-none text-right')}>
-          {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)}/m`}
+        <span className={cn(QUIET, 'w-12 flex-none text-right')}>
+          {row.status.rpm === null ? '—' : row.status.rpm.toFixed(1)}
         </span>
         {/* A line with no movement is a ruler, not a reading: drawn only when
             the two hours actually varied. */}

@@ -37,7 +37,7 @@ export function TabBar<Id extends string>({
   trailing?: ReactNode
 }) {
   return (
-    <div className="mb-6 flex items-end gap-3 border-hairline border-b">
+    <div className="mb-5 flex items-end gap-3 border-hairline border-b">
       <nav
         className={cn(
           // Navigation is an underline on a full-width hairline; the boxed

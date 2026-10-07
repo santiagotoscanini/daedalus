@@ -60,11 +60,16 @@
    A variant rather than a class on each element because the state lives on
    `<html>` and is read by a dozen descendants — the brand, every label,
    the padding, the chevron's rotation. */
+/* Also collapsed, whatever the preference, between the drawer breakpoint
+   and 70rem: a full rail there leaves the page too narrow for its tables. */
 @custom-variant nav-collapsed {
   @media (width >= 52rem) {
     :where(html[data-nav="collapsed"]) & {
       @slot;
     }
+  }
+  @media (52rem <= width < 70rem) {
+    @slot;
   }
 }
 

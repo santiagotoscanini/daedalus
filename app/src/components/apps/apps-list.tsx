@@ -30,12 +30,12 @@ export type ExternalEntry = ListData['external'][number]
 export const APP_LIST = APP_TABLE
 
 /** Search, the two filters and the one action: one row, one height. */
-const TOOLBAR = 'mb-5 flex flex-wrap items-center gap-2.5'
+const TOOLBAR = 'mb-3 flex flex-wrap items-center gap-2'
 
 /** A group's name above its table, with its note. */
 const GROUP =
-  'mt-10 mb-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8125rem] text-foreground [font-weight:560]'
-const GROUP_NOTE = 'text-[0.78rem] font-normal text-muted-foreground'
+  'mt-10 mb-3 flex flex-wrap items-center gap-x-2 text-[0.875rem] text-foreground [font-weight:600]'
+const GROUP_NOTE = 'basis-full pl-6 text-[0.8rem] font-normal text-muted-foreground'
 
 export function AppsList({ data }: { data: ListData }) {
   const { apps, applyStatus, external, offboxStatus } = data
@@ -94,7 +94,7 @@ export function AppsList({ data }: { data: ListData }) {
   return (
     <>
       <div className={TOOLBAR}>
-        <div className="relative flex-[0_1_18rem] max-[40rem]:flex-[1_1_100%]">
+        <div className="relative max-w-[17rem] flex-[1_1_10rem]">
           <SearchIcon
             aria-hidden="true"
             className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -132,7 +132,7 @@ export function AppsList({ data }: { data: ListData }) {
             setExposure(v as 'all' | AppStage)
           }}
           aria-label="Filter by exposure"
-          className="h-8.5 w-auto min-w-[9.5rem] data-[size=sm]:h-8.5"
+          className="h-8.5 w-auto gap-2.5 text-subdued data-[size=sm]:h-8.5"
           options={[
             { value: 'all', label: 'Any exposure' },
             ...APP_STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] })).reverse(),
@@ -165,9 +165,7 @@ export function AppsList({ data }: { data: ListData }) {
             It is not one of the things being managed — it is the thing doing
             the managing, declared by hand in Nix, every control on it
             read-only — so it is set apart rather than mixed in. */}
-        {platform.length > 0 && (
-          <GroupRow title="Control plane" note="Declared in Nix, read-only here" />
-        )}
+        {platform.length > 0 && <GroupRow title="Control plane" note="Declared in Nix" />}
         {platform.map((r) => (
           <AppRow key={r.name} row={r} />
         ))}

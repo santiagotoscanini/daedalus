@@ -25,7 +25,7 @@ import { fetchSiteEdit } from '../server/site'
 // foot of the app list. The builder is the box's own machinery, so its tab
 // opens straight into its boards.
 const TABS = [
-  { id: 'apps', label: 'Apps' },
+  { id: 'apps', label: 'Overview' },
   { id: 'images', label: 'Container registry' },
   { id: 'packages', label: 'npm packages' },
   { id: 'builder', label: 'Builder' },
