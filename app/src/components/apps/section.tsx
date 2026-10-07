@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
-import { ExplainToggle, useExplain } from '../explain'
+import { EXPLAIN_FOLDED, ExplainToggle } from '../explain'
 import { SECTION_NOTE, SECTION_TITLE } from '../table'
 
 /**
@@ -31,16 +31,14 @@ export function TabSection({
   label?: string
   children: ReactNode
 }) {
-  const explain = useExplain()
   return (
-    <section aria-label={label} className={cn('group/sec', first ? 'mt-0' : 'mt-10', explain.body)}>
+    <section
+      aria-label={label}
+      className={cn('group/sec', first ? 'mt-0' : 'mt-10', EXPLAIN_FOLDED)}
+    >
       <h2 className={cn(SECTION_TITLE, 'mt-0 min-h-8 gap-x-1')}>
         {title}
-        <ExplainToggle
-          open={explain.open}
-          onToggle={explain.toggle}
-          className="-my-1 hidden group-has-[.explain]/sec:inline-flex"
-        />
+        <ExplainToggle className="-my-1 hidden group-has-[.explain]/sec:inline-flex" />
         {aside !== undefined && aside !== null && (
           <span className="ml-auto flex items-center gap-3 text-[0.75rem] font-normal text-muted-foreground">
             {aside}

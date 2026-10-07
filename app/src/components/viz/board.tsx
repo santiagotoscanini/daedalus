@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { type Tone, toneStyle } from '../../lib/tone'
-import { ExplainToggle, useExplain } from '../explain'
+import { EXPLAIN_FOLDED, ExplainToggle } from '../explain'
 import { Glyph, type GlyphName, isGlyph } from '../glyph'
 
 /** The glass panel every board, card and strip is drawn as: a veil over the
@@ -63,7 +63,6 @@ export function Board({
   span?: 3 | 4 | 6 | 8 | 9 | 12
   children: ReactNode
 }) {
-  const explain = useExplain()
   return (
     <section className={BOARD} style={{ ['--span' as string]: String(span ?? 6) }}>
       <header className={BOARD_HEAD}>
@@ -78,15 +77,11 @@ export function Board({
             </span>
           )}
           <span className="truncate">{title}</span>
-          <ExplainToggle
-            open={explain.open}
-            onToggle={explain.toggle}
-            className="-my-1 hidden group-has-[.explain]/board:inline-flex opacity-0 group-hover/board:opacity-100"
-          />
+          <ExplainToggle className="-my-1 hidden group-has-[.explain]/board:inline-flex opacity-0 group-hover/board:opacity-100" />
         </h3>
         {aside !== undefined && <div className="min-w-0 text-[0.78rem]">{aside}</div>}
       </header>
-      <div className={cn(BOARD_BODY, explain.body)}>{children}</div>
+      <div className={cn(BOARD_BODY, EXPLAIN_FOLDED)}>{children}</div>
     </section>
   )
 }

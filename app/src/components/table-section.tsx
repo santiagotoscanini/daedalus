@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../lib/cn'
-import { ExplainToggle, useExplain } from './explain'
+import { EXPLAIN_FOLDED, ExplainToggle } from './explain'
 import { SECTION_NOTE, SECTION_TITLE } from './table'
 
 // A titled table standing on a page: the house SECTION_TITLE over a `TABLE`,
@@ -26,16 +26,11 @@ export function TableSection({
   children: ReactNode
   className?: string
 }) {
-  const explain = useExplain()
   return (
     <section className={cn('group/tsec col-span-12 min-w-0', className)}>
       <h3 className={cn(SECTION_TITLE, 'mt-0')}>
         <span className="truncate">{title}</span>
-        <ExplainToggle
-          open={explain.open}
-          onToggle={explain.toggle}
-          className="-my-1 hidden group-has-[.explain]/tsec:inline-flex"
-        />
+        <ExplainToggle className="-my-1 hidden group-has-[.explain]/tsec:inline-flex" />
         {aside !== undefined && (
           <span className="ml-auto text-[0.75rem] text-muted-foreground [font-weight:400]">
             {aside}
@@ -43,7 +38,7 @@ export function TableSection({
         )}
       </h3>
       {note !== undefined && <p className={SECTION_NOTE}>{note}</p>}
-      <div className={cn('flex flex-col gap-3', explain.body)}>{children}</div>
+      <div className={cn('flex flex-col gap-3', EXPLAIN_FOLDED)}>{children}</div>
     </section>
   )
 }

@@ -1,9 +1,8 @@
 import { cn } from '../../lib/cn'
 import { DASH, num } from '../../lib/format'
 import type { AppTabData } from '../../server/registry'
-import { ExplainToggle, useExplain } from '../explain'
+import { ExplainToggle } from '../explain'
 import { SECTION_TITLE } from '../table'
-import { CAPTION } from '../tokens'
 import { Board, BoardGrid, Stat, StatStrip } from '../viz'
 import { DeploymentBoard, PreviewBoard, WorkspaceBoard } from './overview-boards'
 import type { AppRecord, LoaderData } from './shared'
@@ -29,7 +28,6 @@ export function Overview({
   workspaceRoot: NonNullable<LoaderData>['workspaceRoot']
   d: Extract<AppTabData, { kind: 'overview' }>
 }) {
-  const explain = useExplain()
   // `notes` is jsonb, so the database can hand back anything — an array, a
   // nested object, a number. Rendering an unexpected value throws
   // "Objects are not valid as a React child" and takes down the WHOLE page,
@@ -53,18 +51,16 @@ export function Overview({
       <h2 className={cn(SECTION_TITLE, 'mt-0 gap-x-1')}>
         Last hour
         <ExplainToggle
-          open={explain.open}
-          onToggle={explain.toggle}
           className="-my-1 inline-flex"
+          content={
+            <p>
+              CPU and memory come from cgroup v2 at 60-second resolution. Memory is{' '}
+              <code>memory.current</code>, which counts page cache, so an app doing file I/O sits at
+              its limit and is fine. The signal that a cap is too tight is the OOM counter moving.
+            </p>
+          }
         />
       </h2>
-      {explain.open && (
-        <p className={cn(CAPTION, '-mt-1 mb-3 max-w-[74ch] animate-in fade-in-0 duration-200')}>
-          CPU and memory come from cgroup v2 at 60-second resolution. Memory is{' '}
-          <code>memory.current</code>, which counts page cache, so an app doing file I/O sits at its
-          limit and is fine. The signal that a cap is too tight is the OOM counter moving.
-        </p>
-      )}
       <StatStrip>
         {/* The probe, not the container state — the head above already
             carries running/stopped. Only a failing probe takes a colour:

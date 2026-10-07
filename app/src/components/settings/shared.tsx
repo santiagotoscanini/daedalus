@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { SourceMeta } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
 import { Ago, When } from '../ago'
-import { ExplainToggle, useExplain } from '../explain'
+import { EXPLAIN_FOLDED, ExplainToggle } from '../explain'
 import { TABLE } from '../table'
 import { Skeleton } from '../ui/skeleton'
 import { Chip } from '../viz'
@@ -176,7 +176,6 @@ export function Section({
   children?: ReactNode
   id?: string
 }) {
-  const explain = useExplain()
   return (
     <section id={id} className="group/section flex min-w-0 scroll-mt-6 flex-col">
       <header className="mb-3 flex min-w-0 flex-col gap-1">
@@ -198,11 +197,7 @@ export function Section({
             </span>
           ) : null}
           <span className="min-w-0 truncate">{title}</span>
-          <ExplainToggle
-            open={explain.open}
-            onToggle={explain.toggle}
-            className="-my-1 hidden opacity-0 group-hover/section:opacity-100 group-has-[.explain]/section:inline-flex"
-          />
+          <ExplainToggle className="-my-1 hidden opacity-0 group-hover/section:opacity-100 group-has-[.explain]/section:inline-flex" />
           {aside !== undefined && (
             <span className="ml-auto inline-flex flex-none items-center gap-2 text-[0.75rem] text-muted-foreground [font-weight:400]">
               {aside}
@@ -215,7 +210,7 @@ export function Section({
           </div>
         )}
       </header>
-      <div className={cn(FRAME, explain.body)} data-folded={explain.open ? undefined : ''}>
+      <div className={cn(FRAME, EXPLAIN_FOLDED)} data-folded="">
         {rows !== undefined && rows.length > 0 && <Rows rows={rows} framed />}
         {body}
         {children !== undefined && <div className={BAND}>{children}</div>}

@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { cn } from '../lib/cn'
-import { ExplainToggle, useExplain } from './explain'
+import { ExplainToggle } from './explain'
 
 /**
  * The frame every page opens with: a title, and one paragraph saying what
@@ -29,8 +29,6 @@ export function PageHead({
   /** The lede. */
   children?: ReactNode
 }) {
-  const explain = useExplain()
-  const folded = fold && !explain.open
   return (
     <>
       <header className="mb-6 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
@@ -38,15 +36,11 @@ export function PageHead({
           {title}
         </h1>
         {fold && children !== undefined && (
-          <ExplainToggle open={explain.open} onToggle={explain.toggle} className="inline-flex" />
+          <ExplainToggle className="inline-flex" content={children} />
         )}
         {aside}
       </header>
-      {children !== undefined && !folded && (
-        <Lede className={cn('-mt-4 mb-7', fold && 'animate-in fade-in-0 duration-200')}>
-          {children}
-        </Lede>
-      )}
+      {children !== undefined && !fold && <Lede className="-mt-4 mb-7">{children}</Lede>}
     </>
   )
 }

@@ -97,122 +97,129 @@ export function ApplyBar({
   const activeIndex = phases.indexOf(status.phase)
 
   return (
-    <div
-      className={cn(
-        // `left` is the sidebar's width, not a copy of it: the bar is fixed,
-        // so it cannot inherit the grid column, and the collapsed rail moves
-        // that variable rather than this rule.
-        // A dock floating over the page's foot, inset like the rail.
-        'fixed right-[clamp(0.75rem,2.5vw,2.5rem)] bottom-4 left-[calc(var(--sidebar-w)+clamp(0.75rem,2.5vw,2.5rem))] z-20',
-        'max-rail:right-3 max-rail:left-3',
-        'flex items-center justify-between gap-6',
-        'rounded-2xl px-5 py-3',
-        // Glass rather than opaque: the bar sits over the end of a scrolling
-        // page, and content disappearing under a hard edge reads as the page
-        // having ended. The edge carries the state; a glow under it, the urgency.
-        'border bg-popover/75 backdrop-blur-2xl backdrop-saturate-150',
-        'shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow)]',
-        status.state === 'failed'
-          ? 'border-danger/50 shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow),0_0_40px_-12px_var(--danger)]'
-          : 'border-primary/35 shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow),0_0_40px_-14px_var(--primary)]',
-      )}
-    >
-      <div className="min-w-0 text-[0.87rem]">
-        {running ? (
-          <>
-            <strong>Applying…</strong>
-            <ol className="ml-3.5 inline-flex list-none gap-3.5 p-0 text-muted-foreground text-xs">
-              {phases.map((p, i) => (
-                <li
-                  key={p}
-                  className={cn(
-                    p === status.phase && 'text-primary',
-                    i < activeIndex && 'text-subdued line-through',
-                  )}
-                >
-                  {p}
-                </li>
-              ))}
-              {activeIndex === -1 && status.phase !== '' && (
-                <li className="text-primary">{status.phase}</li>
+    <>
+      {/* The room the floating bar covers, reserved only while it is shown,
+          so the end of the page is never hidden under it. */}
+      <div aria-hidden="true" className="h-20" />
+      <div
+        className={cn(
+          // `left` is the sidebar's width, not a copy of it: the bar is fixed,
+          // so it cannot inherit the grid column, and the collapsed rail moves
+          // that variable rather than this rule.
+          // A dock floating over the page's foot, inset like the rail.
+          'fixed right-[clamp(0.75rem,2.5vw,2.5rem)] bottom-4 left-[calc(var(--sidebar-w)+clamp(0.75rem,2.5vw,2.5rem))] z-20',
+          'max-rail:right-3 max-rail:left-3',
+          'flex items-center justify-between gap-6',
+          'rounded-2xl px-5 py-3',
+          // Glass rather than opaque: the bar sits over the end of a scrolling
+          // page, and content disappearing under a hard edge reads as the page
+          // having ended. The edge carries the state; a glow under it, the urgency.
+          'border bg-popover/75 backdrop-blur-2xl backdrop-saturate-150',
+          'shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow)]',
+          status.state === 'failed'
+            ? 'border-danger/50 shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow),0_0_40px_-12px_var(--danger)]'
+            : 'border-primary/35 shadow-[inset_0_1px_0_var(--hairline-hi),var(--float-shadow),0_0_40px_-14px_var(--primary)]',
+        )}
+      >
+        <div className="min-w-0 text-[0.87rem]">
+          {running ? (
+            <>
+              <strong>Applying…</strong>
+              <ol className="ml-3.5 inline-flex list-none gap-3.5 p-0 text-muted-foreground text-xs">
+                {phases.map((p, i) => (
+                  <li
+                    key={p}
+                    className={cn(
+                      p === status.phase && 'text-primary',
+                      i < activeIndex && 'text-subdued line-through',
+                    )}
+                  >
+                    {p}
+                  </li>
+                ))}
+                {activeIndex === -1 && status.phase !== '' && (
+                  <li className="text-primary">{status.phase}</li>
+                )}
+              </ol>
+            </>
+          ) : status.state === 'failed' ? (
+            <>
+              <strong>Apply failed at {status.phase}.</strong> The system was rolled back to the
+              previous commit.
+              <pre className="mt-1.5 mb-0 max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
+                {status.error}
+              </pre>
+            </>
+          ) : rebootPending ? (
+            <>
+              <strong>The last Apply takes effect at the next boot.</strong>
+              <div className="mt-1.5">
+                <RebootRequired note={status.error} />
+              </div>
+            </>
+          ) : (
+            <>
+              <strong>{heading(changed)}</strong>
+              <span className="ml-2.5 text-muted-foreground">
+                {changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
+              </span>
+              {refusal !== null && <span className="ml-2.5 text-danger">{refusal}</span>}
+              {discard.error !== null && (
+                <span className="ml-2.5 text-danger">{discard.error}</span>
               )}
-            </ol>
-          </>
-        ) : status.state === 'failed' ? (
-          <>
-            <strong>Apply failed at {status.phase}.</strong> The system was rolled back to the
-            previous commit.
-            <pre className="mt-1.5 mb-0 max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
-              {status.error}
-            </pre>
-          </>
-        ) : rebootPending ? (
-          <>
-            <strong>The last Apply takes effect at the next boot.</strong>
-            <div className="mt-1.5">
-              <RebootRequired note={status.error} />
-            </div>
-          </>
-        ) : (
-          <>
-            <strong>{heading(changed)}</strong>
-            <span className="ml-2.5 text-muted-foreground">
-              {changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
-            </span>
-            {refusal !== null && <span className="ml-2.5 text-danger">{refusal}</span>}
-            {discard.error !== null && <span className="ml-2.5 text-danger">{discard.error}</span>}
-            {discard.notice !== null && (
-              <span className="ml-2.5 text-muted-foreground">{discard.notice}</span>
-            )}
-          </>
-        )}
-      </div>
+              {discard.notice !== null && (
+                <span className="ml-2.5 text-muted-foreground">{discard.notice}</span>
+              )}
+            </>
+          )}
+        </div>
 
-      <div className="flex shrink-0 items-center gap-2">
-        {!running && changed.length > 0 && armed && (
-          <>
-            <span className="text-muted-foreground text-xs">
-              Back to the last Apply: every edit above is lost.
-            </span>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={discard.busy}
-              onClick={() => {
-                disarm()
-                discard.run(() => discardPending(), {
-                  notice: ({ value: v }) =>
-                    v.kept.length === 0
-                      ? 'Discarded.'
-                      : `Discarded; kept ${v.kept.join(', ')}, which an Apply carries or a page undoes.`,
-                })
-              }}
-            >
-              Discard
+        <div className="flex shrink-0 items-center gap-2">
+          {!running && changed.length > 0 && armed && (
+            <>
+              <span className="text-muted-foreground text-xs">
+                Back to the last Apply: every edit above is lost.
+              </span>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={discard.busy}
+                onClick={() => {
+                  disarm()
+                  discard.run(() => discardPending(), {
+                    notice: ({ value: v }) =>
+                      v.kept.length === 0
+                        ? 'Discarded.'
+                        : `Discarded; kept ${v.kept.join(', ')}, which an Apply carries or a page undoes.`,
+                  })
+                }}
+              >
+                Discard
+              </Button>
+              <Button type="button" variant="ghost" onClick={disarm}>
+                Cancel
+              </Button>
+            </>
+          )}
+          {!running && changed.length > 0 && !armed && (
+            <Button type="button" variant="outline" disabled={discard.busy} onClick={arm}>
+              {discard.busy ? 'Discarding…' : 'Discard'}
             </Button>
-            <Button type="button" variant="ghost" onClick={disarm}>
-              Cancel
-            </Button>
-          </>
-        )}
-        {!running && changed.length > 0 && !armed && (
-          <Button type="button" variant="outline" disabled={discard.busy} onClick={arm}>
-            {discard.busy ? 'Discarding…' : 'Discard'}
+          )}
+          <Button
+            type="button"
+            disabled={running || changed.length === 0 || armed || discard.busy}
+            onClick={() => {
+              start(async () => {
+                const r = await applyRegistry()
+                return r.ok ? { ok: true, value: r.value.id } : r
+              })
+            }}
+          >
+            {running ? 'Applying…' : 'Apply'}
           </Button>
-        )}
-        <Button
-          type="button"
-          disabled={running || changed.length === 0 || armed || discard.busy}
-          onClick={() => {
-            start(async () => {
-              const r = await applyRegistry()
-              return r.ok ? { ok: true, value: r.value.id } : r
-            })
-          }}
-        >
-          {running ? 'Applying…' : 'Apply'}
-        </Button>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
