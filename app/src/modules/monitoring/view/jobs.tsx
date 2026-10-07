@@ -86,7 +86,7 @@ type JobsFacts = NonNullable<ReturnType<typeof jobsFacts>>
 
 /** Job · watched by · last run · ran · next. The two times step away first. */
 const JOB_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(12rem,1.6fr)_8rem_minmax(6rem,0.8fr)_6.5rem_6.5rem] @max-[44rem]/table:grid-cols-[minmax(10rem,1fr)_7.5rem_minmax(6rem,0.8fr)] @max-[44rem]/table:[&>.when]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(12rem,1.6fr)_8rem_minmax(6rem,0.8fr)_6.5rem_6.5rem] @max-[44rem]/table:grid-cols-[minmax(10rem,1fr)_7.5rem_minmax(6rem,0.8fr)] @max-[44rem]/table:[&>.when]:hidden @max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.watch]:hidden'
 
 /** A quiet word in a cell: the norm, said without ink. */
 const QUIET = 'text-[0.78rem] text-muted-foreground'
@@ -104,7 +104,7 @@ function ScheduledJobsBoard({ f }: { f: JobsFacts }) {
       <ul className={TABLE} aria-label="Scheduled jobs">
         <li className={cn(JOB_GRID, TABLE_HEAD)}>
           <span>Job</span>
-          <span>Watched by</span>
+          <span className="watch">Watched by</span>
           <span>Last run</span>
           <span className="when text-right">Ran</span>
           <span className="when text-right">Next</span>
@@ -112,12 +112,31 @@ function ScheduledJobsBoard({ f }: { f: JobsFacts }) {
         {d.jobs.length === 0 && <li className={TABLE_EMPTY}>no job declared</li>}
         {d.jobs.map((j) => (
           <li key={j.unit} className={cn(JOB_GRID, TABLE_ROW_DENSE)}>
-            <span className="truncate font-mono text-[0.76rem] text-foreground" title={j.unit}>
-              {j.unit}
+            <span className="flex min-w-0 flex-col">
+              <span
+                className="truncate font-mono text-[0.76rem] text-foreground @max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]"
+                title={j.unit}
+              >
+                {j.unit}
+              </span>
+              {/* On a phone how it is watched and the two times are this line. */}
+              <span className="hidden text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+                <span className={cn(j.slug !== null && j.status !== 'up' && 'text-warning')}>
+                  {j.slug === null
+                    ? 'mail on failure'
+                    : j.status === 'up'
+                      ? 'pinging'
+                      : (j.status ?? 'slug unknown')}
+                </span>
+                {' · ran '}
+                {j.lastRunAgo === null ? DASH : since(j.lastRunAgo)}
+                {' · next '}
+                {j.nextIn === null ? DASH : until(j.nextIn)}
+              </span>
             </span>
             {/* Both ways of being watched are normal and recede; a switch
                 that is late, down or unknown is the ink. */}
-            <span>
+            <span className="watch">
               {j.slug === null ? (
                 <span className={QUIET}>mail on failure</span>
               ) : j.status === null ? (
@@ -174,7 +193,8 @@ function ScheduledJobsBoard({ f }: { f: JobsFacts }) {
 }
 
 /** Check · state · due. */
-const CHECK_GRID = 'grid items-center gap-x-6 px-5 grid-cols-[minmax(8rem,1fr)_6rem_7rem]'
+const CHECK_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(8rem,1fr)_6rem_7rem] @max-[30rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[30rem]/table:gap-x-3 @max-[30rem]/table:[&>.state]:hidden'
 
 function DeadManSSwitchesBoard({ f }: { f: JobsFacts }) {
   const { d } = f
@@ -191,14 +211,24 @@ function DeadManSSwitchesBoard({ f }: { f: JobsFacts }) {
       <ul className={TABLE} aria-label="Dead-man's switches">
         <li className={cn(CHECK_GRID, TABLE_HEAD)}>
           <span>Check</span>
-          <span>State</span>
+          <span className="state">State</span>
           <span className="text-right">Due</span>
         </li>
         {d.checks.length === 0 && <li className={TABLE_EMPTY}>healthchecks did not answer</li>}
         {d.checks.map((c) => (
           <li key={c.name} className={cn(CHECK_GRID, TABLE_ROW_DENSE)}>
-            <span className="truncate text-foreground">{c.name}</span>
-            <span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-foreground [overflow-wrap:anywhere]">{c.name}</span>
+              <span
+                className={cn(
+                  'hidden text-[0.72rem] text-muted-foreground @max-[30rem]/table:block',
+                  c.status !== 'up' && (c.status === 'grace' ? 'text-warning' : 'text-danger'),
+                )}
+              >
+                {c.status === 'grace' ? 'late' : c.status}
+              </span>
+            </span>
+            <span className="state">
               {c.status === 'up' ? (
                 <span className={QUIET}>up</span>
               ) : c.status === 'grace' ? (

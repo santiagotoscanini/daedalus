@@ -32,3 +32,25 @@ export const TABLE_NONE = 'm-0 py-1 text-[0.84rem] text-muted-foreground'
 export function QuietState({ children }: { children: ReactNode }) {
   return <span className="text-[0.78rem] whitespace-nowrap text-muted-foreground">{children}</span>
 }
+
+/**
+ * Label and value rows for a board wider than a third: values left-aligned on
+ * a fixed label column, hairlines between. Below ~34rem of board width the
+ * label stacks above its value, so a path or a sentence gets the whole line
+ * instead of a right-aligned sliver beside its label.
+ */
+export function KeyValue({ rows }: { rows: { k: string; v: ReactNode }[] }) {
+  return (
+    <dl className="m-0">
+      {rows.map((r) => (
+        <div
+          key={r.k}
+          className="grid grid-cols-[11rem_minmax(0,1fr)] items-baseline gap-x-6 gap-y-0.5 border-hairline border-t py-2.5 first:border-t-0 first:pt-0 @max-[34rem]/board:grid-cols-1"
+        >
+          <dt className="text-[0.82rem] text-muted-foreground">{r.k}</dt>
+          <dd className="m-0 min-w-0 text-[0.84rem] [overflow-wrap:anywhere]">{r.v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}

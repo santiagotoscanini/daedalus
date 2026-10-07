@@ -62,9 +62,9 @@ export function requesterLabel(b: Pick<BuildSummary, 'requestedBy' | 'actor'>): 
 const BUILD_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[7rem_5rem_minmax(0,1fr)_5.5rem_5.5rem]',
-  '@max-[36rem]/table:grid-cols-[7rem_5rem_minmax(0,1fr)]',
+  '@max-[40rem]/table:grid-cols-[7rem_minmax(0,1fr)]',
 )
-const NARROW_HIDE = '@max-[36rem]/table:hidden'
+const NARROW_HIDE = '@max-[40rem]/table:hidden'
 
 /** A build's state in a table cell: the norm (succeeded) is a quiet dot and
     word; anything else keeps its tinted chip, so the exception carries the ink. */
@@ -137,7 +137,7 @@ export function BuildsBoard({
           <li className={cn(BUILD_GRID, TABLE_HEAD)}>
             <span>State</span>
             <span>Commit</span>
-            <span>Requested by</span>
+            <span className={NARROW_HIDE}>Requested by</span>
             <span className={cn('text-right', NARROW_HIDE)}>Took</span>
             <span className={cn('text-right', NARROW_HIDE)}>Started</span>
           </li>
@@ -156,14 +156,28 @@ export function BuildsBoard({
                 <Link
                   to="/apps/$name/builds/$id"
                   params={{ name: app, id: b.id }}
-                  className={cn(TABLE_LINK, 'font-mono text-[0.78rem] text-foreground')}
+                  className={cn(TABLE_LINK, 'min-w-0')}
                 >
-                  {sha7(b.sha)}
+                  <span className="font-mono text-[0.78rem] text-foreground">{sha7(b.sha)}</span>
+                  {/* On a phone the hidden columns live here, under the commit. */}
+                  <span
+                    className={cn(CELL_SUB, 'hidden whitespace-normal @max-[40rem]/table:block')}
+                  >
+                    {requesterLabel(b)}
+                    {b.publish === 'candidate' ? ' · candidate' : ''}
+                    {took === null ? '' : ` · ${ms(took)}`}
+                    {now === null ? '' : ` · ${since((now - Date.parse(b.createdAt)) / 1000)}`}
+                    {(b.state === 'failed' ? b.error : isOpenBuild(b.state) ? b.phase : null) && (
+                      <span className="block text-foreground">
+                        {b.state === 'failed' ? b.error : b.phase}
+                      </span>
+                    )}
+                  </span>
                 </Link>
                 {/* Who asked, and under it what is news about the build: why it
                     failed, or where an open one is. A finished good build is
                     one line. */}
-                <span className="min-w-0">
+                <span className={cn('min-w-0', NARROW_HIDE)}>
                   <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
                     <span className="truncate">{requesterLabel(b)}</span>
                     {b.publish === 'candidate' && <Chip>candidate</Chip>}
@@ -245,35 +259,34 @@ type OverviewBuild = {
 export function DetectionLine({ app, build }: { app: string; build: OverviewBuild }) {
   const parts = detectionParts(build.summary.resolvedStrategy, build.detection)
   return (
-    <p className="m-0 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.8rem] text-subdued">
-      {/* The separator trails each part, so a wrapped line ends on a dot
-          rather than starting with one. */}
+    // A small list, not a sentence: each finding is one item that wraps whole,
+    // so no line begins with a separator or breaks mid-finding.
+    <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-x-4 gap-y-1 p-0 text-[0.8rem] text-subdued">
       {parts.map((p) => (
-        <span
-          key={p.text}
-          className="inline-flex items-baseline gap-2 after:text-muted-foreground after:content-['·']"
-        >
+        <li key={p.text} className="min-w-0 [overflow-wrap:anywhere]">
           {p.code === true ? (
-            <span>
+            <>
               start <code>{p.text}</code>
-            </span>
+            </>
           ) : (
             p.text
           )}
-        </span>
+        </li>
       ))}
-      <Link
-        to="/apps/$name/builds/$id"
-        params={{ name: app, id: build.summary.id }}
-        className="font-mono text-[0.75rem]"
-      >
-        {sha7(build.summary.sha)}
-      </Link>
-      {build.warningCount > 0 && (
-        <Chip tone="warn">
-          {build.warningCount} {build.warningCount === 1 ? 'warning' : 'warnings'}
-        </Chip>
-      )}
-    </p>
+      <li className="flex min-w-0 items-center gap-2">
+        <Link
+          to="/apps/$name/builds/$id"
+          params={{ name: app, id: build.summary.id }}
+          className="font-mono text-[0.75rem]"
+        >
+          {sha7(build.summary.sha)}
+        </Link>
+        {build.warningCount > 0 && (
+          <Chip tone="warn">
+            {build.warningCount} {build.warningCount === 1 ? 'warning' : 'warnings'}
+          </Chip>
+        )}
+      </li>
+    </ul>
   )
 }

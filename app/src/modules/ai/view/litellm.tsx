@@ -5,8 +5,9 @@ import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { LitellmData } from '../data/litellm'
 import { WhoIsCallingBoard } from './callers'
-import { NeighbourPair, ToolsModelsCalledBoard, TrafficBoard } from './litellm-boards'
+import { NeighbourPair, TrafficBoard } from './litellm-boards'
 import { comparePinned, EMPTY, MONO } from './shared'
+import { ToolsModelsCalledBoard } from './tools'
 
 /**
  * The tab on a box with no gateway bound. Said once, in place of a page of

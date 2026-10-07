@@ -290,10 +290,16 @@ export function GrafanaLogs({
           value={from}
           onChange={setFrom}
           label="Log range"
+          className="max-[40rem]:min-h-10 max-[40rem]:[&_button]:min-h-9"
           options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
         />
         <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
-          <a href={grafanaLogsFull(site, source, from)} target="_blank" rel="noreferrer">
+          <a
+            className="whitespace-nowrap"
+            href={grafanaLogsFull(site, source, from)}
+            target="_blank"
+            rel="noreferrer"
+          >
             Search ↗
           </a>
         </Button>

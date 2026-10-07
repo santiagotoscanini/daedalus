@@ -6,23 +6,15 @@ import {
   TABLE_ROW_DENSE,
 } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
-import { AXIS, CAPTION, FOOT, NOTE } from '../../../components/tokens'
-import {
-  BarList,
-  Board,
-  BoardGrid,
-  Columns,
-  Progress,
-  Stat,
-  StatStrip,
-} from '../../../components/viz'
+import { CAPTION, FOOT, NOTE } from '../../../components/tokens'
+import { BarList, Board, BoardGrid, Progress, Stat, StatStrip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, pct } from '../../../lib/format'
 import type { ActionsData } from '../data'
-import { Ext, osWord, SampleRows, WipBoard } from './shared'
+import { DayColumns, Ext, osWord, SampleRows, WipBoard } from './shared'
 
 /** What could move · jobs · wall minutes · billed. */
-const TAKE_GRID = 'grid items-center gap-x-4 grid-cols-[minmax(8rem,1fr)_3rem_4.5rem_4.5rem]'
+const TAKE_GRID = 'grid items-center gap-x-3 grid-cols-[minmax(0,1fr)_2.5rem_4rem_3.5rem]'
 
 type Minutes = Extract<ActionsData, { tab: 'minutes' }>
 
@@ -76,16 +68,14 @@ export function MinutesView({ d }: { d: Minutes }) {
 function minutesFacts({ d }: { d: Minutes }) {
   const t = d.totals
   const share = (100 * t.billedThisMonth) / d.allowance
-  const first = d.days[0]?.label ?? ''
-  const last = d.days[d.days.length - 1]?.label ?? ''
   const savingTotal = d.saving.reduce((s, x) => s + x.billed, 0)
-  return { d, t, share, first, last, savingTotal }
+  return { d, t, share, savingTotal }
 }
 
 type MinutesFacts = NonNullable<ReturnType<typeof minutesFacts>>
 
 function BilledMinutesPerDayBoard({ f }: { f: MinutesFacts }) {
-  const { d, first, last } = f
+  const { d } = f
   return (
     <Board
       title="Billed minutes per day"
@@ -93,12 +83,7 @@ function BilledMinutesPerDayBoard({ f }: { f: MinutesFacts }) {
       span={8}
       aside={<span className={NOTE}>after the multiplier</span>}
     >
-      <Columns points={d.days} height={92} empty="no hosted minutes in the window" />
-      <p className={AXIS}>
-        <span>{first}</span>
-        <span>minutes</span>
-        <span>{last}</span>
-      </p>
+      <DayColumns points={d.days} unit="minutes" empty="no hosted minutes in the window" />
       <p className={FOOT}>
         Counted the way GitHub bills: each job rounded up to whole minutes, then Linux ×
         {String(d.multipliers.linux)}, Windows ×{String(d.multipliers.windows)}, macOS ×
@@ -154,7 +139,7 @@ function WhatARunnerHereWouldTakeBoard({ f }: { f: MinutesFacts }) {
           </li>
           {d.saving.map((s) => (
             <li key={s.os} className={cn(TAKE_GRID, 'border-hairline border-t py-2.5')}>
-              <span className="truncate text-foreground">
+              <span className="text-foreground">
                 {osWord(s.os)} jobs →{' '}
                 {s.os === 'linux'
                   ? 'this box'
@@ -199,7 +184,7 @@ function GitHubSOwnMeterBoard() {
 
 /** Repository · billed · Linux · Windows · macOS · self-hosted · unread. */
 const REPO_GRID =
-  'grid items-center gap-x-5 px-5 grid-cols-[minmax(7rem,1fr)_4.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem] @max-[38rem]/table:grid-cols-[minmax(7rem,1fr)_4.5rem_4rem] @max-[38rem]/table:[&>.os]:hidden'
+  'grid items-center gap-x-5 px-5 grid-cols-[minmax(7rem,1fr)_4.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem] @max-[38rem]/table:grid-cols-[minmax(0,1fr)_4rem_3.5rem] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.os]:hidden'
 
 /** A zero recedes to a dash, so the minutes that exist are what the eye finds. */
 function Minutes({ n, className }: { n: number; className?: string }) {
@@ -239,9 +224,22 @@ function ByRepositoryTable({ f }: { f: MinutesFacts }) {
         {d.byRepo.length === 0 && <li className={TABLE_EMPTY}>no jobs read</li>}
         {d.byRepo.map((r) => (
           <li key={r.repo} className={cn(REPO_GRID, TABLE_ROW_DENSE)}>
-            <Ext href={`${r.url}/actions`} className="truncate text-foreground">
-              {r.repo}
-            </Ext>
+            <span className="flex min-w-0 flex-col">
+              <Ext href={`${r.url}/actions`} className="text-foreground [overflow-wrap:anywhere]">
+                {r.repo}
+              </Ext>
+              {/* On a phone the per-image minutes are this second line. */}
+              <span className="hidden text-[0.72rem] text-muted-foreground tabular-nums @max-[38rem]/table:block">
+                {[
+                  r.raw.linux > 0 && `Linux ${num(r.raw.linux)}`,
+                  r.raw.windows > 0 && `Win ${num(r.raw.windows)}`,
+                  r.raw.macos > 0 && `macOS ${num(r.raw.macos)}`,
+                  r.selfHosted > 0 && `self ${num(r.selfHosted)}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || DASH}
+              </span>
+            </span>
             <span
               className={cn(
                 'text-right tabular-nums',
@@ -270,7 +268,7 @@ function ByRepositoryTable({ f }: { f: MinutesFacts }) {
 
 /** Workflow · the job that dominates it · billed. */
 const WF_COST_GRID =
-  'grid items-center gap-x-5 px-5 grid-cols-[minmax(7rem,1fr)_minmax(5rem,0.8fr)_4.5rem] @max-[26rem]/table:grid-cols-[minmax(7rem,1fr)_4.5rem] @max-[26rem]/table:[&>.job]:hidden'
+  'grid items-center gap-x-5 px-5 grid-cols-[minmax(7rem,1fr)_minmax(5rem,0.8fr)_4.5rem] @max-[38rem]/table:grid-cols-[minmax(0,1fr)_4rem] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.job]:hidden'
 
 function CostPerWorkflowTable({ f }: { f: MinutesFacts }) {
   const { d } = f
@@ -289,7 +287,12 @@ function CostPerWorkflowTable({ f }: { f: MinutesFacts }) {
         {d.byWorkflow.length === 0 && <li className={TABLE_EMPTY}>no hosted jobs read</li>}
         {d.byWorkflow.map((w) => (
           <li key={w.label} className={cn(WF_COST_GRID, TABLE_ROW_DENSE)}>
-            <span className="truncate text-foreground">{w.label}</span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-foreground [overflow-wrap:anywhere]">{w.label}</span>
+              <span className="hidden truncate text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+                {w.topJob === null ? DASH : `${w.topJob} · ${num(w.topJobBilled)}`}
+              </span>
+            </span>
             <span className={cn(CELL_QUIET, 'job truncate')}>
               {w.topJob === null ? DASH : `${w.topJob} · ${num(w.topJobBilled)}`}
             </span>

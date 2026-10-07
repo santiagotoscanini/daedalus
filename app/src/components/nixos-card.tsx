@@ -13,7 +13,13 @@ import { Skeleton } from './ui/skeleton'
 import { Chip, Facts, GLASS } from './viz'
 
 /** The panel under an out-of-card heading: a board without its own title. */
-const PANEL = cn(GLASS, 'flex flex-col gap-3 px-5 py-4')
+const PANEL = cn(
+  GLASS,
+  '@container/board flex flex-col gap-3 px-5 py-4',
+  // Six facts: two abreast on a phone, three in a tablet column, six at a
+  // laptop — never four and an orphan pair.
+  '[&>dl]:grid-cols-2 @[40rem]/board:[&>dl]:grid-cols-3 @[70rem]/board:[&>dl]:grid-cols-6',
+)
 
 // The NixOS release this generation was built with — on System › Updates
 // beside the engine's pin, because it is the third thing on the box that can
@@ -103,7 +109,12 @@ export function NixosCard({ facts }: { facts: NixosFacts }) {
                   <span className={NOTE}>not a git input</span>
                 ) : (
                   // Hash and date on one line, never split.
-                  <span className={cn(MONO, 'whitespace-nowrap [overflow-wrap:normal]')}>
+                  <span
+                    className={cn(
+                      MONO,
+                      '[overflow-wrap:normal] @[30rem]/board:whitespace-nowrap [&>*]:inline-block [&>*]:whitespace-nowrap',
+                    )}
+                  >
                     <a
                       href={`https://github.com/NixOS/nixpkgs/commit/${facts.revision}`}
                       target="_blank"

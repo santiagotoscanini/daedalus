@@ -77,7 +77,7 @@ const HERO_LINK =
 /* The exposure switch goes full-width below the rail breakpoint, where it sits
    alone in its own row — the descendant rules tell it so. */
 const HERO_EXPOSURE =
-  'flex flex-col items-end gap-2 pt-1 max-rail:col-span-full max-rail:items-stretch max-rail:pt-0 max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center'
+  'flex flex-col items-end gap-2 pt-1 max-rail:col-span-full max-rail:items-start max-rail:pt-0 max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radiogroup]]:max-w-[22.5rem] max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center max-[40rem]:items-stretch max-[40rem]:[&_[role=radiogroup]]:max-w-none'
 const EXPOSURE_NOTE =
   'm-0 max-w-[16rem] text-right text-[0.75rem] text-muted-foreground max-rail:max-w-none max-rail:text-left'
 export const Route = createFileRoute('/apps/$name')({
@@ -299,7 +299,7 @@ function AppHero({
       </div>
 
       <div className={HERO_EXPOSURE}>
-        <div className="flex items-center gap-2.5 max-rail:flex-col max-rail:items-stretch max-rail:gap-1.5">
+        <div className="flex items-center gap-2.5 max-[40rem]:flex-col max-[40rem]:items-stretch max-[40rem]:gap-1.5">
           <span className="translate-y-px text-[0.75rem] text-muted-foreground">Exposure</span>
           <SegmentPicker
             value={app.stage}

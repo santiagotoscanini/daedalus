@@ -160,7 +160,8 @@ function Panel({ f }: { f: FactorioFacts }) {
 }
 
 /* The feed: the post and when. Its kind is said only when it is the exception. */
-const NEWS_GRID = 'grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-x-6 px-5'
+const NEWS_GRID =
+  'grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-x-6 px-5 @max-[34rem]/table:grid-cols-1 @max-[34rem]/table:gap-y-0.5'
 
 function FromTheDevsSection({ f }: { f: FactorioFacts }) {
   const { news } = f
@@ -172,7 +173,7 @@ function FromTheDevsSection({ f }: { f: FactorioFacts }) {
         <ul className={TABLE}>
           <li className={cn(NEWS_GRID, TABLE_HEAD)}>
             <span>Post</span>
-            <span className={NUM_CELL}>Published</span>
+            <span className={cn(NUM_CELL, '@max-[34rem]/table:hidden')}>Published</span>
           </li>
           {news.map((n) => (
             <li key={n.url} className={cn(NEWS_GRID, TABLE_ROW, TABLE_ROW_LINK)}>
@@ -181,7 +182,10 @@ function FromTheDevsSection({ f }: { f: FactorioFacts }) {
                   href={n.url}
                   target="_blank"
                   rel="noreferrer"
-                  className={cn(TABLE_LINK, 'truncate text-[0.84rem] text-foreground')}
+                  className={cn(
+                    TABLE_LINK,
+                    'text-[0.84rem] text-foreground @min-[34rem]/table:truncate',
+                  )}
                   title={
                     n.kind === 'fff' ? 'Friday Facts' : n.kind === 'release' ? 'release' : 'post'
                   }
@@ -191,7 +195,9 @@ function FromTheDevsSection({ f }: { f: FactorioFacts }) {
                 {/* A release post is the exception; the Friday Facts are the norm. */}
                 {n.kind === 'release' && <Chip tone="info">release</Chip>}
               </span>
-              <span className={cn(CELL_QUIET, NUM_CELL)}>{n.date}</span>
+              <span className={cn(CELL_QUIET, NUM_CELL, '@max-[34rem]/table:text-left')}>
+                {n.date}
+              </span>
             </li>
           ))}
         </ul>

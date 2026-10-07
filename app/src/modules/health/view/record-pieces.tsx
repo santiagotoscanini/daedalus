@@ -7,7 +7,6 @@ import {
   CELL_MONO,
   CELL_NAME,
   CELL_QUIET,
-  CELL_SUB,
   TABLE,
   TABLE_HEAD,
   TABLE_ROW,
@@ -41,6 +40,8 @@ type Piece = {
   detail?: string
   version: string | null
   where: ReactNode
+  /** The same address as plain text, for the phone's second line. */
+  addr?: string
   state?: ReactNode
 }
 
@@ -50,11 +51,20 @@ function PieceRow({ p }: { p: Piece }) {
       <div className="min-w-0">
         <div className={CELL_NAME}>{p.name}</div>
         {p.pkg !== undefined && (
-          <p className={CELL_SUB}>
+          <p className="m-0 text-[0.78rem] text-muted-foreground/85">
             <span className="font-mono text-[0.7rem]">{p.pkg}</span>
             {p.detail !== undefined && <> · {p.detail}</>}
           </p>
         )}
+        {/* The Address column steps away on a phone; its value lives here. */}
+        <p
+          className={cn(
+            CELL_MONO,
+            'hidden whitespace-normal [overflow-wrap:anywhere] @max-[44rem]/table:block',
+          )}
+        >
+          {p.addr}
+        </p>
       </div>
       <span className="flex min-w-0 items-center gap-2.5">
         <span
@@ -78,11 +88,13 @@ export function PiecesBoard({ d }: { d: Record_ }) {
       pkg: 'getbased',
       version: short(d.build.running),
       where: <span className={CELL_MONO}>{d.url}</span>,
+      addr: d.url,
     },
     {
       name: 'Sync relay',
       version: d.relay.version,
       where: <span className={CELL_MONO}>{d.relayUrl}</span>,
+      addr: d.relayUrl,
       state:
         relay.latest === null ? undefined : relay.behind.length === 0 ? (
           <QuietState>up to date</QuietState>
@@ -97,6 +109,7 @@ export function PiecesBoard({ d }: { d: Record_ }) {
       pkg: 'getbased-rag',
       version: d.agents.rag.version,
       where: <span className={CELL_MONO}>{d.agents.rag.url}</span>,
+      addr: d.agents.rag.url,
       state:
         kb === null ? (
           <Chip tone="bad">not answering</Chip>
@@ -119,6 +132,7 @@ export function PiecesBoard({ d }: { d: Record_ }) {
           {d.agents.library.url} ↗
         </a>
       ),
+      addr: d.agents.library.url,
     },
     {
       name: 'MCP server',

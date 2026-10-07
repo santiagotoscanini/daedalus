@@ -157,6 +157,38 @@ function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
         <span className={CELL_SUB} title={disk.model ?? undefined}>
           {kind}
         </span>
+        {/* Where columns step away their readings move here, muted: nothing a
+            wide row shows is missing from a narrow one. */}
+        <span className={cn(CELL_SUB, 'hidden @max-[64rem]/table:block @max-[36rem]/table:hidden')}>
+          {[
+            `${num(disk.powerCycles)} cycles`,
+            stats?.readBytes == null ? null : `read ${bytes(stats.readBytes)}/s`,
+            stats?.writtenBytes == null ? null : `written ${bytes(stats.writtenBytes)}/s`,
+            stats?.utilPct == null ? null : `${pct(stats.utilPct, 1)} busy`,
+          ]
+            .filter((x) => x !== null)
+            .join(' · ')}
+        </span>
+        <span
+          className={cn(
+            CELL_SUB,
+            'hidden whitespace-normal! overflow-visible! text-clip! @max-[36rem]/table:block',
+          )}
+        >
+          {[
+            disk.sizeBytes === null ? null : bytes(disk.sizeBytes),
+            `on ${hours(disk.powerOnHours)}`,
+            nvme
+              ? disk.percentageUsed === null
+                ? null
+                : `${pct(disk.percentageUsed)} worn`
+              : `${num(disk.reallocated)} realloc.`,
+            `${num(disk.powerCycles)} cycles`,
+            stats?.utilPct == null ? null : `${pct(stats.utilPct, 1)} busy`,
+          ]
+            .filter((x) => x !== null)
+            .join(' · ')}
+        </span>
       </span>
       <span className={cn(CELL_QUIET, N, MID)}>
         {disk.sizeBytes === null ? DASH : bytes(disk.sizeBytes)}
@@ -300,19 +332,24 @@ function DiskBoard({ disk }: { disk: Disk }) {
         {disk.selfTests.slice(0, 5).map((t, i) => (
           <li
             key={`${t.type ?? '?'}-${String(t.hours ?? i)}-${String(i)}`}
-            className={cn(ROW, 'grid grid-cols-[minmax(0,1fr)_auto_4rem] gap-x-3')}
+            className={cn(ROW, 'grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3')}
           >
             {/* An NVMe log carries no test type here, so it reads as a
                 self-test rather than as an unknown. */}
-            <span className={cn(ROW_MAIN, t.type === null && 'text-muted-foreground')}>
-              {t.type ?? (nvme ? 'Self-test' : 'unnamed test')}
-            </span>
-            <span className={cn(ROW_SIDE, 'max-w-none text-right')}>
-              {/* The result, in its column: a pass is a word, an unfinished test a
-                  chip with the short reason; the full status is its hover. */}
-              {t.passed ? (
-                'ok'
-              ) : (
+            {/* The label takes the row's width and wraps rather than cutting;
+                a test that did not finish puts its chip under the label, the
+                full status as its hover. A pass is a word beside the age. */}
+            <span className="flex min-w-0 flex-col items-start gap-1">
+              <span
+                className={cn(
+                  ROW_MAIN,
+                  'whitespace-normal!',
+                  t.type === null && 'text-muted-foreground',
+                )}
+              >
+                {t.type ?? (nvme ? 'Self-test' : 'unnamed test')}
+              </span>
+              {!t.passed && (
                 <span title={t.status ?? undefined}>
                   <Chip tone="warn">{shortStatus(t.status)}</Chip>
                 </span>
@@ -321,6 +358,7 @@ function DiskBoard({ disk }: { disk: Disk }) {
             <span className={cn(ROW_SIDE, 'max-w-none text-right')}>
               {/* Against the drive's CURRENT hours, because the drive has
                   no calendar — it counts hours, not dates. */}
+              {t.passed && 'ok · '}
               {t.hours === null || disk.powerOnHours === null
                 ? DASH
                 : `${hours(disk.powerOnHours - t.hours)} ago`}

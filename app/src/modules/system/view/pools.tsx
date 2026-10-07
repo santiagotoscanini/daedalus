@@ -70,7 +70,10 @@ export function PoolsView({ d }: { d: Pools }) {
             <ul className={LIST}>
               {p.vdevs.map((v) => (
                 <li key={v.name} className={ROW}>
-                  <span className={cn(ROW_MAIN, MONO)} title={v.name}>
+                  <span
+                    className={cn(ROW_MAIN, MONO, 'max-[40rem]:whitespace-normal!')}
+                    title={v.name}
+                  >
                     {v.name}
                   </span>
                   <span className={ROW_SIDE}>
@@ -151,9 +154,23 @@ export function PoolsView({ d }: { d: Pools }) {
                 />,
                 ...rows.map((ds) => (
                   <li key={ds.name} className={cn(DS_GRID, TABLE_ROW)}>
-                    <span className={cn(CELL_MONO, 'text-[0.78rem]')} title={ds.name}>
-                      <span className="text-muted-foreground/70">{pool}/</span>
-                      <span className="text-foreground">{ds.name.slice(pool.length + 1)}</span>
+                    <span className="flex min-w-0 flex-col">
+                      <span
+                        className={cn(
+                          CELL_MONO,
+                          'text-[0.78rem] max-[34rem]:whitespace-normal [overflow-wrap:anywhere]',
+                        )}
+                        title={ds.name}
+                      >
+                        <span className="text-muted-foreground/70 max-[34rem]:hidden">{pool}/</span>
+                        <span className="text-foreground">{ds.name.slice(pool.length + 1)}</span>
+                      </span>
+                      {/* The columns that step away on a phone live here, muted. */}
+                      <span className="hidden text-[0.72rem] text-muted-foreground tabular-nums max-[34rem]:block">
+                        {ds.snapshots === 0
+                          ? 'not snapshotted'
+                          : `${num(ds.snapshots)} snapshots · ${bytes(ds.snapshotBytes)} held`}
+                      </span>
                     </span>
                     <span className={cn(CELL_QUIET, DS_N, DS_MID)}>
                       {ds.snapshots === 0 ? 'not snapshotted' : num(ds.snapshots)}

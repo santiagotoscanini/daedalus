@@ -58,11 +58,25 @@ export function VercelDeploys({ d }: { d: VercelDetail }) {
                     <span className="text-muted-foreground">{x.target ?? DASH}</span>
                   )}
                 </span>
-                <span
-                  className="min-w-0 truncate text-[0.8125rem] text-foreground"
-                  title={x.message ?? undefined}
-                >
+                <span className="min-w-0 text-[0.8125rem] text-foreground [overflow-wrap:anywhere]">
                   {x.message ?? DASH}
+                  {/* The columns that step away on a phone live here. */}
+                  <span className="mt-0.5 hidden text-[0.72rem] text-muted-foreground @max-[40rem]/table:block">
+                    {x.target ?? DASH} · {sha(x.sha)}
+                    {x.inspectorUrl !== null && (
+                      <>
+                        {' · '}
+                        <a
+                          href={x.inspectorUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="relative z-10"
+                        >
+                          open in Vercel ↗
+                        </a>
+                      </>
+                    )}
+                  </span>
                 </span>
                 <span className={cn(CELL_MONO, VDEP_WIDE)}>{sha(x.sha)}</span>
                 <span className={CELL_QUIET}>

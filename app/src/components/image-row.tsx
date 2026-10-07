@@ -48,27 +48,61 @@ const VERDICT: Record<UpdateVerdict, { label: string; tone: Tone }> = {
 export const IMAGE_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.3fr)_7.5rem]',
-  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7.5rem]',
-  '@max-[30rem]/table:grid-cols-[minmax(0,1fr)_7.5rem]',
+  // Below a tablet half-window the two versions move under the name, so the
+  // row is the name and its state: the one identifying cell and one value.
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_auto]',
+)
+/** A table whose groups already name the verdict has no state column at all:
+    pinned and queued sit beside the name instead. */
+export const IMAGE_GRID_GROUPED = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.3fr)]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)]',
 )
 const NARROW = '@max-[44rem]/table:hidden'
-const NARROWER = '@max-[30rem]/table:hidden'
+// Inside a board (no table frame) the same steps follow the BOARD's width: a
+// phone's board is far narrower than its 44rem table threshold.
+const CARD_GRID = '@max-[40rem]/board:grid-cols-[minmax(0,1fr)_auto]'
+const CARD_NARROW = '@max-[40rem]/board:hidden'
 
 /** The head over a `TABLE` of image rows. */
-export function ImageTableHead({ className }: { className?: string }) {
+export function ImageTableHead({ className, grouped }: { className?: string; grouped?: boolean }) {
   return (
-    <li aria-hidden="true" className={cn(IMAGE_GRID, TABLE_HEAD, className)}>
+    <li
+      aria-hidden="true"
+      className={cn(grouped === true ? IMAGE_GRID_GROUPED : IMAGE_GRID, TABLE_HEAD, className)}
+    >
       <span className="pl-5">Container</span>
-      <span className={NARROWER}>Running</span>
+      <span className={NARROW}>Running</span>
       <span className={NARROW}>Available</span>
-      <span className="text-right">State</span>
+      {grouped !== true && <span className="text-right">State</span>}
     </li>
+  )
+}
+
+/** A version that keeps its tail when it is cut: the part that differs
+    between two tags (`…pgvectors0.3.0`) is at the end, never the start. */
+function MidTrunc({
+  text,
+  tail = 12,
+  className,
+}: {
+  text: string
+  tail?: number
+  className?: string
+}) {
+  if (text.length <= tail + 6)
+    return <span className={cn('min-w-0 truncate', className)}>{text}</span>
+  return (
+    <span className={cn('flex min-w-0', className)} title={text}>
+      <span className="truncate">{text.slice(0, -tail)}</span>
+      <span className="flex-none">{text.slice(-tail)}</span>
+    </span>
   )
 }
 
 /* The disclosure's summary: the grid, a row's height, the house hover. */
 const SUMMARY = cn(
-  IMAGE_GRID,
   'min-h-[3.25rem] cursor-pointer list-none py-2 text-[0.8125rem] transition-colors duration-100',
   'hover:bg-foreground/[0.025] [&::-webkit-details-marker]:hidden',
   'focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--brand-dim)]',
@@ -77,7 +111,7 @@ const SUMMARY = cn(
 /* The caret, a cell of its own inside the name column — a ::before would be
    a grid item and push every column one to the right. */
 const CARET =
-  "inline-block w-5 flex-none text-[0.7rem] text-muted-foreground transition-transform duration-[0.12s] group-open:rotate-90 before:content-['▸']"
+  "inline-block w-5 flex-none text-[0.85rem] text-muted-foreground transition-transform duration-[0.12s] group-open:rotate-90 before:content-['▸']"
 
 /**
  * One pinned image.
@@ -101,6 +135,7 @@ export function ImageRow({
 }) {
   const v = VERDICT[r.verdict]
   const [notes, setNotes] = useState<Notes | null>(null)
+  const runningText = r.running.version ?? (r.kind === 'container' ? r.tag : DASH)
   const available =
     r.verdict === 'tag-moved'
       ? (r.freshness?.remoteVersion ?? null)
@@ -132,24 +167,62 @@ export function ImageRow({
             })
         }}
       >
-        <summary className={cn(SUMMARY, table === undefined && 'min-h-11 px-0.5')}>
-          <span className="flex min-w-0 items-center">
-            <span aria-hidden="true" className={CARET} />
-            <span className={CELL_NAME}>{r.container}</span>
+        <summary
+          className={cn(
+            SUMMARY,
+            table === 'grouped' ? IMAGE_GRID_GROUPED : IMAGE_GRID,
+            table === undefined && cn('min-h-11 px-0.5', CARD_GRID),
+          )}
+        >
+          <span className="flex min-w-0 flex-col">
+            <span className="flex min-w-0 items-center">
+              <span aria-hidden="true" className={CARET} />
+              <span className={CELL_NAME}>{r.container}</span>
+              {/* Pinned and queued sit beside the name where the table has no
+                  state column. */}
+              {table === 'grouped' && r.kind === 'container' && !r.updatable && (
+                <Chip tone="muted" className="ml-2 flex-none">
+                  pinned
+                </Chip>
+              )}
+              {table === 'grouped' && queue?.queued === true && (
+                <Chip tone="ok" className="ml-2 flex-none">
+                  queued
+                </Chip>
+              )}
+            </span>
+            {/* Where the version columns step away, the versions are the
+                name's second line: nothing is dropped, it is moved. */}
+            <span className="ml-5 hidden min-w-0 items-center gap-1.5 text-[0.75rem] text-muted-foreground @max-[44rem]/table:flex @max-[40rem]/board:flex">
+              <MidTrunc text={runningText} className="font-mono" />
+              {(available !== null || r.verdict === 'tag-moved') && (
+                <>
+                  <span aria-hidden="true" className="flex-none">
+                    →
+                  </span>
+                  {available !== null ? (
+                    <MidTrunc text={available} className="font-mono text-foreground" />
+                  ) : (
+                    <span className="flex-none">new digest</span>
+                  )}
+                </>
+              )}
+            </span>
           </span>
-          <span className={cn(CELL_MONO, 'text-[0.75rem]', NARROWER)}>
-            {r.running.version ?? (r.kind === 'container' ? r.tag : DASH)}
-          </span>
+          <MidTrunc
+            text={runningText}
+            className={cn(CELL_MONO, 'text-[0.75rem]', NARROW, table === undefined && CARD_NARROW)}
+          />
           {/* For a moved CHANNEL pin both tags are the same string, so the
               only honest thing the digests can say is "new digest" — unless
               the image states its own version, in which case that IS the
               answer. Nothing to move to is an empty cell, not "→ —" down a
               column of settled rows. */}
-          <span className={cn('min-w-0 truncate', NARROW)}>
+          <span className={cn('min-w-0', NARROW, table === undefined && CARD_NARROW)}>
             {available !== null ? (
-              <span className={cn(MONO_FACE, 'text-[0.75rem] text-foreground')}>
-                <span className="mr-1.5 text-muted-foreground">→</span>
-                {available}
+              <span className={cn(MONO_FACE, 'flex min-w-0 text-[0.75rem] text-foreground')}>
+                <span className="mr-1.5 flex-none text-muted-foreground">→</span>
+                <MidTrunc text={available} />
               </span>
             ) : r.verdict === 'tag-moved' ? (
               <span className="text-[0.78rem] text-subdued">
@@ -157,19 +230,19 @@ export function ImageRow({
               </span>
             ) : null}
           </span>
-          <span className="flex items-center justify-end gap-1.5">
-            {/* A grouped table names the verdict once, in the group. */}
-            {table !== 'grouped' &&
-              (r.verdict === 'current' && table === 'row' ? (
+          {table !== 'grouped' && (
+            <span className="flex items-center justify-end gap-1.5">
+              {r.verdict === 'current' && table === 'row' ? (
                 <span className={CELL_QUIET}>{v.label}</span>
               ) : (
                 <Chip tone={v.tone}>{v.label}</Chip>
-              ))}
-            {r.kind === 'container' && !r.updatable && <Chip tone="muted">pinned</Chip>}
-            {/* On the closed row, because the whole point of a queue is to
-                build it while scrolling past rows that are shut. */}
-            {queue?.queued === true && <Chip tone="ok">queued</Chip>}
-          </span>
+              )}
+              {r.kind === 'container' && !r.updatable && <Chip tone="muted">pinned</Chip>}
+              {/* On the closed row, because the whole point of a queue is to
+                  build it while scrolling past rows that are shut. */}
+              {queue?.queued === true && <Chip tone="ok">queued</Chip>}
+            </span>
+          )}
         </summary>
 
         <div

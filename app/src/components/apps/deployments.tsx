@@ -28,12 +28,12 @@ const DEPLOY_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(7rem,1fr)_6rem_minmax(0,1.5fr)_3.5rem_7rem_3.5rem_9.5rem]',
   '@max-[60rem]/table:grid-cols-[minmax(7rem,1fr)_6rem_minmax(0,1.5fr)_7rem]',
-  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_6rem]',
+  '@max-[40rem]/table:grid-cols-[minmax(0,1fr)_6rem]',
 )
 /** Deploys shown before the list folds: the recent ones are what is read. */
 const DEPLOYS_FOLDED = 10
 const WIDE = '@max-[60rem]/table:hidden'
-const NARROW = '@max-[36rem]/table:hidden'
+const NARROW = '@max-[40rem]/table:hidden'
 
 export function Deployments({
   app,
@@ -81,7 +81,7 @@ export function Deployments({
             <span className={cn('text-right', WIDE)}>Took</span>
             <span className={WIDE}>Digest</span>
             <span className={cn('text-right', WIDE)}>HTTP</span>
-            <span className={NARROW}>Source</span>
+            <span className={cn('text-right', NARROW)}>Source</span>
           </li>
           {(showAll ? td.deployments : td.deployments.slice(0, DEPLOYS_FOLDED)).map((d) => (
             <DeployLine key={d.id} d={d} />
@@ -109,16 +109,30 @@ export function Deployments({
 function DeployLine({ d }: { d: DeployRow }) {
   return (
     <li className={cn(DEPLOY_GRID, TABLE_ROW, d.isCurrent && 'bg-foreground/[0.025]')}>
-      <span className="flex min-w-0 items-center gap-2.5">
-        <code
-          className={cn(
-            'truncate text-[0.8rem]',
-            d.isCurrent ? 'text-foreground [font-weight:600]' : 'text-subdued',
-          )}
-        >
-          {d.shortRevision ?? d.digest.slice(0, 12)}
-        </code>
-        {d.isCurrent && <Chip className={CHIP}>current</Chip>}
+      <span className="min-w-0">
+        <span className="flex min-w-0 items-center gap-2.5">
+          <code
+            className={cn(
+              'truncate text-[0.8rem]',
+              d.isCurrent ? 'text-foreground [font-weight:600]' : 'text-subdued',
+            )}
+          >
+            {d.shortRevision ?? d.digest.slice(0, 12)}
+          </code>
+          {d.isCurrent && <Chip className={CHIP}>current</Chip>}
+        </span>
+        {/* On a phone the hidden columns live here, under the revision. */}
+        <span className="mt-0.5 hidden text-[0.75rem] text-muted-foreground @max-[40rem]/table:block">
+          <When at={d.startedAt} /> · {ms(d.durationMs)}
+          {d.commitUrl ? (
+            <>
+              {' · '}
+              <a href={d.commitUrl} target="_blank" rel="noreferrer" className="relative z-10">
+                view commit ↗
+              </a>
+            </>
+          ) : null}
+        </span>
       </span>
       <span>
         {d.result === 'ok' ? (
@@ -144,7 +158,7 @@ function DeployLine({ d }: { d: DeployRow }) {
       >
         {d.httpCode ?? '—'}
       </span>
-      <span className={cn('min-w-0 truncate text-[0.78rem]', NARROW)}>
+      <span className={cn('min-w-0 truncate text-right text-[0.78rem]', NARROW)}>
         {d.commitUrl ? (
           <a
             href={d.commitUrl}

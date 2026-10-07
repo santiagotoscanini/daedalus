@@ -45,7 +45,7 @@ function CopyLine({ command, label }: { command: string; label: string }) {
         ref={line}
         className={cn(
           MONO,
-          'm-0 min-w-0 flex-1 select-all rounded-lg bg-foreground/[0.05] px-3 py-1.5 leading-[1.45]',
+          'm-0 min-w-0 flex-1 select-all overflow-x-auto whitespace-pre rounded-lg bg-foreground/[0.05] px-3 py-1.5 leading-[1.45] [overflow-wrap:normal]',
         )}
       >
         {command}

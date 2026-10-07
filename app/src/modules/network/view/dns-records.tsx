@@ -64,13 +64,22 @@ export function RecordList({
         {records.map((r, i) => (
           <li
             key={rowKeys[i]}
-            className={cn(ROW, 'grid grid-cols-[minmax(6rem,16rem)_3.4rem_1fr] gap-2')}
+            className={cn(
+              ROW,
+              'grid grid-cols-[minmax(6rem,16rem)_3.4rem_1fr] gap-2 @max-[34rem]/board:grid-cols-[minmax(0,1fr)_3.4rem]',
+            )}
           >
             <span className={cn(MAIN, MONO)}>{r.short}</span>
             <Chip tone="muted">{r.type}</Chip>
             {/* Content is the widest thing in the row and the least important
                 (see SIDE). */}
-            <span className={cn(MONO, SIDE, 'max-w-none flex-auto text-left opacity-85')}>
+            <span
+              className={cn(
+                MONO,
+                SIDE,
+                'max-w-none flex-auto text-left opacity-85 @max-[34rem]/board:col-span-2 @max-[34rem]/board:whitespace-normal @max-[34rem]/board:break-all',
+              )}
+            >
               {r.content}
             </span>
           </li>

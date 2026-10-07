@@ -219,8 +219,11 @@ const RUN_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_4rem_4.5rem_6rem_4.5rem]',
   '@max-[48rem]/table:grid-cols-[minmax(0,1fr)_4rem_6rem_4.5rem]',
+  // A phone: the run and its verdict; shots, time and age are its second line.
+  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_auto]',
 )
 const RUN_WIDE = '@max-[48rem]/table:hidden'
+const RUN_PHONE_HIDE = '@max-[34rem]/table:hidden'
 const N = 'text-right tabular-nums'
 
 function RunsBoard({ f }: { f: ShotterFacts }) {
@@ -234,9 +237,9 @@ function RunsBoard({ f }: { f: ShotterFacts }) {
         <li aria-hidden="true" className={cn(RUN_GRID, TABLE_HEAD)}>
           <span>Run</span>
           <span className={RUN_WIDE}>Underneath</span>
-          <span className={N}>Shots</span>
+          <span className={cn(N, RUN_PHONE_HIDE)}>Shots</span>
           <span className={cn(N, RUN_WIDE)}>Took</span>
-          <span className={N}>When</span>
+          <span className={cn(N, RUN_PHONE_HIDE)}>When</span>
           <span className="text-right">Verdict</span>
         </li>
         {sh.runs.length === 0 && (
@@ -288,15 +291,34 @@ function ShotRunRow({ run }: { run: ShotRun }) {
   const bad = issueSummary(run.counts)
   return (
     <li className={cn(RUN_GRID, TABLE_ROW)} title={run.id}>
-      <span className={CELL_NAME}>{run.label === '' ? run.id : run.label}</span>
+      <span className="flex min-w-0 flex-col">
+        <span className={CELL_NAME}>{run.label === '' ? run.id : run.label}</span>
+        <span className="hidden text-[0.72rem] text-muted-foreground tabular-nums @max-[34rem]/table:block">
+          {[
+            `${num(run.shots)} shot${run.shots === 1 ? '' : 's'}`,
+            run.durationMs === null ? null : ms(run.durationMs),
+            bad,
+          ]
+            .filter((x) => x !== null)
+            .join(' · ')}
+          {run.at !== null && (
+            <>
+              {' · '}
+              <Ago at={run.at} />
+            </>
+          )}
+        </span>
+      </span>
       <span className={cn(CELL_QUIET, RUN_WIDE, 'truncate', bad !== null && 'text-subdued')}>
         {bad ?? DASH}
       </span>
-      <span className={cn(CELL_QUIET, N)}>{num(run.shots)}</span>
+      <span className={cn(CELL_QUIET, N, RUN_PHONE_HIDE)}>{num(run.shots)}</span>
       <span className={cn(CELL_QUIET, N, RUN_WIDE)}>
         {run.durationMs === null ? DASH : ms(run.durationMs)}
       </span>
-      <span className={cn(CELL_QUIET, N)}>{run.at === null ? DASH : <Ago at={run.at} />}</span>
+      <span className={cn(CELL_QUIET, N, RUN_PHONE_HIDE)}>
+        {run.at === null ? DASH : <Ago at={run.at} />}
+      </span>
       <span className="flex justify-end">
         {!run.ok ? (
           <Chip tone="bad">fail</Chip>

@@ -152,7 +152,7 @@ export function WhatThisHouseAsksForBoard({ f }: { f: GeneralFacts }) {
         {top.length === 0 && <li className={TABLE_EMPTY}>no queries recorded</li>}
         {top.map((d) => (
           <li key={d.label} className={cn(DOMAINS_GRID, TABLE_ROW_DENSE)}>
-            <span className="truncate text-foreground" title={d.label}>
+            <span className="min-w-0 text-foreground [overflow-wrap:anywhere]" title={d.label}>
               {d.label}
             </span>
             <span className="bar flex h-1.5 min-w-0 overflow-hidden rounded-full bg-foreground/[0.06]">

@@ -242,9 +242,11 @@ function AfterTheFactBoard({ d }: { d: Memory }) {
 const CAP_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_6rem_minmax(6rem,12rem)_5rem]',
-  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_6rem_5rem]',
+  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_auto]',
 )
 const CAP_MID = '@max-[36rem]/table:hidden'
+/** The phone's one value: use over cap, in place of the two columns and the bar. */
+const CAP_PHONE = 'hidden @max-[36rem]/table:block'
 const N = 'text-right tabular-nums'
 
 function CapsSection({ d }: { d: Memory }) {
@@ -253,9 +255,10 @@ function CapsSection({ d }: { d: Memory }) {
       <ul className={TABLE}>
         <li aria-hidden="true" className={cn(CAP_GRID, TABLE_HEAD)}>
           <span>Container</span>
-          <span className={N}>In use</span>
+          <span className={cn(N, CAP_MID)}>In use</span>
           <span className={CAP_MID}>Of its cap</span>
-          <span className={N}>Cap</span>
+          <span className={cn(N, CAP_MID)}>Cap</span>
+          <span className={cn(N, CAP_PHONE)}>In use / cap</span>
         </li>
         {d.capped.length === 0 && <li className={TABLE_EMPTY}>No container has a memory cap.</li>}
         {d.capped.map((c) => {
@@ -265,8 +268,10 @@ function CapsSection({ d }: { d: Memory }) {
           const tight = share !== null && share >= 85
           return (
             <li key={c.name} className={cn(CAP_GRID, TABLE_ROW)}>
-              <span className={cn(CELL_MONO, 'text-[0.78rem] text-foreground')}>{c.name}</span>
-              <span className={cn(N, tight ? 'text-warning' : CELL_QUIET)}>
+              <span className={cn(CELL_MONO, 'text-[0.78rem] text-foreground')} title={c.name}>
+                {c.name}
+              </span>
+              <span className={cn(N, CAP_MID, tight ? 'text-warning' : CELL_QUIET)}>
                 {bytes(c.usageBytes)}
               </span>
               <span className={cn(CAP_MID, 'flex items-center gap-2.5')}>
@@ -275,7 +280,11 @@ function CapsSection({ d }: { d: Memory }) {
                   {share === null ? DASH : `${share.toFixed(0)}%`}
                 </span>
               </span>
-              <span className={cn(N, 'text-foreground')}>{bytes(c.limitBytes)}</span>
+              <span className={cn(N, CAP_MID, 'text-foreground')}>{bytes(c.limitBytes)}</span>
+              <span className={cn(N, CAP_PHONE, CELL_QUIET)}>
+                <span className={tight ? 'text-warning' : undefined}>{bytes(c.usageBytes)}</span> /{' '}
+                {bytes(c.limitBytes)}
+              </span>
             </li>
           )
         })}

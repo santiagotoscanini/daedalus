@@ -161,7 +161,7 @@ export function Facts({ rows, list }: { rows: { k: string; v: ReactNode }[]; lis
           className={cn(
             'min-w-0',
             list === true
-              ? 'flex flex-row flex-wrap items-baseline justify-between gap-x-[1.25rem] gap-y-[0.2rem] border-t border-hairline py-2 first:border-t-0 first:pt-0'
+              ? 'flex flex-row flex-wrap items-baseline justify-between gap-x-[1.25rem] gap-y-[0.2rem] @max-[22rem]/board:flex-col @max-[22rem]/board:items-start border-t border-hairline py-2 first:border-t-0 first:pt-0'
               : 'flex flex-col gap-[0.05rem]',
           )}
         >
@@ -177,7 +177,7 @@ export function Facts({ rows, list }: { rows: { k: string; v: ReactNode }[]; lis
             className={cn(
               'm-0',
               list === true
-                ? 'min-w-0 text-right text-[0.84rem] [font-weight:450]'
+                ? 'min-w-0 text-right text-[0.84rem] [font-weight:450] [overflow-wrap:anywhere] @max-[22rem]/board:text-left'
                 : 'text-[0.9375rem] tracking-[-0.01em] tabular-nums [font-weight:520] [overflow-wrap:anywhere]',
             )}
           >

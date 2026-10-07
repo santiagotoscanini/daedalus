@@ -25,7 +25,7 @@ const APPS_SHOWN = 5
 const GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1.5fr)_minmax(6rem,1fr)_4rem_7.5rem]',
-  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_4rem_7.5rem]',
+  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_6.5rem]',
 )
 const HIDE_NARROW = '@max-[36rem]/table:hidden'
 
@@ -35,7 +35,8 @@ const SUMMARY = cn(
   'min-h-11 cursor-pointer list-none py-2 outline-none [&::-webkit-details-marker]:hidden',
   'focus-visible:shadow-[inset_0_0_0_2px_var(--brand-dim)]',
 )
-const NAME = 'flex min-w-0 items-center gap-2 text-[0.84rem] text-foreground [font-weight:520]'
+const NAME =
+  'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[0.84rem] text-foreground [font-weight:520]'
 /* The disclosure mark: turns with the row. */
 const MARK =
   'flex-none text-[0.6rem] text-muted-foreground transition-transform group-open/app:rotate-90'
@@ -46,9 +47,9 @@ const FILL =
   'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-muted-foreground opacity-70 motion-reduce:animate-none'
 
 /* The opened row: who went in, as a nested list indented under the name. */
-const BODY = 'flex flex-col gap-2 pr-5 pb-4 pl-10'
+const BODY = 'flex flex-col gap-2 pr-5 pb-4 pl-10 @max-[36rem]/table:pl-5'
 const OPENS =
-  'm-0 flex list-none flex-col p-0 [&>li]:grid [&>li]:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_6rem] [&>li]:items-center [&>li]:gap-x-4 [&>li]:border-hairline [&>li]:py-1.5 [&>li]:text-[0.8rem] [&>li+li]:border-t'
+  'm-0 flex list-none flex-col p-0 [&>li]:grid [&>li]:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_6rem] [&>li]:items-center [&>li]:gap-x-4 [&>li]:border-hairline [&>li]:py-1.5 [&>li]:text-[0.8rem] [&>li+li]:border-t @max-[36rem]/table:[&>li]:grid-cols-[minmax(0,1fr)_auto] @max-[36rem]/table:[&>li>span:nth-child(2)]:order-3 @max-[36rem]/table:[&>li>span:nth-child(2)]:col-span-full'
 
 /** The count column. Exported for the devices table, which counts the same way. */
 export const COUNT = cn(NUM_CELL, 'text-[0.84rem] text-foreground')
@@ -71,7 +72,7 @@ export function AppList({ clients, max }: { clients: IdpData['clients']; max: nu
       <li className={cn(GRID, TABLE_HEAD)}>
         <span>{all ? 'Every registration' : `Last ${String(APPS_SHOWN)} used`}</span>
         <span className={HIDE_NARROW}>Use</span>
-        <span className={NUM_CELL}>Opens</span>
+        <span className={cn(NUM_CELL, HIDE_NARROW)}>Opens</span>
         <span className={NUM_CELL}>Last opened</span>
       </li>
       {shown.map((c) => (
@@ -111,33 +112,42 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
     <li className={cn(TABLE_ROW, TABLE_ROW_LINK, 'py-0')}>
       <details className="group/app">
         <summary className={SUMMARY}>
-          <span className={NAME}>
-            <span className={MARK} aria-hidden="true">
-              ▸
-            </span>
-            <span className="truncate" title={c.host ?? c.name}>
-              {c.name}
-            </span>
-            {/* The exception: open to anyone rather than to a named group. */}
-            {!c.restricted && (
-              <Chip tone="warn" title="Open to every account, not a named group">
-                any account
-              </Chip>
-            )}
-            {/* Which of a hostname's registrations this one is — see `role` in
-                data/signin.ts. Not a fault, so it is not drawn as one. */}
-            {c.role !== null && (
-              <Chip
-                tone="muted"
-                title={
-                  c.role === 'gate'
-                    ? 'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app'
-                    : 'The credential the app itself runs its own login with'
-                }
+          <span className="min-w-0">
+            <span className={NAME}>
+              <span className={MARK} aria-hidden="true">
+                ▸
+              </span>
+              <span
+                className="truncate @max-[36rem]/table:whitespace-normal @max-[36rem]/table:[overflow-wrap:anywhere]"
+                title={c.host ?? c.name}
               >
-                {c.role === 'gate' ? 'proxy gate' : 'app login'}
-              </Chip>
-            )}
+                {c.name}
+              </span>
+              {/* The exception: open to anyone rather than to a named group. */}
+              {!c.restricted && (
+                <Chip tone="warn" title="Open to every account, not a named group">
+                  any account
+                </Chip>
+              )}
+              {/* Which of a hostname's registrations this one is — see `role` in
+                data/signin.ts. Not a fault, so it is not drawn as one. */}
+              {c.role !== null && (
+                <Chip
+                  tone="muted"
+                  title={
+                    c.role === 'gate'
+                      ? 'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app'
+                      : 'The credential the app itself runs its own login with'
+                  }
+                >
+                  {c.role === 'gate' ? 'proxy gate' : 'app login'}
+                </Chip>
+              )}
+            </span>
+            {/* The Opens column steps away on a phone; its number lives here. */}
+            <span className="hidden pl-[1.1rem] text-[0.75rem] text-muted-foreground tabular-nums @max-[36rem]/table:block">
+              {idle ? 'not opened' : `${num(c.used)} ${c.used === 1 ? 'open' : 'opens'}`}
+            </span>
           </span>
           {/* Muted for a row with nothing in it, so the tail of the list
               reads as a tail rather than as a column of empty tracks. */}
@@ -149,7 +159,7 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
               />
             )}
           </span>
-          <span className={cn(COUNT, idle && 'text-muted-foreground')}>
+          <span className={cn(COUNT, HIDE_NARROW, idle && 'text-muted-foreground')}>
             {idle ? DASH : num(c.used)}
           </span>
           <span className={cn(CELL_QUIET, 'text-right whitespace-nowrap')}>

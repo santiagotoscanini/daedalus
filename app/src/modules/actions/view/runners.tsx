@@ -97,7 +97,7 @@ type RunnersFacts = NonNullable<ReturnType<typeof runnersFacts>>
 
 /** Machine · platform · labels · demand · state. Labels and platform step away first. */
 const MACHINE_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,0.9fr)_8rem] @max-[52rem]/table:grid-cols-[minmax(9rem,1fr)_minmax(8rem,0.9fr)_7rem] @max-[52rem]/table:[&>.side]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,0.9fr)_8rem] @max-[52rem]/table:grid-cols-[minmax(9rem,1fr)_minmax(8rem,0.9fr)_7rem] @max-[52rem]/table:[&>.side]:hidden @max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.ask]:hidden'
 
 function MachinesThatCouldTakeAJobTable({ f }: { f: RunnersFacts }) {
   const { d } = f
@@ -108,12 +108,27 @@ function MachinesThatCouldTakeAJobTable({ f }: { f: RunnersFacts }) {
           <span>Machine</span>
           <span className="side">Platform</span>
           <span className="side">Would answer to</span>
-          <span>Asked for, a month</span>
+          <span className="ask">Asked for, a month</span>
           <span className="text-right">State</span>
         </li>
         {d.machines.map((m) => (
           <li key={m.id} className={cn(MACHINE_GRID, TABLE_ROW)}>
-            <span className={CELL_NAME}>{m.name}</span>
+            <span className="flex min-w-0 flex-col">
+              <span className={cn(CELL_NAME, '@max-[38rem]/table:whitespace-normal')}>
+                {m.name}
+              </span>
+              {/* On a phone platform, demand and labels are this second line. */}
+              <span className="hidden text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+                {osWord(m.os)} · {m.arch}
+                {m.agentVersion !== null && ` · agent ${m.agentVersion}`}
+                {' · '}
+                {m.demand === 0
+                  ? 'no job asked for this OS'
+                  : `${num(m.demand)} jobs · ${num(m.minutes)} min a month`}
+                {' · '}
+                {m.labels.join(', ')}
+              </span>
+            </span>
             <span className={cn(CELL_QUIET, 'side truncate')}>
               {osWord(m.os)} · {m.arch}
               {m.agentVersion !== null && ` · agent ${m.agentVersion}`}
@@ -123,7 +138,7 @@ function MachinesThatCouldTakeAJobTable({ f }: { f: RunnersFacts }) {
             <span className={cn(CELL_MONO, 'side')} title={m.labels.join(', ')}>
               {m.labels.join(', ')}
             </span>
-            <span className={cn(CELL_QUIET, m.demand > 0 && 'text-subdued')}>
+            <span className={cn(CELL_QUIET, 'ask', m.demand > 0 && 'text-subdued')}>
               {m.demand === 0
                 ? 'no job asked for this OS'
                 : `${num(m.demand)} jobs · ${num(m.minutes)} min`}

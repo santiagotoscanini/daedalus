@@ -73,7 +73,9 @@ export function ServiceHead({
             {version ?? DASH}
           </span>
           {versionNote !== undefined && (
-            <span className="text-[0.75rem] text-muted-foreground">{versionNote}</span>
+            <span className="text-[0.75rem] text-muted-foreground max-[40rem]:order-3 max-[40rem]:basis-full">
+              {versionNote}
+            </span>
           )}
           {verdict !== undefined && <VersionCompare verdict={verdict} rows={compare ?? []} />}
         </p>
@@ -297,11 +299,11 @@ export function LinkRow({ links }: { links: { label: string; href: string }[] })
   return (
     // Indented past the logo so the row hangs under the header's text column
     // rather than under its artwork.
-    <p className="-mt-4 mr-0 mb-6 ml-15 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] max-[44rem]:ml-0">
+    <p className="-mt-4 mr-0 mb-6 ml-15 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] max-[44rem]:ml-0 max-[40rem]:mt-0 max-[40rem]:flex-nowrap max-[40rem]:gap-2 max-[40rem]:overflow-x-auto max-[40rem]:[scrollbar-width:none]">
       {links.map((l) => (
         <a
           key={l.href}
-          className="text-muted-foreground no-underline transition-colors hover:text-foreground"
+          className="whitespace-nowrap text-muted-foreground no-underline transition-colors hover:text-foreground max-[40rem]:flex max-[40rem]:min-h-10 max-[40rem]:flex-none max-[40rem]:items-center max-[40rem]:rounded-full max-[40rem]:border max-[40rem]:border-hairline max-[40rem]:px-3.5 max-[40rem]:text-[0.8rem]"
           href={l.href}
           target="_blank"
           rel="noreferrer"

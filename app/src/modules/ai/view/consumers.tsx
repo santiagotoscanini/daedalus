@@ -10,6 +10,7 @@ import {
   CELL_MONO,
   CELL_NAME,
   CELL_QUIET,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
@@ -31,7 +32,7 @@ const BREAK = 'mt-8 border-hairline border-t pt-8'
 const APP_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8rem]',
-  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_8rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_8rem]',
 )
 
 export function ConsumersView({ data }: { data: ConsumersData }) {
@@ -52,7 +53,7 @@ export function ConsumersView({ data }: { data: ConsumersData }) {
             {data.apps.length > 0 && (
               <li aria-hidden="true" className={cn(APP_GRID, TABLE_HEAD)}>
                 <span>App</span>
-                <span className="@max-[36rem]/table:hidden">Credential</span>
+                <span className="@max-[38rem]/table:hidden">Credential</span>
                 <span className="text-right">Delivered</span>
               </li>
             )}
@@ -61,17 +62,20 @@ export function ConsumersView({ data }: { data: ConsumersData }) {
             ) : (
               data.apps.map((a) => (
                 <li key={a.name} className={cn(APP_GRID, TABLE_ROW, TABLE_ROW_LINK)}>
-                  <Link
-                    to="/apps/$name"
-                    params={{ name: a.name }}
-                    search={{ tab: 'overview' as const }}
-                    className={cn(TABLE_LINK, CELL_NAME)}
-                  >
-                    {a.name}
-                  </Link>
+                  <div className="min-w-0">
+                    <Link
+                      to="/apps/$name"
+                      params={{ name: a.name }}
+                      search={{ tab: 'overview' as const }}
+                      className={cn(TABLE_LINK, CELL_NAME)}
+                    >
+                      {a.name}
+                    </Link>
+                    <p className={PHONE_SUB}>LITELLM_API_KEY</p>
+                  </div>
                   {/* The same variable on every row: quiet, so a row that ever
                       differs is the one that shows. */}
-                  <span className={cn(CELL_MONO, '@max-[36rem]/table:hidden')}>
+                  <span className={cn(CELL_MONO, '@max-[38rem]/table:hidden')}>
                     LITELLM_API_KEY
                   </span>
                   <span className={cn(CELL_QUIET, 'text-right')}>injected at deploy</span>

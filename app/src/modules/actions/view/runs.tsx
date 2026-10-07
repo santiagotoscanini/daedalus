@@ -1,9 +1,9 @@
-import { AXIS, FOOT, NOTE } from '../../../components/tokens'
-import { BarList, Board, BoardGrid, Columns, Stat, StatStrip } from '../../../components/viz'
+import { FOOT, NOTE } from '../../../components/tokens'
+import { BarList, Board, BoardGrid, Stat, StatStrip } from '../../../components/viz'
 import { DASH, num, pct } from '../../../lib/format'
 import type { ActionsData } from '../data'
 import { ByRepositoryTable, ByWorkflowTable, FailuresTable, RecentRunsTable } from './runs-tables'
-import { GrantBoard, took } from './shared'
+import { DayColumns, GrantBoard, took } from './shared'
 
 type Runs = Extract<ActionsData, { tab: 'runs' }>
 
@@ -60,15 +60,13 @@ export function RunsView({ d }: { d: Runs }) {
 function runsFacts({ d }: { d: Runs }) {
   const t = d.totals
   const okRate = t.runs === 0 ? null : (100 * t.ok) / Math.max(1, t.ok + t.failed)
-  const first = d.days[0]?.label ?? ''
-  const last = d.days[d.days.length - 1]?.label ?? ''
-  return { d, t, okRate, first, last }
+  return { d, t, okRate }
 }
 
 type RunsFacts = NonNullable<ReturnType<typeof runsFacts>>
 
 function RunsPerDayBoard({ f }: { f: RunsFacts }) {
-  const { d, first, last } = f
+  const { d } = f
   return (
     <Board
       title="Runs per day"
@@ -76,12 +74,7 @@ function RunsPerDayBoard({ f }: { f: RunsFacts }) {
       span={8}
       aside={<span className={NOTE}>a hairline marks a day with a failure</span>}
     >
-      <Columns points={d.days} height={92} empty="no runs in the window" />
-      <p className={AXIS}>
-        <span>{first}</span>
-        <span>runs</span>
-        <span>{last}</span>
-      </p>
+      <DayColumns points={d.days} unit="runs" empty="no runs in the window" />
     </Board>
   )
 }

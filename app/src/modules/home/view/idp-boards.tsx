@@ -126,6 +126,7 @@ export function AppsSection({
 const DECLARED_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]',
+  '@max-[34rem]/table:grid-cols-1 @max-[34rem]/table:gap-y-0.5',
 )
 
 export function DeclaredSection({ d }: { d: IdpData }) {
@@ -162,7 +163,7 @@ export function DeclaredSection({ d }: { d: IdpData }) {
         <ul className={TABLE}>
           <li className={cn(DECLARED_GRID, TABLE_HEAD)}>
             <span>Client</span>
-            <span>Client id</span>
+            <span className="@max-[34rem]/table:hidden">Client id</span>
           </li>
           {groups.map((g, i) => (
             <Fragment key={g.note}>
@@ -175,7 +176,13 @@ export function DeclaredSection({ d }: { d: IdpData }) {
               {g.rows.map((c) => (
                 <li key={c.id} className={cn(DECLARED_GRID, TABLE_ROW)}>
                   <span className="truncate text-[0.84rem] text-foreground">{c.name}</span>
-                  <span className={CELL_MONO} title={c.id}>
+                  <span
+                    className={cn(
+                      CELL_MONO,
+                      '@max-[34rem]/table:whitespace-normal @max-[34rem]/table:[overflow-wrap:anywhere]',
+                    )}
+                    title={c.id}
+                  >
                     {c.id}
                   </span>
                 </li>

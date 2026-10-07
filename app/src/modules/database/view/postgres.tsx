@@ -144,7 +144,7 @@ export function PostgresView({ d }: { d: Postgres }) {
 
 /** Database · connections · cache hit · rollbacks · size. The middle steps away first. */
 const TENANT_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.4fr)_6rem_6.5rem_minmax(7rem,1fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(8rem,1fr)_6.5rem_6rem] @max-[40rem]/table:[&>.mid]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.4fr)_6rem_6.5rem_minmax(7rem,1fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[40rem]/table:gap-x-3 @max-[40rem]/table:[&>.mid]:hidden @max-[40rem]/table:[&>.cache]:hidden'
 
 /** Below this the cluster is going to disk for pages it should hold. */
 const CACHE_FLOOR = 99
@@ -161,7 +161,7 @@ function TenantsTable({ rows }: { rows: Postgres['databases'] }) {
       <li className={cn(TENANT_GRID, TABLE_HEAD)}>
         <span>Database</span>
         <span className="mid text-right">Connections</span>
-        <span className="text-right">Cache hit</span>
+        <span className="cache text-right">Cache hit</span>
         <span className="mid text-right">Rollbacks</span>
         <span className="text-right">Size</span>
       </li>
@@ -173,7 +173,24 @@ function TenantsTable({ rows }: { rows: Postgres['databases'] }) {
         const rollbackHigh = share !== null && share > ROLLBACK_CEILING
         return (
           <li key={db.name} className={cn(TENANT_GRID, TABLE_ROW_DENSE)}>
-            <span className="truncate font-mono text-[0.76rem] text-foreground">{db.name}</span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate font-mono text-[0.76rem] text-foreground">{db.name}</span>
+              {/* On a phone connections, cache hit and rollbacks are this line. */}
+              <span className="hidden text-[0.72rem] text-muted-foreground tabular-nums @max-[40rem]/table:block">
+                {num(db.connections)} conn ·{' '}
+                <span className={cn(cacheLow && 'text-warning')}>
+                  {pct(db.cacheHitPct, 2)} cached
+                </span>
+                {' · '}
+                {(db.deadlocks ?? 0) > 0 ? (
+                  <span className="text-warning">{num(db.deadlocks)} deadlocks</span>
+                ) : (
+                  <span className={cn(rollbackHigh && 'text-warning')}>
+                    {num(db.rollbacks)} rollbacks
+                  </span>
+                )}
+              </span>
+            </span>
             <span
               className={cn(
                 CELL_QUIET,

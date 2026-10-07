@@ -5,20 +5,7 @@ import { cn } from '../../../lib/cn'
 import { compact, DASH, ms, num, pct } from '../../../lib/format'
 import type { LitellmData } from '../data/litellm'
 import type { LitellmFacts } from './litellm'
-import {
-  AXIS,
-  CAPTION,
-  EMPTY,
-  FOOT,
-  ITEM,
-  ITEM_MAIN,
-  ITEM_N,
-  ITEM_SIDE,
-  ITEMS,
-  LIVE,
-  MONO,
-  NOTE,
-} from './shared'
+import { AXIS, CAPTION, FOOT, LIVE, MONO, NOTE } from './shared'
 
 export function TrafficBoard({ f }: { f: LitellmFacts }) {
   const { data, daily, total, busy, firstDate, todayDate } = f
@@ -26,7 +13,7 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
     <Board
       title="Traffic"
       icon="◇"
-      span={8}
+      span={12}
       aside={
         <span className={LIVE}>
           <Pulse on={busy} tone="accent" />
@@ -102,55 +89,6 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
       <p className={FOOT}>
         Counted from the gateway’s own ledger, which survives a restart. Its Prometheus counters do
         not. A day that saw a failure is underlined in red.
-      </p>
-    </Board>
-  )
-}
-
-export function ToolsModelsCalledBoard({ f }: { f: LitellmFacts }) {
-  const { data, total } = f
-  // A time column only while some tool has one: a column of dashes says
-  // nothing a missing column does not.
-  const timed = data.mcp.some((t) => t.latencyMs !== null && Number.isFinite(t.latencyMs))
-  return (
-    <Board
-      title="Tools models called"
-      icon="hash"
-      span={4}
-      aside={
-        <span className={NOTE}>
-          {data.mcpServers.length === 0
-            ? `MCP, ${String(total.days)}d`
-            : data.mcpServers.map((s) => `${s.name} ${String(s.calls)}`).join(' · ')}
-        </span>
-      }
-    >
-      {data.mcp.length === 0 ? (
-        <p className={EMPTY}>no tool calls in the window</p>
-      ) : (
-        <ul className={ITEMS}>
-          {data.mcp.map((t) => (
-            <li key={`${t.server}/${t.tool}`} className={ITEM}>
-              <span className="w-[4.5rem] flex-none truncate text-[0.75rem] text-muted-foreground">
-                {t.server}
-              </span>
-              <span className={cn(ITEM_MAIN, MONO)} title={t.tool}>
-                {t.tool}
-              </span>
-              {/* The tool's own time, which is the only latency on this
-                  page that is NOT mostly the model server — a tool call is the
-                  gateway talking to a container on this box, so tens of
-                  milliseconds is what right looks like. */}
-              {timed && <span className={ITEM_SIDE}>{ms(t.latencyMs)}</span>}
-              <span className={ITEM_N}>{num(t.calls)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        The other direction: tools the gateway hands to a model mid-answer, counted when one was
-        invoked. A registered server with no calls does not appear, and a tool whose counters were
-        reset by a restart shows no time.
       </p>
     </Board>
   )

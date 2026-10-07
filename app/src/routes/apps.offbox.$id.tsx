@@ -255,7 +255,10 @@ function PagesBoards({ site, d }: { site: ExternalApp; d: PagesDetail }) {
 }
 
 /** State · when · commit, for a site's publishes. */
-const PUB_GRID = 'grid items-center gap-x-6 px-5 grid-cols-[8rem_10rem_minmax(0,1fr)]'
+const PUB_GRID = cn(
+  'grid items-center gap-x-6 px-5 grid-cols-[8rem_10rem_minmax(0,1fr)]',
+  '@max-[32rem]/table:grid-cols-[6rem_minmax(0,1fr)_auto] @max-[32rem]/table:gap-x-4',
+)
 
 function VercelBoards({ d }: { d: VercelDetail }) {
   return (

@@ -13,11 +13,13 @@ import {
   FOOT,
   LIST,
   NOTE,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
   TABLE_ROW,
   TableSection,
+  WRAP_PHONE,
 } from '../shared'
 import type { Wanted } from './shared'
 import { WANTED_NEIGHBOURS } from './shared'
@@ -29,9 +31,9 @@ import { WANTED_NEIGHBOURS } from './shared'
 const REQ_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,2fr)_6.5rem_4.5rem_minmax(0,1fr)_5.5rem]',
-  '@max-[40rem]/table:grid-cols-[minmax(0,1fr)_6.5rem_5.5rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_6.5rem_5.5rem]',
 )
-const WIDE = '@max-[40rem]/table:hidden'
+const WIDE = '@max-[38rem]/table:hidden'
 
 /** Available is where every request ends up: quiet. In progress is plain ink; a request that needs somebody is a chip. */
 function RequestStatus({
@@ -98,7 +100,14 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
             ) : (
               d.requests.map((r, i) => (
                 <li key={`${r.title}-${String(i)}`} className={cn(REQ_GRID, TABLE_ROW)}>
-                  <span className={cn(CELL_NAME, '[font-weight:500]')}>{r.title}</span>
+                  <div className="min-w-0">
+                    <span className={cn(CELL_NAME, WRAP_PHONE, 'block [font-weight:500]')}>
+                      {r.title}
+                    </span>
+                    <p className={PHONE_SUB}>
+                      {r.kind === 'tv' ? 'series' : 'film'} · {r.by}
+                    </p>
+                  </div>
                   <RequestStatus status={r.status} tone={r.tone} />
                   <span className={cn(CELL_QUIET, WIDE)}>
                     {r.kind === 'tv' ? 'series' : 'film'}

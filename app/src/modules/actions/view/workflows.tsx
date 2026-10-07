@@ -76,7 +76,7 @@ export function WorkflowsView({ d }: { d: Workflows }) {
 
 /** State · workflow · runs · failed · median · last. The tallies step away first. */
 const WF_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[6.5rem_minmax(14rem,1fr)_3.5rem_3.5rem_4.5rem_6rem] @max-[46rem]/table:grid-cols-[6.5rem_minmax(10rem,1fr)_6rem] @max-[46rem]/table:[&>.tally]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[6.5rem_minmax(14rem,1fr)_3.5rem_3.5rem_4.5rem_6rem] @max-[46rem]/table:grid-cols-[6.5rem_minmax(10rem,1fr)_6rem] @max-[46rem]/table:[&>.tally]:hidden @max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.st]:hidden'
 
 /** What the box could read of a repository, said only where it is not the App. */
 function readNote(r: Workflows['repos'][number]): string {
@@ -105,7 +105,7 @@ function WorkflowsTable({ repos }: { repos: Workflows['repos'] }) {
     >
       <ul className={TABLE} aria-label="Workflows by repository">
         <li className={cn(WF_GRID, TABLE_HEAD)}>
-          <span>Last run</span>
+          <span className="st">Last run</span>
           <span>Workflow</span>
           <span className="tally text-right">Runs</span>
           <span className="tally text-right">Failed</span>
@@ -175,7 +175,7 @@ function RepoGroup({ r }: { r: Workflows['repos'][number] }) {
       />
       {r.workflows.map((w) => (
         <li key={w.id} className={cn(WF_GRID, TABLE_ROW, 'py-2.5')}>
-          <span>
+          <span className="st">
             {w.lastRun !== null ? (
               <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />
             ) : (
@@ -186,12 +186,26 @@ function RepoGroup({ r }: { r: Workflows['repos'][number] }) {
           </span>
           <span className="min-w-0">
             <span className="flex min-w-0 items-baseline gap-2">
-              <Ext href={w.url} className="truncate text-foreground [font-weight:560]">
+              <Ext
+                href={w.url}
+                className="min-w-0 truncate text-foreground [font-weight:560] @max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]"
+              >
                 {w.name}
               </Ext>
               <span className={cn(MONO, 'truncate text-muted-foreground')}>
                 {w.path.replace(/^\.github\/workflows\//, '')}
               </span>
+            </span>
+            {/* On a phone the state and the tallies are this line. */}
+            <span className="hidden flex-wrap items-center gap-x-2 pt-0.5 text-[0.75rem] text-muted-foreground tabular-nums @max-[38rem]/table:flex">
+              {w.lastRun !== null ? (
+                <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />
+              ) : (
+                <span>{w.state === 'unknown' ? 'no run read' : w.state.replace(/_/g, ' ')}</span>
+              )}
+              {w.runs > 0 && <span>· {num(w.runs)} runs</span>}
+              {w.failed > 0 && <span className="text-danger">· {num(w.failed)} failed</span>}
+              {w.runs > 0 && <span>· median {took(w.p50)}</span>}
             </span>
             <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0 text-[0.75rem] text-muted-foreground">
               <span>

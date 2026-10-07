@@ -1,14 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { DAY, LocalTime } from '../../../components/ago'
 import { SECTION_SPAN, TABLE_NONE } from '../../../components/modules/parts'
-import {
-  CELL_NAME,
-  CELL_QUIET,
-  CELL_SUB,
-  TABLE,
-  TABLE_HEAD,
-  TABLE_ROW,
-} from '../../../components/table'
+import { CELL_NAME, CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { FOOT, INPUT_MONO, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
@@ -108,9 +101,20 @@ function PlayerRow({ r }: { r: Row }) {
             {removing && <Chip tone="warn">leaves on Apply</Chip>}
             {r.opPending && <Chip tone="info">{r.op ? 'op on Apply' : 'not op on Apply'}</Chip>}
           </div>
-          <p className={cn(CELL_SUB, 'flex flex-wrap gap-x-2.5')}>
-            <span className="truncate font-mono text-[0.7rem]">{r.uuid}</span>
+          <p className="m-0 flex flex-wrap gap-x-2.5 text-[0.78rem] text-muted-foreground/85">
+            <span className="font-mono text-[0.7rem] [overflow-wrap:anywhere]">{r.uuid}</span>
             {r.renamed !== null && <span>now {r.renamed} on Mojang</span>}
+          </p>
+          {/* The columns that step away on a phone, said here so nothing is lost. */}
+          <p className="m-0 hidden text-[0.78rem] text-muted-foreground/85 @max-[44rem]/table:block">
+            {r.lastSeen === null ? (
+              'not seen in 30 days'
+            ) : (
+              <>
+                last joined <LocalTime at={r.lastSeen} opts={DAY} />
+              </>
+            )}
+            {skin === '' ? '' : ` · ${skin}`}
           </p>
           {error !== null && <p className={cn(NOTE, 'm-0 text-danger')}>{error}</p>}
         </div>

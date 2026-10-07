@@ -216,7 +216,7 @@ export function Integrations({
       />
 
       {status !== null && (
-        <p className="m-0 -mt-7 text-[0.74rem] text-muted-foreground">
+        <p className="m-0 -mt-7 text-[0.75rem] text-muted-foreground">
           Checked <Ago at={status.checkedAt} />; each service is asked at most every five minutes.
         </p>
       )}

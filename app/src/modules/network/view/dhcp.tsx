@@ -26,7 +26,7 @@ type Device = Dhcp['devices'][number]
 
 /** Device · address · hardware address · last seen. The MAC steps away first. */
 const DEVICE_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.2fr)_7.5rem_minmax(9rem,1fr)_6.5rem] @max-[38rem]/table:grid-cols-[minmax(8rem,1fr)_7rem_5.5rem] @max-[38rem]/table:[&>.mac]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.2fr)_7.5rem_minmax(9rem,1fr)_6.5rem] @max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.mac]:hidden @max-[38rem]/table:[&>.ipc]:hidden'
 
 /**
  * The LAN, in two groups of one table.
@@ -54,7 +54,7 @@ function LanDevices({ devices }: { devices: Device[] }) {
     <ul className={TABLE} aria-label="Devices on the LAN">
       <li className={cn(DEVICE_GRID, TABLE_HEAD)}>
         <span>Device</span>
-        <span>Address</span>
+        <span className="ipc">Address</span>
         <span className="mac">Hardware address</span>
         <span className="text-right">Last seen</span>
       </li>
@@ -93,18 +93,24 @@ function DeviceRow({ d }: { d: Device }) {
   const active = d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE
   return (
     <li className={cn(DEVICE_GRID, TABLE_ROW_DENSE)}>
-      <span
-        className={cn(
-          'truncate',
-          active ? 'text-foreground [font-weight:520]' : 'text-subdued',
-          d.name === null && 'text-muted-foreground [font-weight:400]',
-        )}
-      >
-        {d.name ?? 'unnamed'}
+      <span className="flex min-w-0 flex-col">
+        <span
+          className={cn(
+            'truncate',
+            active ? 'text-foreground [font-weight:520]' : 'text-subdued',
+            d.name === null && 'text-muted-foreground [font-weight:400]',
+          )}
+        >
+          {d.name ?? 'unnamed'}
+        </span>
+        {/* On a phone the address and hardware address are this second line. */}
+        <span className="hidden truncate font-mono text-[0.72rem] text-muted-foreground @max-[38rem]/table:block">
+          {d.ip} · {d.mac}
+        </span>
       </span>
       <span
         className={cn(
-          'font-mono text-[0.75rem] tabular-nums',
+          'ipc font-mono text-[0.75rem] tabular-nums',
           active ? 'text-subdued' : 'text-muted-foreground',
         )}
       >

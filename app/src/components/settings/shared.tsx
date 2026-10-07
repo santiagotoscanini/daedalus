@@ -25,7 +25,7 @@ import { Chip } from '../viz'
    against 0.73rem and 0.86em) and, for the note, a step darker — `--text-muted`
    sits nearer the body ink than `--muted-foreground` does in the light theme. */
 
-export const MONO = 'font-mono text-[0.8rem] [overflow-wrap:anywhere]'
+export const MONO = 'font-mono text-[0.8125rem] [overflow-wrap:anywhere]'
 
 /** A tab's column of sections: 40px between one section and the next. */
 export const SECTIONS = 'flex flex-col gap-10'
@@ -41,7 +41,7 @@ export const NOTE = 'explain m-0 max-w-[72ch] text-[0.8rem] leading-relaxed text
 export const NOTE_SHOWN = 'm-0 max-w-[72ch] text-[0.8rem] leading-relaxed text-subdued'
 
 /** The quieter line under a value: when it was read, what it was, what it needs. */
-export const ASIDE = 'text-[0.72rem] text-muted-foreground'
+export const ASIDE = 'text-[0.75rem] text-muted-foreground'
 
 /** ASIDE for a line that only explains a control: folded behind the section's ⓘ with the rest. */
 export const HINT = `explain ${ASIDE} max-w-[64ch] leading-[1.5]`
@@ -83,7 +83,8 @@ export function Band({ children, className }: { children: ReactNode; className?:
 
 const ROW_GRID = cn(
   'grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] items-baseline gap-x-6',
-  'max-[40rem]:grid-cols-1 max-[40rem]:gap-y-1.5',
+  '@max-[48rem]/table:grid-cols-[minmax(0,9rem)_minmax(0,1fr)] @max-[48rem]/table:gap-x-4',
+  '@max-[30rem]/table:grid-cols-1 @max-[30rem]/table:gap-y-1.5',
 )
 
 /**
@@ -116,7 +117,7 @@ export function Rows({
           )}
         >
           <dt className="text-[0.8125rem] text-muted-foreground">{r.k}</dt>
-          <dd className="m-0 min-w-0 text-[0.8125rem]">{r.v}</dd>
+          <dd className="m-0 min-w-0 text-[0.8125rem] [overflow-wrap:anywhere]">{r.v}</dd>
         </div>
       ))}
     </dl>
@@ -272,7 +273,7 @@ export function Commit({ rev, subject, at }: { rev: string; subject?: string; at
         <span className="text-[0.78rem] text-subdued [overflow-wrap:anywhere]">{subject}</span>
       )}
       {at !== undefined && at !== '' && (
-        <span className="whitespace-nowrap text-[0.72rem] text-muted-foreground">
+        <span className="whitespace-nowrap text-[0.75rem] text-muted-foreground">
           {<When at={at} />}
         </span>
       )}
@@ -303,7 +304,7 @@ export function SourceNote({
   return (
     <p
       className={cn(
-        'm-0 -mt-7 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.74rem] text-muted-foreground',
+        'm-0 -mt-7 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-muted-foreground',
       )}
     >
       {meta.error !== null ? (
@@ -324,7 +325,7 @@ export function SourceNote({
         <>
           {meta.stale && <Chip tone="warn">stale</Chip>}
           <span>
-            From <Mono className="text-[0.72rem]">{file}</Mono>, written by {producer}
+            From <Mono className="text-[0.75rem]">{file}</Mono>, written by {producer}
             {meta.generatedAt !== null && (
               <>
                 {' '}

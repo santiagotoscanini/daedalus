@@ -99,7 +99,7 @@ export function PasteKey({ settingsUrl }: { settingsUrl: string | undefined }) {
         onChange={(e) => {
           setPem(e.target.value)
         }}
-        className="max-h-60 font-mono text-[0.74rem] md:text-[0.74rem]"
+        className="max-h-60 font-mono text-[0.75rem] md:text-[0.75rem]"
       />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">

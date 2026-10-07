@@ -32,8 +32,8 @@ const APP_GRID = cn(
 /** App + commit · stage · error · when. */
 const FAIL_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[10rem_6.5rem_minmax(0,1fr)_5.5rem]',
-  '@max-[44rem]/table:grid-cols-[10rem_minmax(0,1fr)]',
+  'grid-cols-[max-content_5.75rem_minmax(0,1fr)_4.5rem]',
+  '@max-[44rem]/table:grid-cols-[max-content_minmax(0,1fr)]',
 )
 const NARROW = '@max-[36rem]/table:hidden'
 const FAIL_NARROW = '@max-[44rem]/table:hidden'
@@ -92,12 +92,15 @@ export function HistorySection({ h }: { h: History }) {
               to="/apps/$name"
               params={{ name: a.app }}
               search={{ tab: 'deployments' }}
-              className={cn(
-                TABLE_LINK,
-                'truncate text-[0.875rem] text-foreground [font-weight:560]',
-              )}
+              className={cn(TABLE_LINK, 'min-w-0')}
             >
-              {a.app}
+              <span className="block truncate text-[0.875rem] text-foreground [font-weight:560]">
+                {a.app}
+              </span>
+              <span className="hidden text-[0.72rem] text-muted-foreground @max-[36rem]/table:block">
+                median {ms(a.medianMs)} ·{' '}
+                {a.successRate === null ? DASH : `${pct(a.successRate * 100)} landed`}
+              </span>
             </Link>
             <span className={cn(CELL_QUIET, 'text-right')}>{String(a.total)}</span>
             <span
@@ -158,11 +161,12 @@ export function FailuresSection({ h }: { h: History }) {
                 {/* Every row here is a failure, so the stage is the fact that
                     differs — in ink, not another red pill. */}
                 <span className={cn('text-[0.78rem] text-foreground', FAIL_NARROW)}>{f.phase}</span>
-                <span
-                  className="min-w-0 truncate text-[0.78rem] text-muted-foreground"
-                  title={f.error ?? undefined}
-                >
+                <span className="min-w-0 text-[0.78rem] text-muted-foreground">
                   {f.error ?? 'no error recorded'}
+                  {/* The columns that step away on a narrow table live here. */}
+                  <span className="mt-0.5 hidden text-[0.72rem] @max-[44rem]/table:block">
+                    failed in {f.phase} · <Ago at={f.at} />
+                  </span>
                 </span>
                 <span className={cn(CELL_QUIET, 'text-right', FAIL_NARROW)}>
                   <Ago at={f.at} />

@@ -13,6 +13,7 @@ import {
   comparePinned,
   FOOT,
   LIVE,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
@@ -96,7 +97,7 @@ export function OpenWebUiView({ data }: { data: OpenWebUiData }) {
 const REACH_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]',
-  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)]',
 )
 const KIND_GROUP: Record<OpenWebUiData['reach'][number]['kind'], string> = {
   model: 'Models',
@@ -140,7 +141,7 @@ function ReachTable({ data, busy }: { data: OpenWebUiData; busy: boolean }) {
         {data.reach.length > 0 && (
           <li aria-hidden="true" className={cn(REACH_GRID, TABLE_HEAD)}>
             <span>Name</span>
-            <span className="@max-[34rem]/table:hidden">What it is</span>
+            <span className="@max-[38rem]/table:hidden">What it is</span>
           </li>
         )}
         {data.reach.length === 0 ? (
@@ -165,11 +166,21 @@ function ReachGroup({ title, rows }: { title: string; rows: OpenWebUiData['reach
       <TableGroup title={title} />
       {rows.map((r) => (
         <li key={`${r.kind}-${r.name}`} className={cn(REACH_GRID, TABLE_ROW)}>
-          <span className={CELL_NAME}>{r.name}</span>
+          <div className="min-w-0">
+            <span
+              className={cn(
+                CELL_NAME,
+                'block @max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]',
+              )}
+            >
+              {r.name}
+            </span>
+            <p className={cn(PHONE_SUB, r.flag && 'text-danger')}>{r.detail}</p>
+          </div>
           <span
             className={cn(
               r.kind === 'model' ? CELL_MONO : CELL_QUIET,
-              'truncate @max-[34rem]/table:hidden',
+              'truncate @max-[38rem]/table:hidden',
               r.flag && 'text-danger',
             )}
             title={r.detail}

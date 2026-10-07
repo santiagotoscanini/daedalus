@@ -12,11 +12,13 @@ import {
   HealthChecks,
   HealthLine,
   healthFailing,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
   TABLE_ROW,
   TableSection,
+  WRAP_PHONE,
 } from './shared'
 
 /* ── Indexer: Prowlarr ────────────────────────────────────────────────── */
@@ -123,10 +125,10 @@ const IDX_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1.4fr)_5rem_minmax(0,1.6fr)_4rem_6rem_4rem]',
   '@max-[52rem]/table:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_4rem_4rem]',
-  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]',
 )
 const WIDE = '@max-[52rem]/table:hidden'
-const MID = '@max-[34rem]/table:hidden'
+const MID = '@max-[38rem]/table:hidden'
 const NUM = cn(CELL_QUIET, 'text-right')
 
 const BAR = 'block h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]'
@@ -143,18 +145,30 @@ function IndexerRow({ i, max }: { i: Indexer; max: number }) {
   const failing = i.queries > 0 && i.failedQueries / i.queries > 0.25
   return (
     <li className={cn(IDX_GRID, TABLE_ROW, !i.enabled && 'opacity-60')}>
-      <span className="flex min-w-0 items-center gap-2">
-        <span className={CELL_NAME}>{i.name}</span>
-        {!i.enabled && <Chip>disabled</Chip>}
-        {failing && (
-          <Chip
-            tone="warn"
-            title={`${String(i.failedQueries)} of ${String(i.queries)} queries failed`}
-          >
-            failing
-          </Chip>
-        )}
-      </span>
+      <div className="min-w-0">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className={cn(CELL_NAME, WRAP_PHONE)}>{i.name}</span>
+          {!i.enabled && <Chip>disabled</Chip>}
+          {failing && (
+            <Chip
+              tone="warn"
+              title={`${String(i.failedQueries)} of ${String(i.queries)} queries failed`}
+            >
+              failing
+            </Chip>
+          )}
+        </span>
+        <p className={PHONE_SUB}>
+          {[
+            i.protocol,
+            `${num(i.grabs)} grabs`,
+            i.responseMs === null ? null : `${num(i.responseMs)} ms`,
+            i.failedQueries > 0 ? `${num(i.failedQueries)} failed` : null,
+          ]
+            .filter((x) => x !== null)
+            .join(' · ')}
+        </p>
+      </div>
       <span className={cn(CELL_QUIET, WIDE)}>{i.protocol}</span>
       <span className="flex min-w-0 items-center gap-3">
         <span className={BAR}>

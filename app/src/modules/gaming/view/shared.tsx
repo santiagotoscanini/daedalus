@@ -15,10 +15,15 @@ const EVENTS_GRID =
 
 type GameEvent = { at: number; who: string; kind: 'join' | 'leave' }
 
-/** A KPI with nothing behind it: a muted word at the same size as every
-    other value in the strip — only the colour says it is not a reading. */
+/** A KPI with nothing behind it: a small muted word in a slot as tall as the
+    figures beside it, so the strip keeps one baseline and the word does not
+    read as an error the way a 36px grey one does. */
 export function Unknown() {
-  return <span className="text-muted-foreground">unknown</span>
+  return (
+    <span className="inline-block text-[1rem] leading-[1.76rem] tracking-normal text-muted-foreground [font-weight:450]">
+      unknown
+    </span>
+  )
 }
 
 /**

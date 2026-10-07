@@ -136,7 +136,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         }
       >
         <ul className={TABLE}>
-          <ImageTableHead />
+          <ImageTableHead grouped />
           {behind.length === 0 && (
             <li className={TABLE_EMPTY}>
               Every digest-pinned container is on the newest tag of its shape, and no channel tag

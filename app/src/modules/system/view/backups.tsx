@@ -3,6 +3,7 @@ import {
   CELL_MONO,
   CELL_NAME,
   CELL_QUIET,
+  CELL_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
@@ -42,6 +43,9 @@ const GAP_GRID = cn(
   '@max-[30rem]/table:grid-cols-[minmax(0,1fr)]',
 )
 
+/** The gap's reason, under its name, once the second column has gone. */
+const GAP_PHONE = 'hidden whitespace-normal! @max-[30rem]/table:block'
+
 const COVER_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_6.5rem_6rem]',
@@ -66,7 +70,14 @@ export function BackupsView({ d }: { d: Backups }) {
           {d.pairs.length === 0 && <li className={TABLE_EMPTY}>no replication pairs found</li>}
           {d.pairs.map((p) => (
             <li key={p.target} className={cn(PAIR_GRID, TABLE_ROW)}>
-              <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>{p.source}</span>
+              <span className="flex min-w-0 flex-col">
+                <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>{p.source}</span>
+                {/* The replica and its snapshot count, under the source, where the
+                    columns for them have stepped away. */}
+                <span className="hidden text-[0.72rem] text-muted-foreground [overflow-wrap:anywhere] @max-[40rem]/table:block">
+                  → {p.target} · {num(p.targetSnapshots)} snapshots
+                </span>
+              </span>
               <span className={cn(CELL_MONO, PAIR_MID)}>
                 <span className="mr-1.5">→</span>
                 {p.target}
@@ -104,15 +115,24 @@ export function BackupsView({ d }: { d: Backups }) {
             <span className={COVER_MID}>Why it matters</span>
           </li>
           <li className={cn(GAP_GRID, TABLE_ROW)}>
-            <span className={CELL_NAME}>Off-site</span>
+            <span className="flex min-w-0 flex-col">
+              <span className={CELL_NAME}>Off-site</span>
+              <span className={cn(CELL_SUB, GAP_PHONE)}>nothing — both pools are in this box</span>
+            </span>
             <span className={cn(CELL_QUIET, COVER_MID)}>nothing — both pools are in this box</span>
           </li>
           <li className={cn(GAP_GRID, TABLE_ROW)}>
-            <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>acme.json</span>
+            <span className="flex min-w-0 flex-col">
+              <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>acme.json</span>
+              <span className={cn(CELL_SUB, GAP_PHONE)}>Let&rsquo;s Encrypt cert store</span>
+            </span>
             <span className={cn(CELL_QUIET, COVER_MID)}>Let&rsquo;s Encrypt cert store</span>
           </li>
           <li className={cn(GAP_GRID, TABLE_ROW)}>
-            <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>gravity.db</span>
+            <span className="flex min-w-0 flex-col">
+              <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>gravity.db</span>
+              <span className={cn(CELL_SUB, GAP_PHONE)}>pi-hole&rsquo;s UI-added lists</span>
+            </span>
             <span className={cn(CELL_QUIET, COVER_MID)}>pi-hole&rsquo;s UI-added lists</span>
           </li>
         </ul>
@@ -137,7 +157,12 @@ export function BackupsView({ d }: { d: Backups }) {
           <TableGroup title="Enrolled" note={`${num(d.coverage.length)} datasets`} />
           {d.coverage.map((c) => (
             <li key={c.name} className={cn(COVER_GRID, TABLE_ROW)}>
-              <span className={cn(CELL_MONO, 'text-[0.78rem] text-foreground')}>{c.name}</span>
+              <span className="flex min-w-0 flex-col">
+                <span className={cn(CELL_MONO, 'text-[0.78rem] text-foreground')}>{c.name}</span>
+                <span className="hidden text-[0.72rem] text-muted-foreground @max-[30rem]/table:block">
+                  {num(c.snapshots)} snapshots
+                </span>
+              </span>
               <span className={cn(CELL_QUIET, N, COVER_MID)}>{num(c.snapshots)}</span>
               <span className={cn(N, 'text-foreground')}>{bytes(c.usedBytes)}</span>
             </li>

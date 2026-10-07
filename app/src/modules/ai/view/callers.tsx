@@ -10,6 +10,7 @@ import {
   CELL_NAME,
   CELL_QUIET,
   FOOT,
+  PHONE_SUB,
   REJECTED,
   TABLE,
   TABLE_EMPTY,
@@ -107,18 +108,37 @@ type Caller = LitellmData['callers'][number]
 function CallerRow({ caller, max, today }: { caller: Caller; max: number; today: string }) {
   return (
     <li className={cn(CALLER_GRID, TABLE_ROW)}>
-      <span className="flex min-w-0 items-center gap-2">
-        <span
-          // A name that cannot be read at face value — an internal credential,
-          // or a hash — carries its explanation on a hover, and says so with a
-          // dotted underline.
-          className={cn(CELL_NAME, caller.note !== null && 'cursor-help border-b border-dotted')}
-          title={caller.note ?? caller.name}
-        >
-          {caller.name}
+      <div className="min-w-0">
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            // A name that cannot be read at face value — an internal credential,
+            // or a hash — carries its explanation on a hover, and says so with a
+            // dotted underline.
+            className={cn(
+              CELL_NAME,
+              '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]',
+              caller.note !== null && 'cursor-help border-b border-dotted',
+            )}
+            title={caller.note ?? caller.name}
+          >
+            {caller.name}
+          </span>
+          {!caller.live && <Chip tone="warn">revoked</Chip>}
         </span>
-        {!caller.live && <Chip tone="warn">revoked</Chip>}
-      </span>
+        <p className={PHONE_SUB}>
+          {[
+            caller.tokens > 0 ? `${compact(caller.tokens)} tok` : null,
+            caller.latencyMs === null ? null : ms(caller.latencyMs),
+            caller.failed > 0 ? `${num(caller.failed)} failed` : null,
+            caller.models[0] === undefined
+              ? null
+              : `${caller.models[0]}${caller.models.length > 1 ? ` +${String(caller.models.length - 1)}` : ''}`,
+            ledgerAgo(caller.last, today),
+          ]
+            .filter((x) => x !== null)
+            .join(' · ')}
+        </p>
+      </div>
       <span className="flex min-w-0 items-center gap-3">
         <span className={BAR}>
           <span

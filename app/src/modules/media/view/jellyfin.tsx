@@ -1,16 +1,7 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import {
-  Board,
-  BoardGrid,
-  Chip,
-  Facts,
-  Progress,
-  Pulse,
-  Ring,
-  Trend,
-} from '../../../components/viz'
+import { Board, BoardGrid, Chip, Progress, Pulse, Ring, Trend } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, daysAgo, num } from '../../../lib/format'
 import type { MediaData } from '../data'
@@ -20,14 +11,15 @@ import {
   CELL_SUB,
   EMPTY,
   FOOT,
-  LIST,
   MONO,
   NOTE,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
   TABLE_ROW,
   TableSection,
+  WRAP_PHONE,
 } from './shared'
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
@@ -61,11 +53,9 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
 
         <LibraryBoard f={f} />
 
-        <WhoWatchesBoard f={f} />
-
         <Changelog
           gap={d.gap}
-          span={8}
+          span={12}
           aside={
             d.pendingRestart ? (
               <span className={cn(NOTE, 'text-warning')}>restart pending</span>
@@ -101,10 +91,10 @@ const PLAY_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,1fr)_6.5rem_minmax(0,1.2fr)]',
   '@max-[52rem]/table:grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_6.5rem]',
-  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_6.5rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_6.5rem]',
 )
 const WIDE = '@max-[52rem]/table:hidden'
-const MID = '@max-[34rem]/table:hidden'
+const MID = '@max-[38rem]/table:hidden'
 
 /** Who is watching what, right now: a table that is one quiet row most of the day. */
 function PlayingNow({ f }: { f: JellyfinFacts }) {
@@ -141,8 +131,14 @@ function PlayingNow({ f }: { f: JellyfinFacts }) {
               <span className="flex min-w-0 items-center gap-2">
                 <Pulse on={!s.paused} tone="ok" />
                 <span className="min-w-0">
-                  <span className={cn(CELL_NAME, 'block')}>{s.title}</span>
+                  <span className={cn(CELL_NAME, WRAP_PHONE, 'block')}>{s.title}</span>
                   {s.sub !== null && <span className={cn(CELL_SUB, 'block')}>{s.sub}</span>}
+                  <span className={PHONE_SUB}>
+                    {[s.user, s.device].filter((x) => x !== null && x !== '').join(' · ')}
+                  </span>
+                  <span className="mt-1.5 hidden @max-[38rem]/table:block">
+                    <Progress pct={s.pct} tone="muted" active={!s.paused} />
+                  </span>
                 </span>
               </span>
               <span className={cn(CELL_QUIET, MID, 'truncate text-foreground')}>{s.user}</span>
@@ -168,15 +164,34 @@ function PlayingNow({ f }: { f: JellyfinFacts }) {
 }
 
 /**
- * The library: how much of the pool it fills, what it holds, how it grows.
- * The one figure the page leads with, so it takes the row's width and lays
- * its three readings side by side rather than stacking them in a column.
+ * The library: how much of the pool it fills, what it holds, how it grows —
+ * and who watches. The people were a board of their own holding one row
+ * beside a changelog, both near-empty; they are the library's audience, so
+ * they sit under it on a hairline.
+ *
+ * Below 25rem of board the ring stacks above a 2x2 grid of the counts, so
+ * neither the donut shrinks to a coin nor the counts line up lopsided.
  */
 function LibraryBoard({ f }: { f: JellyfinFacts }) {
-  const { library, counts, total } = f
+  const { d, library, counts, total } = f
+  const stats = [
+    { k: 'Movies', v: num(counts.movies) },
+    { k: 'Series', v: num(counts.series) },
+    { k: 'Episodes', v: num(counts.episodes) },
+    { k: 'Free on pool', v: bytes(library.freeBytes) },
+  ]
   return (
-    <Board title="Library" icon="grid" span={12}>
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] items-center gap-x-10 gap-y-5 @max-[56rem]/board:grid-cols-[auto_minmax(0,1fr)]">
+    <Board
+      title="Library"
+      icon="grid"
+      span={12}
+      aside={
+        <span className={NOTE}>
+          {num(d.people.length)} {d.people.length === 1 ? 'account' : 'accounts'}
+        </span>
+      }
+    >
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] items-center gap-x-10 gap-y-5 @max-[56rem]/board:grid-cols-[auto_minmax(0,1fr)] @max-[25rem]/board:grid-cols-1 @max-[25rem]/board:justify-items-center">
         <Ring
           pct={
             total === null || library.usedBytes === null ? null : (library.usedBytes / total) * 100
@@ -185,62 +200,46 @@ function LibraryBoard({ f }: { f: JellyfinFacts }) {
           label="/s2/tv"
           tone="muted"
         />
-        <Facts
-          rows={[
-            { k: 'Movies', v: num(counts.movies) },
-            { k: 'Series', v: num(counts.series) },
-            { k: 'Episodes', v: num(counts.episodes) },
-            { k: 'Free on pool', v: bytes(library.freeBytes) },
-          ]}
-        />
-        <div className="min-w-0 @max-[56rem]/board:col-span-2">
+        <dl className="m-0 grid w-full grid-cols-2 gap-x-6 gap-y-3 @max-[25rem]/board:max-w-[18rem]">
+          {stats.map((s) => (
+            <div key={s.k} className="flex min-w-0 flex-col gap-[0.05rem]">
+              <dt className="text-[0.75rem] text-muted-foreground">{s.k}</dt>
+              <dd className="m-0 text-[0.9375rem] tabular-nums [font-weight:520]">{s.v}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="min-w-0 @max-[56rem]/board:col-span-2 @max-[25rem]/board:col-span-1 @max-[25rem]/board:w-full">
           <p className="m-0 mb-1.5 text-[0.75rem] text-muted-foreground">Growth, 30 days</p>
-          <Trend values={library.growth} tone="muted" height={70} />
+          <Trend values={library.growth} tone="muted" height={48} />
         </div>
       </div>
-    </Board>
-  )
-}
 
-function WhoWatchesBoard({ f }: { f: JellyfinFacts }) {
-  const { d } = f
-  return (
-    <Board
-      title="Who watches"
-      icon="◍"
-      span={4}
-      aside={
-        <span className={NOTE}>
-          {num(d.people.length)} {d.people.length === 1 ? 'account' : 'accounts'}
-        </span>
-      }
-    >
-      {d.people.length === 0 ? (
-        <p className={EMPTY}>could not read the user list</p>
-      ) : (
-        <ul className={LIST}>
-          {d.people.map((p) => (
-            <li
-              key={p.name}
-              className="flex items-baseline justify-between gap-3 border-hairline border-t py-2 text-[0.8125rem] first:border-t-0 first:pt-0"
-            >
-              <span>{p.name}</span>
-              <span
-                className={cn(
-                  'text-[0.75rem] text-muted-foreground',
-                  p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS && 'opacity-55',
-                )}
-              >
-                {daysAgo(p.lastSeenDays)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        Last activity, not last login. A client that stays signed in reports the second one once and
-        never again, which is why an account in daily use can show a login from May.
-      </p>
+      <div className="border-hairline border-t pt-3">
+        <p className="m-0 mb-1.5 text-[0.75rem] text-muted-foreground">Who watches</p>
+        {d.people.length === 0 ? (
+          <p className={EMPTY}>could not read the user list</p>
+        ) : (
+          <ul className={'m-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0'}>
+            {d.people.map((p) => (
+              <li key={p.name} className="flex items-baseline gap-2 text-[0.8125rem]">
+                <span>{p.name}</span>
+                <span
+                  className={cn(
+                    'whitespace-nowrap text-[0.75rem] text-muted-foreground',
+                    p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS && 'opacity-55',
+                  )}
+                >
+                  {daysAgo(p.lastSeenDays)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className={FOOT}>
+          Last activity, not last login. A client that stays signed in reports the second one once
+          and never again, which is why an account in daily use can show a login from May.
+        </p>
+      </div>
     </Board>
   )
 }

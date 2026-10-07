@@ -75,7 +75,14 @@ export function MachineSwitcher({
 }) {
   return (
     <nav aria-label={label} className={cn(ROW, className)}>
-      <div className={cn(SEGMENT_TRACK, 'overflow-x-auto')}>
+      {/* On a phone the track scrolls sideways; its right edge fades so a name
+          cut there reads as "more this way", and each item snaps whole. */}
+      <div
+        className={cn(
+          SEGMENT_TRACK,
+          'snap-x overflow-x-auto max-[40rem]:[mask-image:linear-gradient(to_right,black_calc(100%-1.75rem),transparent)] max-[40rem]:pr-8',
+        )}
+      >
         {items.map((it) => {
           const mark = it.os === 'box' ? BOX_MARK : OS_MARK[it.os]
           return (
@@ -86,7 +93,11 @@ export function MachineSwitcher({
               search={it.link.search}
               aria-current={it.selected ? 'page' : undefined}
               title={it.title}
-              className={cn(SEGMENT_ITEM, it.selected && SEGMENT_ITEM_ON)}
+              className={cn(
+                SEGMENT_ITEM,
+                'snap-start max-[40rem]:min-h-10',
+                it.selected && SEGMENT_ITEM_ON,
+              )}
             >
               {mark !== undefined && (
                 <img

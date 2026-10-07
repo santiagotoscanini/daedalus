@@ -1,11 +1,11 @@
 import type { LogNeighbour } from '../../../components/logs'
 import { LogBoard } from '../../../components/logs'
 import { Button } from '../../../components/ui/button'
-import { Board, Chip, Facts, Measures, Pulse, Trend } from '../../../components/viz'
+import { Board, Chip, Measures, Pulse, Trend } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, num } from '../../../lib/format'
 import type { GeneralFacts } from './general'
-import { FOOT, MONO, NOTE } from './shared'
+import { FOOT, MONO, NOTE, Pairs } from './shared'
 
 /** A chart's own head: what it draws on the left, its readings on the right. */
 const CHART_HEAD = 'mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[0.75rem]'
@@ -155,16 +155,18 @@ export function TheWayOutBoard({ f }: { f: GeneralFacts }) {
           </li>
         ))}
       </ul>
-      <Facts
+      <Pairs
         rows={[
           { k: 'Default route', v: <span className={MONO}>{router.gateway}</span> },
           { k: 'This box', v: <span className={MONO}>{router.lan}</span> },
-          {
-            k: 'Link, negotiated',
-            v: wire.linkMbps === null ? DASH : `${num(wire.linkMbps)} Mbps`,
-          },
         ]}
       />
+      <p className="m-0 flex items-baseline justify-between gap-3 border-hairline border-t pt-2.5 text-[0.8rem]">
+        <span className="text-muted-foreground">Link, negotiated</span>
+        <span className="tabular-nums [font-weight:520]">
+          {wire.linkMbps === null ? DASH : `${num(wire.linkMbps)} Mbps`}
+        </span>
+      </p>
       <p className={FOOT}>
         Two probes a minute rather than one: the router answering while the far side does not is the
         ISP, and neither answering is this box’s own link. The public address is the one fact that
@@ -217,7 +219,7 @@ export function TheRouterBoard({ f }: { f: GeneralFacts }) {
           </span>
         </div>
       </div>
-      <Facts
+      <Pairs
         rows={[
           { k: 'Firmware', v: <span className={MONO}>{router.firmware ?? DASH}</span> },
           { k: 'Built', v: router.built ?? DASH },

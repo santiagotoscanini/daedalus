@@ -13,7 +13,7 @@ import { Bar } from './skeleton'
    positioned over the skeleton inside it — so the box is the same size and
    shape throughout, and uncovering it changes nothing but what is inside. */
 const EMBED_WRAP =
-  'relative h-[22rem] overflow-hidden rounded-xl border border-hairline bg-foreground/[0.03] font-mono text-[0.75rem] max-[50rem]:h-[18rem]'
+  'relative h-[22rem] overflow-hidden rounded-xl border border-hairline bg-foreground/[0.03] font-mono text-[0.75rem] max-[50rem]:h-[18rem] max-[40rem]:h-[11.25rem]'
 /* Log-shaped: ragged lines of the app's own grey, so the wait looks like the
    rest of the dashboard loading rather than like Grafana loading. */
 const EMBED_SKELETON = 'absolute inset-0 flex flex-col justify-center gap-3.5 px-5 py-4'

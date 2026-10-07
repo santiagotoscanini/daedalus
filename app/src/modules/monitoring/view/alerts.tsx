@@ -7,6 +7,7 @@ import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, since } from '../../../lib/format'
+import { Pairs } from '../../network/view/shared'
 import type { MonitoringData } from '../data'
 import { AllClear, LIST, MAIN, SEVERITY, SIDE } from './shared'
 
@@ -114,7 +115,7 @@ function WhereAnAlertGoesBoard({ f }: { f: AlertsFacts }) {
   const { d } = f
   return (
     <Board title="Where an alert goes" icon="✉" span={12}>
-      <Facts
+      <Pairs
         rows={[
           { k: 'Contact points', v: num(d.delivery.contactPoints) },
           { k: 'Email', v: 'msmtp relay' },
@@ -174,8 +175,10 @@ function Panel2({ f }: { f: AlertsFacts }) {
                   'nothing in the last 30 days'
                 ) : (
                   <>
-                    {since(d.mail.lastSend.agoSeconds)} — from{' '}
-                    <span className="whitespace-nowrap">{d.mail.lastSend.unit}</span>
+                    {since(d.mail.lastSend.agoSeconds)}
+                    <span className="block text-[0.78rem] text-muted-foreground [font-weight:400] [overflow-wrap:anywhere]">
+                      from {d.mail.lastSend.unit}
+                    </span>
                   </>
                 ),
             },
@@ -226,7 +229,7 @@ function GrafanaLogsBoard() {
 
 /** Unit · error · when. The error steps away first. */
 const SEND_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(12rem,1fr)_minmax(10rem,1.2fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(10rem,1fr)_6rem] @max-[40rem]/table:[&>.err]:hidden'
+  'grid items-start gap-x-6 px-5 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[40rem]/table:gap-x-3 @max-[40rem]/table:[&>.err]:hidden'
 
 /**
  * Every send the relay logged as failed, newest first. Every row here is a
@@ -248,16 +251,30 @@ function FailedSendsTable({ f }: { f: AlertsFacts }) {
         </li>
         {d.mail.failures.map((x) => (
           <li key={`${x.unit}-${String(x.agoSeconds)}`} className={cn(SEND_GRID, TABLE_ROW_DENSE)}>
-            <span className="truncate font-mono text-[0.76rem] text-foreground" title={x.unit}>
-              {x.unit}
+            <span className="flex min-w-0 flex-col py-1">
+              <span className="font-mono text-[0.76rem] text-foreground [overflow-wrap:anywhere]">
+                {x.unit}
+              </span>
+              {/* On a phone the error is this line, wrapping rather than cut. */}
+              <span
+                className={cn(
+                  'hidden text-[0.72rem] text-muted-foreground @max-[40rem]/table:block',
+                  mailFailing && 'text-danger/90',
+                )}
+              >
+                {x.error}
+              </span>
             </span>
             <span
-              className={cn(CELL_QUIET, 'err truncate', mailFailing && 'text-danger/90')}
-              title={x.error}
+              className={cn(
+                CELL_QUIET,
+                'err py-1 [overflow-wrap:anywhere]',
+                mailFailing && 'text-danger/90',
+              )}
             >
               {x.error}
             </span>
-            <span className={cn(CELL_QUIET, 'text-right')}>{since(x.agoSeconds)}</span>
+            <span className={cn(CELL_QUIET, 'py-1 text-right')}>{since(x.agoSeconds)}</span>
           </li>
         ))}
       </ul>

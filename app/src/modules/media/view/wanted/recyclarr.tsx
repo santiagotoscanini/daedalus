@@ -12,17 +12,23 @@ import {
   FOOT,
   MONO,
   NOTE,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
   TABLE_ROW,
   TableSection,
   VERSION_SNAPSHOT,
+  WRAP_PHONE,
 } from '../shared'
 import type { Wanted } from './shared'
 
 /* Instance, then what the run changed and what it left alone. */
-const SYNC_GRID = 'grid grid-cols-[minmax(0,1fr)_12rem_9rem] items-center gap-x-6 px-5'
+const SYNC_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1fr)_12rem_9rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto]',
+)
 
 export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
   const recyclarr = d
@@ -75,7 +81,7 @@ export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
               <li aria-hidden="true" className={cn(SYNC_GRID, TABLE_HEAD)}>
                 <span>Instance</span>
                 <span className="text-right">Custom formats updated</span>
-                <span className="text-right">Already current</span>
+                <span className="text-right @max-[38rem]/table:hidden">Already current</span>
               </li>
             )}
             {recyclarr.synced.length === 0 ? (
@@ -83,14 +89,19 @@ export function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
             ) : (
               recyclarr.synced.map((s) => (
                 <li key={s.instance} className={cn(SYNC_GRID, TABLE_ROW)}>
-                  <span className={CELL_NAME}>{s.instance}</span>
+                  <div className="min-w-0">
+                    <span className={cn(CELL_NAME, WRAP_PHONE, 'block')}>{s.instance}</span>
+                    <p className={PHONE_SUB}>{num(s.skipped)} already current</p>
+                  </div>
                   {/* A change is the reading; nothing changed is the norm. */}
                   <span
                     className={cn(CELL_QUIET, 'text-right', s.updated > 0 && 'text-foreground')}
                   >
                     {s.updated === 0 ? 'nothing changed' : num(s.updated)}
                   </span>
-                  <span className={cn(CELL_QUIET, 'text-right')}>{num(s.skipped)}</span>
+                  <span className={cn(CELL_QUIET, 'text-right @max-[38rem]/table:hidden')}>
+                    {num(s.skipped)}
+                  </span>
                 </li>
               ))
             )}

@@ -31,6 +31,7 @@ type Github = Builder['github']
 const DELIVERY_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,14rem)_6rem]',
+  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_auto]',
 )
 /** Build · state · check run · deployment · reported. */
 const REPORT_GRID = cn(
@@ -96,11 +97,17 @@ export function GithubSection({ g }: { g: Github }) {
               </li>
               {g.deliveries.map((x) => (
                 <li key={x.id} className={cn(DELIVERY_GRID, TABLE_ROW)}>
-                  <span className="min-w-0 truncate text-foreground">
-                    {x.event}
-                    {x.action === null ? '' : ` · ${x.action}`}
+                  <span className="min-w-0">
+                    <span className="block truncate text-foreground">
+                      {x.event}
+                      {x.action === null ? '' : ` · ${x.action}`}
+                    </span>
+                    {/* The outcome moves under the event on a phone. */}
+                    <code className={cn(CELL_MONO, 'hidden @max-[36rem]/table:block')}>
+                      {x.outcome}
+                    </code>
                   </span>
-                  <code className={CELL_MONO}>{x.outcome}</code>
+                  <code className={cn(CELL_MONO, '@max-[36rem]/table:hidden')}>{x.outcome}</code>
                   <span className={cn(CELL_QUIET, 'text-right whitespace-nowrap')}>
                     <Ago at={x.receivedAt} />
                   </span>
@@ -173,6 +180,32 @@ export function GithubSection({ g }: { g: Github }) {
                     )}
                   >
                     {b.reported ? 'reported' : 'not reported'}
+                  </span>
+                  {/* The columns that step away on a phone: links and status in a line. */}
+                  <span className="col-span-full hidden flex-wrap gap-x-3 text-[0.72rem] text-muted-foreground @max-[40rem]/table:flex">
+                    {b.checkRunId !== null && (
+                      <a
+                        className="relative z-10"
+                        href={`https://github.com/${appRepo(site, b.app)}/runs/${String(b.checkRunId)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        check run ↗
+                      </a>
+                    )}
+                    {b.deploymentId !== null && (
+                      <a
+                        className="relative z-10"
+                        href={`https://github.com/${appRepo(site, b.app)}/deployments`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        deployment ↗
+                      </a>
+                    )}
+                    <span className={b.reported ? undefined : 'text-foreground'}>
+                      {b.reported ? 'reported' : 'not reported'}
+                    </span>
                   </span>
                 </li>
               ))}

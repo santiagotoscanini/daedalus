@@ -13,7 +13,7 @@ import {
   unloadProviderModelFn,
 } from '../../../../server/providers'
 import type { CatalogEntry, ProviderMachine } from '../../data/providers'
-import { CELL_MONO, CELL_NAME, CELL_QUIET, CELL_SUB, TABLE_ROW } from '../shared'
+import { CELL_MONO, CELL_NAME, CELL_QUIET, CELL_SUB, PHONE_SUB, TABLE_ROW } from '../shared'
 
 /** How long a verb may take on the machine: a cold 12B model is read off a disk and pushed across PCIe. */
 const OUTCOME_WITHIN_MS = 150_000
@@ -36,12 +36,16 @@ export const MODEL_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_4rem_3.5rem_6.5rem_4.5rem_4rem_5.5rem]',
   '@max-[62rem]/table:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_4rem_3.5rem_5.5rem]',
-  '@max-[40rem]/table:grid-cols-[minmax(0,1fr)_5.5rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_5.5rem]',
 )
 /** A column that steps away under 62rem. */
 export const NARROW = '@max-[62rem]/table:hidden'
 /** A column that steps away under 40rem. */
-export const NARROWEST = '@max-[40rem]/table:hidden'
+export const NARROWEST = '@max-[38rem]/table:hidden'
+
+/** Names wrap on a phone rather than truncate: the name is what identifies the row. */
+const WRAP_PHONE =
+  '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]'
 
 const NUM = cn(CELL_QUIET, 'text-right')
 /** A figure not there yet: a quiet dash, so the column still reads as a column. */
@@ -76,6 +80,28 @@ export function GatewayName({ model }: { model: CatalogEntry }) {
     )
   }
   return <span className={CELL_QUIET}>not offered</span>
+}
+
+/** What the columns hidden on a phone held, as the muted second line. */
+function phoneLine(model: CatalogEntry): string {
+  const f = model.figures
+  const gateway =
+    model.routed !== null
+      ? model.routed
+      : !model.downloaded
+        ? 'not on disk'
+        : model.offerable
+          ? `${model.alias} · awaiting the sync`
+          : 'not offered'
+  return [
+    gateway,
+    model.sizeGb === null ? null : `${num(model.sizeGb, 1)} GB`,
+    f?.tps != null && f.tps > 0 ? `${f.tps.toFixed(1)} tok/s` : null,
+    f?.ttftMs != null && f.ttftMs > 0 ? `${num(f.ttftMs)} ms first token` : null,
+    f?.requests != null && f.requests > 0 ? `${num(f.requests)} req` : null,
+  ]
+    .filter((x) => x !== null)
+    .join(' · ')
 }
 
 /**
@@ -139,7 +165,7 @@ export function ModelRow({
             <span aria-hidden="true" className="size-[7px] flex-none" />
           )}
           <span
-            className={cn(CELL_NAME, !resident && 'text-subdued [font-weight:450]')}
+            className={cn(CELL_NAME, WRAP_PHONE, !resident && 'text-subdued [font-weight:450]')}
             title={model.id}
           >
             {model.id}
@@ -147,15 +173,16 @@ export function ModelRow({
         </p>
         <div className="pl-[15px]">
           <Attributes model={model} />
+          <p className={PHONE_SUB}>{phoneLine(model)}</p>
         </div>
       </div>
-      <span className="flex min-w-0 @max-[40rem]/table:hidden">
+      <span className="flex min-w-0 @max-[38rem]/table:hidden">
         <GatewayName model={model} />
       </span>
-      <span className={cn(NUM, '@max-[40rem]/table:hidden')}>
+      <span className={cn(NUM, '@max-[38rem]/table:hidden')}>
         {model.sizeGb === null ? NONE : num(model.sizeGb, 1)}
       </span>
-      <span className={cn(NUM, '@max-[40rem]/table:hidden', resident && 'text-foreground')}>
+      <span className={cn(NUM, '@max-[38rem]/table:hidden', resident && 'text-foreground')}>
         {some(f?.tps) ? f.tps.toFixed(1) : NONE}
       </span>
       <span className={cn(NUM, NARROW)}>{some(f?.ttftMs) ? num(f.ttftMs) : NONE}</span>

@@ -21,7 +21,7 @@ type Lan = Extract<NetworkData, { tab: 'dns' }>['lan']
 
 /** Name · answers with · zone · router. */
 const GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.3fr)_minmax(7rem,1fr)_6rem_6rem] @max-[36rem]/table:grid-cols-[minmax(8rem,1fr)_5rem_6rem] @max-[36rem]/table:[&>.ip]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.3fr)_minmax(7rem,1fr)_6rem_6rem] @max-[36rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[36rem]/table:gap-x-3 @max-[36rem]/table:[&>.ip]:hidden @max-[36rem]/table:[&>.zone]:hidden'
 
 type Filter = 'all' | 'public' | 'unserved'
 
@@ -60,13 +60,20 @@ export function DeclaredNames({ lan }: { lan: Lan }) {
         <li className={cn(GRID, TABLE_HEAD)}>
           <span>Name</span>
           <span className="ip">Answers with</span>
-          <span>Zone</span>
+          <span className="zone">Zone</span>
           <span>Router</span>
         </li>
         {shown.length === 0 && <li className={TABLE_EMPTY}>No name matches that filter.</li>}
         {shown.map((n) => (
           <li key={n.fqdn} className={cn(GRID, TABLE_ROW_DENSE)} title={n.fqdn}>
-            <span className="truncate font-mono text-[0.76rem] text-foreground">{n.short}</span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate font-mono text-[0.76rem] text-foreground">{n.short}</span>
+              {/* On a phone the address and zone columns are this second line. */}
+              <span className="hidden truncate text-[0.72rem] text-muted-foreground @max-[36rem]/table:block">
+                {n.elsewhere ? n.ip : 'this box'}
+                {n.public && ' · public'}
+              </span>
+            </span>
             {/* This box is the norm, so it recedes; an entry pointing at
                 another machine prints the address in full ink. */}
             {n.elsewhere ? (
@@ -74,7 +81,7 @@ export function DeclaredNames({ lan }: { lan: Lan }) {
             ) : (
               <span className={cn(CELL_QUIET, 'ip')}>this box</span>
             )}
-            <span className={CELL_QUIET}>{n.public ? 'public' : ''}</span>
+            <span className={cn(CELL_QUIET, 'zone')}>{n.public ? 'public' : ''}</span>
             {/* The one state worth interrupting the list for. */}
             <span>{n.served === false && <Chip tone="bad">no route</Chip>}</span>
           </li>

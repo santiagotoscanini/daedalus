@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNow } from '../../../components/poll'
-import { Board, Chip } from '../../../components/viz'
+import { AXIS } from '../../../components/tokens'
+import { Board, Chip, type Column, Columns } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, duration } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
@@ -193,5 +194,45 @@ export function SampleRows({ rows }: { rows: [string, string][] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * A per-day column chart that is two charts: the whole window on a screen
+ * wide enough for it, and the last fourteen days on a phone, where thirty
+ * bars are six pixels each and the failure hairline is gone. The same data,
+ * the rest of it one wider screen away.
+ */
+export function DayColumns({
+  points,
+  unit,
+  empty,
+  height = 92,
+}: {
+  points: Column[]
+  /** What the axis says in the middle: "runs", "minutes". */
+  unit: string
+  empty: string
+  height?: number
+}) {
+  const recent = points.slice(-14)
+  const axis = (p: Column[]) => (
+    <p className={AXIS}>
+      <span>{p[0]?.label}</span>
+      <span>{unit}</span>
+      <span>{p[p.length - 1]?.label}</span>
+    </p>
+  )
+  return (
+    <>
+      <div className="flex flex-col gap-3 max-[40rem]:hidden">
+        <Columns points={points} height={height} empty={empty} />
+        {points.length > 0 && axis(points)}
+      </div>
+      <div className="hidden flex-col gap-3 max-[40rem]:flex">
+        <Columns points={recent} height={120} empty={empty} />
+        {recent.length > 0 && axis(recent)}
+      </div>
+    </>
   )
 }

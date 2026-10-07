@@ -7,6 +7,7 @@ import {
   CELL_MONO,
   CELL_NAME,
   CELL_QUIET,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
@@ -35,10 +36,10 @@ const ROUTE_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1.3fr)_7rem_minmax(0,1.8fr)_minmax(0,1fr)]',
   '@max-[52rem]/table:grid-cols-[minmax(0,1.2fr)_7rem_minmax(0,1.6fr)]',
-  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_7rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_7rem]',
 )
 const HOST = '@max-[52rem]/table:hidden'
-const UPSTREAM = '@max-[36rem]/table:hidden'
+const UPSTREAM = '@max-[38rem]/table:hidden'
 
 export function GatewayView({ data }: { data: GatewayData }) {
   const { routing, machineNames } = data
@@ -112,9 +113,21 @@ function RouteGroup({ group, routes }: { group: string; routes: Route[] }) {
       />
       {routes.map((r) => (
         <li key={`${group}-${r.alias}-${r.id ?? ''}`} className={cn(ROUTE_GRID, TABLE_ROW)}>
-          <span className={CELL_NAME} title={r.alias}>
-            {r.alias}
-          </span>
+          <div className="min-w-0">
+            <span
+              className={cn(
+                CELL_NAME,
+                '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]',
+                'block',
+              )}
+              title={r.alias}
+            >
+              {r.alias}
+            </span>
+            <p className={PHONE_SUB}>
+              {r.upstream} · {r.host ?? 'no api_base'}
+            </p>
+          </div>
           <span className={CELL_QUIET}>{modeWord(r.mode)}</span>
           <span className={cn(CELL_MONO, UPSTREAM)} title={r.upstream}>
             {r.upstream}

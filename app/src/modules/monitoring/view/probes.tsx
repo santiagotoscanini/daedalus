@@ -61,7 +61,7 @@ export function ProbesView({ data: d }: { data: Probes }) {
             {d.worst.length === 0 && <li className={TABLE_EMPTY}>nothing measured</li>}
             {d.worst.map((w) => (
               <li key={w.name} className={cn(RANK_GRID, TABLE_ROW_DENSE)}>
-                <span className="truncate text-foreground">{w.name}</span>
+                <span className="text-foreground [overflow-wrap:anywhere]">{w.name}</span>
                 <span
                   className={cn(
                     'text-right tabular-nums',
@@ -92,7 +92,7 @@ export function ProbesView({ data: d }: { data: Probes }) {
             {d.slowest.length === 0 && <li className={TABLE_EMPTY}>nothing measured</li>}
             {d.slowest.map((s) => (
               <li key={s.label} className={cn(RANK_GRID, TABLE_ROW_DENSE)}>
-                <span className="truncate text-foreground">{s.label}</span>
+                <span className="text-foreground [overflow-wrap:anywhere]">{s.label}</span>
                 <span className="text-right text-subdued tabular-nums">{s.display}</span>
               </li>
             ))}

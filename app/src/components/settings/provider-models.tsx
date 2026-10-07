@@ -81,7 +81,7 @@ function ModelRow({
         busy={busy}
         failed={failed}
         disabled={busy}
-        className={cn(CONTROL_H, 'w-full')}
+        className={cn(CONTROL_H, 'w-full max-[48rem]:col-start-2')}
         aria-label={`Mode of ${m.id}`}
         onChange={(v) => onChange({ mode: v as ModelPolicy['mode'] })}
       />
@@ -90,7 +90,7 @@ function ModelRow({
         disabled={busy}
         aria-label={`Alias of ${m.id}`}
         placeholder={m.defaultAlias}
-        className={cn(CONTROL_H, 'font-mono md:text-[0.78rem]')}
+        className={cn(CONTROL_H, 'font-mono max-[48rem]:col-start-2 md:text-[0.78rem]')}
         onChange={(e) => setAlias(e.target.value)}
         onBlur={saveAlias}
         onKeyDown={(e) => {
@@ -262,7 +262,7 @@ export function BoxProvider() {
   }
   return (
     <Stack className="w-full max-w-[28rem]">
-      <span className="inline-flex flex-wrap items-center gap-3">
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Switch
           checked={offer}
           disabled={busy}
@@ -273,10 +273,13 @@ export function BoxProvider() {
           }}
         />
         <span className="text-[0.82rem]">{offer ? 'offered to the gateway' : 'not offered'}</span>
-        <span className="inline-flex items-center gap-2 text-[0.82rem]">
+        <span className="flex w-full items-center gap-2 text-[0.82rem] sm:inline-flex sm:w-auto">
           alias
           <Input
-            className={cn(CONTROL_H, 'w-40 font-mono md:text-[0.78rem]')}
+            className={cn(
+              CONTROL_H,
+              'min-w-0 flex-1 font-mono sm:w-40 sm:flex-none md:text-[0.78rem]',
+            )}
             value={alias}
             placeholder="whisper"
             disabled={busy}

@@ -12,6 +12,7 @@ import {
   TABLE_HEAD,
   TABLE_ROW,
   TableSection,
+  WRAP_PHONE,
 } from '../shared'
 import type { Downloaders } from './shared'
 
@@ -79,7 +80,7 @@ export function MetubePage({ d }: { d: Downloaders['metube'] }) {
                   >
                     {r.status}
                   </span>
-                  <span className="truncate text-foreground" title={r.title}>
+                  <span className={cn('truncate text-foreground', WRAP_PHONE)} title={r.title}>
                     {r.title}
                   </span>
                 </li>

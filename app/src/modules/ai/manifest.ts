@@ -27,7 +27,7 @@ export const manifest = {
       id: 'gateway',
       label: 'Gateway',
       probe: 'litellm',
-      boardSpans: [8, 4, 12, 12],
+      boardSpans: [12, 12, 12, 12],
       nix: 'litellm',
     },
     // Shown while either caller on this box is; the apps that hold a key

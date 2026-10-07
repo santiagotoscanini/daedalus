@@ -29,9 +29,9 @@ const SPLIT =
 
 /* Key/value on a label column: the board is wide, so values sit left beside
    their labels rather than right-aligned a column-width away from them. */
-const KV = 'm-0 grid grid-cols-[11rem_minmax(0,1fr)] content-start'
+const KV = 'm-0 grid grid-cols-[11rem_minmax(0,1fr)] content-start @max-[22rem]/board:grid-cols-1'
 const KV_ROW =
-  'col-span-2 grid grid-cols-subgrid items-baseline gap-x-4 border-hairline border-t py-2 text-[0.8125rem] first:border-t-0 first:pt-0'
+  'col-span-2 grid grid-cols-subgrid items-baseline gap-x-4 @max-[22rem]/board:col-span-1 @max-[22rem]/board:gap-y-0.5 border-hairline border-t py-2 text-[0.8125rem] first:border-t-0 first:pt-0'
 
 function KeyValues({ rows }: { rows: { k: string; v: ReactNode }[] }) {
   return (

@@ -16,6 +16,7 @@ import {
   healthFailing,
   LIST,
   NOTE,
+  PHONE_SUB,
   QueueTable,
   SUB,
   TABLE,
@@ -23,6 +24,7 @@ import {
   TABLE_HEAD,
   TABLE_ROW,
   TableSection,
+  WRAP_PHONE,
 } from '../shared'
 import type { Wanted } from './shared'
 import { WANTED_NEIGHBOURS } from './shared'
@@ -241,7 +243,7 @@ function QueueTableSection({ f }: { f: ArrFacts }) {
 const FEED_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[8rem_minmax(0,1fr)_5.5rem]',
-  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_5.5rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_5.5rem]',
 )
 
 function LatelyTable({ f }: { f: ArrFacts }) {
@@ -259,7 +261,7 @@ function LatelyTable({ f }: { f: ArrFacts }) {
       <ul className={TABLE} aria-label="Lately">
         {d.history.length > 0 && (
           <li aria-hidden="true" className={cn(FEED_GRID, TABLE_HEAD)}>
-            <span className="@max-[34rem]/table:hidden">Event</span>
+            <span className="@max-[38rem]/table:hidden">Event</span>
             <span>Title</span>
             <span className="text-right">When</span>
           </li>
@@ -272,15 +274,20 @@ function LatelyTable({ f }: { f: ArrFacts }) {
               <span
                 className={cn(
                   CELL_QUIET,
-                  'first-letter:uppercase @max-[34rem]/table:hidden',
+                  'first-letter:uppercase @max-[38rem]/table:hidden',
                   EVENT_INK[h.tone],
                 )}
               >
                 {h.event}
               </span>
-              <span className="truncate text-foreground" title={h.title}>
-                {h.title}
-              </span>
+              <div className="min-w-0">
+                <p className={cn('m-0 truncate text-foreground', WRAP_PHONE)} title={h.title}>
+                  {h.title}
+                </p>
+                <p className={cn(PHONE_SUB, 'first-letter:uppercase', EVENT_INK[h.tone])}>
+                  {h.event}
+                </p>
+              </div>
               <span className={cn(CELL_QUIET, 'whitespace-nowrap text-right')}>
                 {daysAgo(h.ageDays)}
               </span>

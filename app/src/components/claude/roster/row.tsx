@@ -29,9 +29,10 @@ const ROW_BTN = 'ml-auto h-7 shrink-0 px-2.5 text-[0.75rem]'
 
 /* The side column: how the row stands on its first line, the ids the CLI and
    claude.ai go by on its second. Right-aligned, so the ids form a column. */
-const SIDE = 'flex min-w-0 flex-col items-end gap-1 pt-0.5'
+const SIDE =
+  'flex min-w-0 flex-col items-end gap-1 pt-0.5 max-[40rem]:col-span-2 max-[40rem]:row-start-2 max-[40rem]:items-start'
 const SIDE_LINE =
-  'flex min-w-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-0.5 [&>span]:max-w-none'
+  'flex min-w-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-0.5 max-[40rem]:justify-start [&>span]:max-w-none [overflow-wrap:anywhere]'
 
 /* ── the enriched row ─────────────────────────────────────────────────────
 
@@ -118,7 +119,10 @@ export function RosterRow({
         // One grid for every row, so the facts and the verb sit in the same
         // columns down the whole roster: what it is (name, last prompt, its
         // metadata) · how it stands and its ids · the verb.
-        'grid grid-cols-[minmax(0,1fr)_minmax(0,auto)_5rem] items-start gap-x-5 gap-y-0 py-3.5 [[data-group]+&]:border-t-0',
+        'grid grid-cols-[minmax(0,1fr)_13rem_5rem] items-start gap-x-5 gap-y-0 py-3.5 [[data-group]+&]:border-t-0',
+        // A phone stacks the row: the name and the verb on top, how it stands
+        // and its ids as a full-width line beneath.
+        'max-[40rem]:grid-cols-[minmax(0,1fr)_auto] max-[40rem]:gap-y-2',
       )}
       title={row.id ?? undefined}
     >
@@ -129,7 +133,14 @@ export function RosterRow({
           {row.state === 'orphan' && (
             <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
           )}
-          <span className={cn(ROW_MAIN, 'text-[0.84rem] [font-weight:520]')}>{row.label}</span>
+          <span
+            className={cn(
+              ROW_MAIN,
+              'text-[0.84rem] [font-weight:520] max-[40rem]:whitespace-normal! max-[40rem]:[text-overflow:clip]',
+            )}
+          >
+            {row.label}
+          </span>
         </div>
 
         {/* The one line of conversation on this page, and it gets a line of

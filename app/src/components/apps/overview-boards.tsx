@@ -155,7 +155,11 @@ export function DeploymentBoard({
           },
           {
             k: 'image',
-            v: <code title={app.effectiveImage}>{shortImage(app.effectiveImage)}</code>,
+            v: (
+              <code title={app.effectiveImage} className="[overflow-wrap:anywhere]">
+                {shortImage(app.effectiveImage)}
+              </code>
+            ),
           },
           {
             // A push is the real trigger — the box build starts the deploy
@@ -239,12 +243,14 @@ export function WorkspaceBoard({
             },
             {
               k: 'path',
-              v: <code>{`${workspaceRoot}/${workspace.name}`}</code>,
+              v: (
+                <code className="[overflow-wrap:anywhere]">{`${workspaceRoot}/${workspace.name}`}</code>
+              ),
             },
             {
               k: 'checked out',
               v: (
-                <code>
+                <code className="[overflow-wrap:anywhere]">
                   {workspace.branch ?? DASH} @ {workspace.head ?? DASH}
                 </code>
               ),

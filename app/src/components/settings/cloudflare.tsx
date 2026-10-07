@@ -9,7 +9,6 @@ import { Input } from '../ui/input'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
 import {
-  ASIDE,
   Bad,
   ERROR_NOTE,
   FIELD_LABEL,
@@ -48,7 +47,7 @@ export function Identified({
       ) : live === null ? (
         <>
           <span className="text-[0.82rem] text-muted-foreground">not readable with the token</span>
-          <span className="text-[0.72rem] text-subdued">needs {needs}</span>
+          <span className="text-[0.75rem] text-subdued">needs {needs}</span>
         </>
       ) : (
         <span className="inline-flex items-center gap-2">
@@ -60,7 +59,7 @@ export function Identified({
           <Mono>{live.name}</Mono>
         </span>
       )}
-      <span className={ASIDE}>{id}</span>
+      <span className="text-[0.8125rem] text-muted-foreground [overflow-wrap:anywhere]">{id}</span>
     </Stack>
   )
 }

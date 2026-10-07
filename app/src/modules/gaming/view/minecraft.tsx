@@ -1,10 +1,10 @@
 import { ImageRow } from '../../../components/image-row'
 import { LogBoard } from '../../../components/logs'
-import { QuietState } from '../../../components/modules/parts'
+import { KeyValue, QuietState } from '../../../components/modules/parts'
 import { Changelog, ReleaseNotes } from '../../../components/release-notes'
 import { ServiceHead } from '../../../components/service-head'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
-import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../../../components/viz'
+import { Board, BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
 import type { GamingData } from '../data'
 import { VersionBoard } from './minecraft-update'
 import { RosterBoard } from './roster'
@@ -196,8 +196,7 @@ function HowItIsRunBoard({ f }: { f: MinecraftFacts }) {
   const { mc } = f
   return (
     <Board title="How it is run" icon="⚒" span={12}>
-      <Facts
-        list
+      <KeyValue
         rows={[
           { k: 'Address', v: <span className={MONO}>{mc.connect}</span> },
           {

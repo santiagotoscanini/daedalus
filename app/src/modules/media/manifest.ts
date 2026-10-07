@@ -7,7 +7,7 @@ export const manifest = {
   order: 20,
   section: 'Services',
   // Shaped to Jellyfin, the tab that opens by default.
-  boardSpans: [12, 12, 4, 8],
+  boardSpans: [12, 12, 12],
   // No tile directory: every service has a tab page with room for the version
   // verdict, the health checks and the log a tile had none for.
   //
@@ -38,7 +38,7 @@ export const manifest = {
       id: 'jellyfin',
       label: 'Jellyfin',
       probe: 'jellyfin',
-      boardSpans: [12, 12, 4, 8],
+      boardSpans: [12, 12, 12],
       nix: 'tv',
     },
     {

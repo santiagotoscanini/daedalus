@@ -9,11 +9,13 @@ import {
   FOOT,
   MONO,
   NOTE,
+  PHONE_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
   TABLE_ROW,
   TableSection,
+  WRAP_PHONE,
 } from '../shared'
 import type { Wanted } from './shared'
 
@@ -21,6 +23,7 @@ import type { Wanted } from './shared'
 const PROV_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto]',
 )
 
 /* ── Bazarr — reached from the Wanted switch above ────────────────────── */
@@ -78,7 +81,7 @@ export function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
               <li aria-hidden="true" className={cn(PROV_GRID, TABLE_HEAD)}>
                 <span>Provider</span>
                 <span>Status</span>
-                <span className="text-right">Retry</span>
+                <span className="text-right @max-[38rem]/table:hidden">Retry</span>
               </li>
             )}
             {d.providers.length === 0 ? (
@@ -86,7 +89,12 @@ export function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
             ) : (
               d.providers.map((p) => (
                 <li key={p.name} className={cn(PROV_GRID, TABLE_ROW)}>
-                  <span className="text-foreground">{p.name}</span>
+                  <div className="min-w-0">
+                    <span className={cn('block text-foreground', WRAP_PHONE)}>{p.name}</span>
+                    {p.retry !== '-' && (
+                      <p className={cn(PHONE_SUB, 'text-warning')}>retry {p.retry}</p>
+                    )}
+                  </div>
                   {/* Answering is the norm: quiet. Throttled is the row to read. */}
                   <span>
                     {p.ok ? (
@@ -95,7 +103,13 @@ export function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
                       <Chip tone="warn">{p.status}</Chip>
                     )}
                   </span>
-                  <span className={cn(CELL_QUIET, 'text-right', p.retry !== '-' && 'text-warning')}>
+                  <span
+                    className={cn(
+                      CELL_QUIET,
+                      'text-right @max-[38rem]/table:hidden',
+                      p.retry !== '-' && 'text-warning',
+                    )}
+                  >
                     {p.retry === '-' ? '' : p.retry}
                   </span>
                 </li>

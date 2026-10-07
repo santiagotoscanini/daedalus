@@ -206,9 +206,9 @@ const SECTION_AIR = 'my-2 first:mt-0 last:mb-0'
 const QUEUE_GRID = cn(
   'grid items-center gap-x-6 px-5',
   'grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_3.5rem_minmax(0,1.4fr)]',
-  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_3.5rem]',
+  '@max-[38rem]/table:grid-cols-[minmax(0,1fr)_3.5rem]',
 )
-const QUEUE_WIDE = '@max-[44rem]/table:hidden'
+const QUEUE_WIDE = '@max-[38rem]/table:hidden'
 
 export type QueueRow = {
   key: string
@@ -249,9 +249,15 @@ export function QueueTable({
       ) : (
         rows.map((r) => (
           <li key={r.key} className={cn(QUEUE_GRID, TABLE_ROW)}>
-            <span className="truncate text-foreground" title={r.name}>
-              {r.name}
-            </span>
+            <div className="min-w-0">
+              <p className={cn('m-0 truncate text-foreground', WRAP_PHONE)} title={r.name}>
+                {r.name}
+              </p>
+              <p className={PHONE_SUB}>{r.detail}</p>
+              <span className="mt-1.5 hidden @max-[38rem]/table:block">
+                <Progress pct={r.pct} tone={r.tone} active={r.active} />
+              </span>
+            </div>
             <span className={QUEUE_WIDE}>
               <Progress pct={r.pct} tone={r.tone} active={r.active} />
             </span>
@@ -273,3 +279,10 @@ export function QueueTable({
     </ul>
   )
 }
+
+/** A phone-only second line in a table's first cell: what its hidden columns held. */
+export const PHONE_SUB =
+  'm-0 mt-0.5 hidden text-[0.75rem] text-muted-foreground [overflow-wrap:anywhere] @max-[38rem]/table:block'
+/** A name that wraps on a phone instead of truncating: it is what identifies the row. */
+export const WRAP_PHONE =
+  '@max-[38rem]/table:whitespace-normal @max-[38rem]/table:[overflow-wrap:anywhere]'

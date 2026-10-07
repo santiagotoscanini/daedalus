@@ -5,6 +5,7 @@ import {
   CELL_MONO,
   CELL_NAME,
   CELL_QUIET,
+  CELL_SUB,
   TABLE,
   TABLE_EMPTY,
   TABLE_HEAD,
@@ -103,7 +104,7 @@ type WireguardFacts = NonNullable<ReturnType<typeof wireguardFacts>>
 
 /** Peer · address · from it · to it · last handshake · total. Directions go first. */
 const PEER_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.2fr)_minmax(6rem,0.8fr)_5rem_5rem_minmax(6rem,0.8fr)_5rem] @max-[44rem]/table:grid-cols-[minmax(8rem,1fr)_minmax(6rem,0.8fr)_minmax(5rem,0.7fr)_5rem] @max-[44rem]/table:[&>.dir]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.2fr)_minmax(6rem,0.8fr)_5rem_5rem_minmax(6rem,0.8fr)_5rem] @max-[44rem]/table:grid-cols-[minmax(8rem,1fr)_minmax(6rem,0.8fr)_minmax(5rem,0.7fr)_5rem] @max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[38rem]/table:gap-x-3 @max-[44rem]/table:[&>.dir]:hidden @max-[38rem]/table:[&>.ip]:hidden @max-[38rem]/table:[&>.hs]:hidden'
 
 /** Configured, enabled, connected now: three counts and the live dot. */
 function PeersNowBoard({ f }: { f: WireguardFacts }) {
@@ -145,31 +146,45 @@ function PeersTable({ f }: { f: WireguardFacts }) {
       <ul className={TABLE} aria-label="WireGuard peers">
         <li className={cn(PEER_GRID, TABLE_HEAD)}>
           <span>Peer</span>
-          <span>Address</span>
+          <span className="ip">Address</span>
           {/* Named rather than arrowed. An arrow on a VPN row is ambiguous by
               construction — the same byte is the peer's upload and the
               server's download — so these say which end they are counted at. */}
           <span className="dir text-right">From it</span>
           <span className="dir text-right">To it</span>
-          <span>Last handshake</span>
+          <span className="hs">Last handshake</span>
           <span className="text-right">Total</span>
         </li>
         {peers.length === 0 && <li className={TABLE_EMPTY}>no peers configured</li>}
         {peers.map((p) => (
           <li key={p.name} className={cn(PEER_GRID, TABLE_ROW)}>
-            <span className="flex min-w-0 items-center gap-2">
-              <span className={CELL_NAME} title={p.name}>
-                {p.name}
-              </span>
-              {/* Deliberately switched off is not a warning at all — it
+            <span className="flex min-w-0 flex-col">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className={CELL_NAME} title={p.name}>
+                  {p.name}
+                </span>
+                {/* Deliberately switched off is not a warning at all — it
                   explains the silence rather than reporting it. */}
-              {!p.enabled && <Chip tone="muted">disabled</Chip>}
-              {p.handshakeAgo === null && <Chip tone="warn">never used</Chip>}
+                {!p.enabled && <Chip tone="muted">disabled</Chip>}
+                {p.handshakeAgo === null && <Chip tone="warn">never used</Chip>}
+              </span>
+              {/* On a phone address and handshake are this second line. */}
+              <span
+                className={cn(
+                  CELL_SUB,
+                  'hidden @max-[38rem]/table:block',
+                  p.handshakeAgo === null && 'text-warning',
+                )}
+              >
+                {p.ipv4 ?? DASH} · {p.ago}
+              </span>
             </span>
-            <span className={cn(CELL_MONO, p.ipv4 === null && 'font-sans')}>{p.ipv4 ?? DASH}</span>
+            <span className={cn(CELL_MONO, 'ip', p.ipv4 === null && 'font-sans')}>
+              {p.ipv4 ?? DASH}
+            </span>
             <span className={cn(CELL_QUIET, 'dir text-right')}>{bytes(p.rx)}</span>
             <span className={cn(CELL_QUIET, 'dir text-right')}>{bytes(p.tx)}</span>
-            <span className={cn(CELL_QUIET, p.handshakeAgo === null && 'text-warning')}>
+            <span className={cn(CELL_QUIET, 'hs', p.handshakeAgo === null && 'text-warning')}>
               {p.ago}
             </span>
             <span className="text-right text-foreground tabular-nums">{bytes(p.rx + p.tx)}</span>

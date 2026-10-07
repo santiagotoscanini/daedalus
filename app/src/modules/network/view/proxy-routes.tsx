@@ -42,7 +42,7 @@ const PROTECTION: Record<Protection, { title: string; note: string }> = {
 
 /** Hostname · reach · middleware · requests. The middleware steps away first. */
 const GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.3fr)_6.5rem_minmax(7rem,1fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(8rem,1fr)_6.5rem_5rem] @max-[40rem]/table:[&>.via]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(10rem,1.6fr)_minmax(6rem,0.8fr)_minmax(8rem,1.4fr)_minmax(3.5rem,0.5fr)] @max-[40rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[40rem]/table:gap-x-3 @max-[40rem]/table:[&>.reach]:hidden @max-[40rem]/table:[&>.via]:hidden'
 
 type Filter = 'all' | 'remote' | 'disabled'
 
@@ -93,7 +93,7 @@ export function PublishedTable({
       <ul className={TABLE} aria-label="Published hostnames">
         <li className={cn(GRID, TABLE_HEAD)}>
           <span>Hostname</span>
-          <span>Reach</span>
+          <span className="reach">Reach</span>
           <span className="via">Middleware</span>
           <span className="text-right">Requests</span>
         </li>
@@ -137,22 +137,30 @@ function Group({ title, rows, site }: { title: string; rows: ProxyData['routes']
       <TableGroup title={title} note={String(rows.length)} />
       {rows.map((r) => (
         <li key={r.host} className={cn(GRID, TABLE_ROW_DENSE)}>
-          <span className="flex min-w-0 items-center gap-2">
-            {/* The label is what differs between rows; the shared domain recedes,
+          <span className="flex min-w-0 flex-col justify-center py-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              {/* The label is what differs between rows; the shared domain recedes,
                 as on the Apps list. */}
-            <span className="truncate whitespace-nowrap font-mono text-[0.76rem] text-foreground">
-              {stripBaseDomain(site, r.host)}
-              {r.host !== stripBaseDomain(site, r.host) && (
-                <span className="text-muted-foreground/50">
-                  {r.host.slice(stripBaseDomain(site, r.host).length)}
-                </span>
-              )}
+              <span className="min-w-0 truncate font-mono text-[0.76rem] text-foreground [overflow-wrap:anywhere] @max-[40rem]/table:whitespace-normal @max-[40rem]/table:break-all">
+                {stripBaseDomain(site, r.host)}
+                {r.host !== stripBaseDomain(site, r.host) && (
+                  <span className="text-muted-foreground/50">
+                    {r.host.slice(stripBaseDomain(site, r.host).length)}
+                  </span>
+                )}
+              </span>
+              {r.disabled && <Chip tone="bad">disabled</Chip>}
             </span>
-            {r.disabled && <Chip tone="bad">disabled</Chip>}
+            {/* On a phone the other columns are this second line: reach, then
+              the middleware — nothing is dropped, it is moved. */}
+            <span className="hidden flex-wrap items-center gap-x-2 text-[0.72rem] text-muted-foreground @max-[40rem]/table:flex">
+              <span>{r.remote ? 'Internet' : 'LAN only'}</span>
+              {r.via !== null && <span className="font-mono">· {r.via}</span>}
+            </span>
           </span>
           {/* Deliberate configuration, not a fault: neutral text and a mark,
               like the Apps list's exposure. LAN-only is the quiet norm. */}
-          <span>
+          <span className="reach">
             {r.remote ? (
               <span
                 className="inline-flex items-center gap-1.5 text-[0.78rem] text-subdued [&>svg]:size-3.5 [&>svg]:opacity-70"

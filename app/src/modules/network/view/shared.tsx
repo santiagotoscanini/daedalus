@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { Tone } from '../../../components/viz'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
@@ -57,3 +58,24 @@ export const GROUP = `${FOLD} [&>summary]:text-[0.8rem] [&>summary]:text-foregro
     where every toolbar does — left, under the tabs, above what it switches —
     with no rule of its own. */
 export const SWITCH_BAR = 'mx-0 mt-0 mb-6 flex flex-wrap items-center gap-3'
+
+/**
+ * Short facts in a fixed two-column grid: label above value, two to a row, at
+ * any board width. `Facts`' auto-fit drops to one column in a quarter-width
+ * board and stacks four facts into a tall tower; this stays 2×2. A value is
+ * allowed to break anywhere (paths, addresses) rather than push its neighbour.
+ */
+export function Pairs({ rows }: { rows: { k: string; v: ReactNode }[] }) {
+  return (
+    <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-3">
+      {rows.map((r) => (
+        <div key={r.k} className="min-w-0">
+          <dt className="truncate text-[0.75rem] text-muted-foreground">{r.k}</dt>
+          <dd className="m-0 text-[0.9375rem] tabular-nums tracking-[-0.01em] [font-weight:520] [overflow-wrap:anywhere]">
+            {r.v}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}

@@ -64,6 +64,7 @@ export function BoxHead({ h }: { h: BoxHeadData }) {
       compact
       mark={{ src: '/icon-nixos.webp', invert: false }}
       name={h.hostname}
+      title={[h.os, h.kernel, h.arch, h.model].filter((x) => x !== null && x !== '').join(' · ')}
       line={
         <>
           {h.os}
@@ -103,6 +104,9 @@ export function MachineHead({
       compact
       mark={OS_MARK[node.os]}
       name={node.name}
+      title={[edition, status?.os_version, status?.arch, t?.machine.model]
+        .filter((x) => x !== null && x !== undefined && x !== '')
+        .join(' · ')}
       // One pill at most, and only for the exception: a hold that should be on
       // and is not. Every other state of the link is a word in the line.
       chip={awake.tone === 'bad' ? awake : undefined}

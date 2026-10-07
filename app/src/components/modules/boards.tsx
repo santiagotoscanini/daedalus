@@ -81,7 +81,7 @@ export function ModuleBoards({
 /**
  * A tab whose stack is switched off. No loader ran (host/modules.ts), so
  * there are no boards to draw; what the page owes the operator is the fact,
- * and the one control that changes it, labelled and pinned to the card's right edge.
+ * and the one control that changes it: a labelled button under the message.
  */
 function OffPanel({ module, tab }: { module: string; tab: string }) {
   const spec = moduleById(module)?.tabs.find((t) => t.id === tab)
@@ -90,10 +90,10 @@ function OffPanel({ module, tab }: { module: string; tab: string }) {
     <div
       className={cn(
         GLASS,
-        'flex items-center gap-4 p-6 text-[0.875rem] text-muted-foreground [overflow-wrap:anywhere] max-[44rem]:flex-col max-[44rem]:items-start',
+        'flex flex-col items-start gap-4 p-6 text-[0.875rem] text-muted-foreground [overflow-wrap:anywhere] min-[44rem]:items-center min-[44rem]:gap-5 min-[44rem]:px-8 min-[44rem]:py-16 min-[44rem]:text-center',
       )}
     >
-      <p className="m-0 max-w-[640px] flex-1 leading-[1.6]">
+      <p className="m-0 max-w-[56ch] leading-[1.6] min-[44rem]:text-[0.95rem]">
         {ids.map((id, i) => (
           <span key={id}>
             {i > 0 && ', '}
@@ -103,7 +103,7 @@ function OffPanel({ module, tab }: { module: string; tab: string }) {
         {ids.length === 1 ? 'is' : 'are'} switched off on this box: nothing runs, nothing answers,
         and the data stays where it is. Turn it on in settings, then Apply.
       </p>
-      <div className="ml-auto flex-none max-[44rem]:ml-0">
+      <div className="flex-none">
         <ServiceSettingsButton ids={ids} label="Turn on in settings" />
       </div>
     </div>

@@ -16,7 +16,11 @@ import type { HomeData } from '../data'
 type Photos = Extract<HomeData, { tab: 'photos' }>
 
 /* Who is backing up: the account, then three numbers read down their columns. */
-const USERS_GRID = 'grid grid-cols-[minmax(0,1fr)_6rem_6rem_6rem] items-center gap-x-6 px-5'
+const USERS_GRID = [
+  'grid grid-cols-[minmax(0,1fr)_6rem_6rem_6rem] items-center gap-x-6 px-5',
+  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_auto]',
+].join(' ')
+const HIDE_NARROW = '@max-[34rem]/table:hidden'
 
 export function PhotosView({ data: d }: { data: Photos }) {
   const total = (d.photos ?? 0) + (d.videos ?? 0)
@@ -111,15 +115,21 @@ export function PhotosView({ data: d }: { data: Photos }) {
             <ul className={TABLE}>
               <li className={cn(USERS_GRID, TABLE_HEAD)}>
                 <span>Account</span>
-                <span className={NUM_CELL}>Stills</span>
-                <span className={NUM_CELL}>Videos</span>
+                <span className={cn(NUM_CELL, HIDE_NARROW)}>Stills</span>
+                <span className={cn(NUM_CELL, HIDE_NARROW)}>Videos</span>
                 <span className={NUM_CELL}>Size</span>
               </li>
               {d.users.map((u) => (
                 <li key={u.name} className={cn(USERS_GRID, TABLE_ROW)}>
-                  <span className="truncate text-[0.84rem] text-foreground">{u.name}</span>
-                  <span className={cn(CELL_QUIET, NUM_CELL)}>{num(u.photos)}</span>
-                  <span className={cn(CELL_QUIET, NUM_CELL)}>{num(u.videos)}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[0.84rem] text-foreground">{u.name}</span>
+                    {/* Stills and videos step away on a phone; they live here. */}
+                    <span className="hidden text-[0.75rem] text-muted-foreground tabular-nums @max-[34rem]/table:block">
+                      {num(u.photos)} stills · {num(u.videos)} videos
+                    </span>
+                  </span>
+                  <span className={cn(CELL_QUIET, NUM_CELL, HIDE_NARROW)}>{num(u.photos)}</span>
+                  <span className={cn(CELL_QUIET, NUM_CELL, HIDE_NARROW)}>{num(u.videos)}</span>
                   <span className={cn(NUM_CELL, 'text-[0.84rem] text-foreground')}>
                     {bytes(u.usageBytes)}
                   </span>

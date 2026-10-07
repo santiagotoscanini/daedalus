@@ -84,3 +84,7 @@ export function TableSection({
 
 /** Between a section and the boards around it: 24px, the grid gap included. */
 const SECTION_AIR = 'my-2 first:mt-0 last:mb-0'
+
+/** A phone-only second line in a table's first cell: what its hidden columns held. */
+export const PHONE_SUB =
+  'm-0 mt-0.5 hidden text-[0.75rem] text-muted-foreground [overflow-wrap:anywhere] @max-[38rem]/table:block'

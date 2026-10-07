@@ -62,7 +62,7 @@ function Provenance({ edit, field }: { edit: SiteEdit; field: SiteField }) {
       <Chip tone="info">pending</Chip>
       <span className={ASIDE}>
         was{' '}
-        <Mono className="text-[0.74rem] text-muted-foreground">
+        <Mono className="text-[0.75rem] text-muted-foreground">
           {show(getSiteField(edit.committed, field))}
         </Mono>
       </span>
@@ -93,7 +93,7 @@ function Control({
         {saving && <span className={ASIDE}>saving…</span>}
       </div>
       {error !== null && (
-        <FieldError className="max-w-[24rem] text-[0.74rem] leading-[1.45]">{error}</FieldError>
+        <FieldError className="max-w-[24rem] text-[0.75rem] leading-[1.45]">{error}</FieldError>
       )}
     </Field>
   )
@@ -292,7 +292,7 @@ export function SiteSelect({ edit, field, label, groups, patchFor, disabled }: S
         value={current}
         options={groups}
         aria-label={label}
-        className={BOX}
+        className={cn(BOX, 'w-[20rem]')}
         mono
         busy={saving}
         failed={refused !== null}

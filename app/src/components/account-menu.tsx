@@ -229,7 +229,7 @@ function Menu({
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="pt-1.5 pb-0.5 text-[0.72rem] text-muted-foreground [font-weight:500]">
+        <DropdownMenuLabel className="pt-1.5 pb-0.5 text-[0.75rem] text-muted-foreground [font-weight:500]">
           Theme
         </DropdownMenuLabel>
         <DropdownMenuRadioGroup

@@ -4,7 +4,7 @@ import { cn } from '../../lib/cn'
 import { bytes, DASH } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
 import { Ago } from '../ago'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE, SUB } from '../tokens'
+import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, SUB } from '../tokens'
 import { Board, Chip, Facts, Progress } from '../viz'
 import type { Builder } from './builder'
 
@@ -119,13 +119,16 @@ export function MachineryBoard({ m }: { m: Machinery }) {
           <h4 className={SUB}>Units</h4>
           <ul className={LIST}>
             {f.units.map((u) => (
-              <li key={u.unit} className={ROW}>
-                <span className={cn(ROW_MAIN, MONO)}>{u.unit}</span>
-                <span className={ROW_SIDE}>
+              <li key={u.unit} className={cn(ROW, 'items-start')}>
+                {/* The unit name keeps its whole width (it wraps rather than
+                    truncating — the end is what differs); the last exit is a
+                    second line under it. */}
+                <span className="min-w-0 flex-auto">
+                  <span className={cn(MONO, 'block text-foreground')}>{u.unit}</span>
                   {u.lastExitAt !== null && (
-                    <>
+                    <span className="block text-[0.72rem] text-muted-foreground">
                       last exit <Ago at={u.lastExitAt} />
-                    </>
+                    </span>
                   )}
                 </span>
                 {unitTone(u) === 'ok' || unitTone(u) === 'muted' ? (

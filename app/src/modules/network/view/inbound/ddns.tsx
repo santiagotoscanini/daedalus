@@ -198,7 +198,7 @@ function WhatNeedsItBoard({ f }: { f: DdnsFacts }) {
 
 /** Address · held for · since. */
 const ADDR_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1fr)_minmax(6rem,0.6fr)_7rem]'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1fr)_minmax(6rem,0.6fr)_7rem] @max-[30rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[30rem]/table:gap-x-3 @max-[30rem]/table:[&>.held]:hidden'
 
 function TheAddressOverTimeBoard({ f }: { f: DdnsFacts }) {
   const { d } = f
@@ -207,7 +207,7 @@ function TheAddressOverTimeBoard({ f }: { f: DdnsFacts }) {
       <ul className={TABLE} aria-label="Address history">
         <li className={cn(ADDR_GRID, TABLE_HEAD)}>
           <span>Address</span>
-          <span>Held for</span>
+          <span className="held">Held for</span>
           <span className="text-right">Since</span>
         </li>
         {d.history.length === 0 && (
@@ -217,15 +217,21 @@ function TheAddressOverTimeBoard({ f }: { f: DdnsFacts }) {
             history and recede. */}
         {d.history.map((h) => (
           <li key={h.at} className={cn(ADDR_GRID, TABLE_ROW_DENSE)}>
-            <span
-              className={cn(
-                'truncate font-mono text-[0.76rem]',
-                h.heldDays === null ? 'text-foreground [font-weight:560]' : 'text-subdued',
-              )}
-            >
-              {h.ip}
+            <span className="flex min-w-0 flex-col">
+              <span
+                className={cn(
+                  'truncate font-mono text-[0.76rem]',
+                  h.heldDays === null ? 'text-foreground [font-weight:560]' : 'text-subdued',
+                )}
+              >
+                {h.ip}
+              </span>
+              {/* On a phone "held for" is this second line. */}
+              <span className="hidden text-[0.72rem] text-muted-foreground @max-[30rem]/table:block">
+                {h.heldDays === null ? 'current' : `held ${String(h.heldDays)}d`}
+              </span>
             </span>
-            <span className={CELL_QUIET}>
+            <span className={cn(CELL_QUIET, 'held')}>
               {h.heldDays === null ? (
                 <span className="text-foreground">current</span>
               ) : (

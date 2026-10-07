@@ -25,11 +25,11 @@ type Runs = Extract<ActionsData, { tab: 'runs' }>
 
 /** State · run · event · runner · took · when. Event and runner step away first. */
 const RUN_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[6rem_minmax(12rem,1.6fr)_6.5rem_minmax(7rem,1fr)_4.5rem_6rem] @max-[52rem]/table:grid-cols-[6rem_minmax(10rem,1fr)_4.5rem_6rem] @max-[52rem]/table:[&>.side]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[6rem_minmax(12rem,1.6fr)_6.5rem_minmax(7rem,1fr)_4.5rem_6rem] @max-[52rem]/table:grid-cols-[6rem_minmax(10rem,1fr)_4.5rem_6rem] @max-[52rem]/table:[&>.side]:hidden @max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.st]:hidden @max-[38rem]/table:[&>.took]:hidden'
 
 /** The failures table: every row failed, so it has no state column. */
 const FAIL_GRID =
-  'grid items-center gap-x-6 px-5 grid-cols-[minmax(14rem,2fr)_6.5rem_minmax(6rem,0.8fr)_4.5rem_6rem] @max-[52rem]/table:grid-cols-[minmax(10rem,1fr)_4.5rem_6rem] @max-[52rem]/table:[&>.side]:hidden'
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(14rem,2fr)_6.5rem_minmax(6rem,0.8fr)_4.5rem_6rem] @max-[52rem]/table:grid-cols-[minmax(10rem,1fr)_4.5rem_6rem] @max-[52rem]/table:[&>.side]:hidden @max-[38rem]/table:grid-cols-[minmax(0,1fr)_auto] @max-[38rem]/table:gap-x-3 @max-[38rem]/table:[&>.took]:hidden'
 
 /** The machines a run used, as OS words ("Linux, macOS"); the images are on hover. */
 function runnerWord(ranOn: readonly string[]): string {
@@ -44,7 +44,7 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
   return (
     <li className={cn(showFailure ? FAIL_GRID : RUN_GRID, TABLE_ROW_DENSE, TABLE_ROW_LINK)}>
       {!showFailure && (
-        <span>
+        <span className="st">
           <RunChip status={r.status} conclusion={r.conclusion} />
         </span>
       )}
@@ -53,17 +53,30 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
           href={r.url}
           target="_blank"
           rel="noreferrer"
-          className={cn(TABLE_LINK, 'block truncate')}
+          className={cn(TABLE_LINK, 'block truncate @max-[38rem]/table:whitespace-normal')}
         >
-          <span className="text-foreground [font-weight:560]">{r.repo}</span>
-          <span className="text-muted-foreground"> · </span>
-          <span className="text-foreground">{r.workflow}</span>
+          <span className="@max-[38rem]/table:hidden">
+            <span className="text-foreground [font-weight:560]">{r.repo}</span>
+            <span className="text-muted-foreground"> · </span>
+            <span className="text-foreground">{r.workflow}</span>
+          </span>
+          {/* On a phone the workflow is the name, wrapping to two lines, and the
+              repository is the muted line under it. */}
+          <span className="hidden text-foreground [font-weight:560] [overflow-wrap:anywhere] @max-[38rem]/table:inline">
+            {r.workflow}
+          </span>
           {r.branch !== null && r.branch !== 'main' && (
             <span className="ml-1.5 font-mono text-[0.75rem] text-muted-foreground">
               {r.branch}
             </span>
           )}
         </a>
+        <span className="hidden flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-[0.72rem] text-muted-foreground @max-[38rem]/table:flex">
+          {!showFailure && <RunChip status={r.status} conclusion={r.conclusion} />}
+          <span>{r.repo}</span>
+          <span>· {r.event.replace(/_/g, ' ')}</span>
+          <span className="tabular-nums">· {took(r.seconds)}</span>
+        </span>
         {/* The job path gives way, never the failing step: the job truncates
             and the step (the one red) is always whole. */}
         {showFailure && r.failed !== null && (
@@ -88,7 +101,7 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
       <span className={cn(CELL_QUIET, 'side truncate')} title={r.ranOn.join(', ')}>
         {runnerWord(r.ranOn)}
       </span>
-      <span className={cn(CELL_QUIET, 'text-right')}>{took(r.seconds)}</span>
+      <span className={cn(CELL_QUIET, 'took text-right')}>{took(r.seconds)}</span>
       <span className={cn(CELL_QUIET, 'text-right')}>
         <Ago at={r.createdAt} />
       </span>
@@ -99,11 +112,11 @@ function RunRowLine({ r, showFailure = false }: { r: RunRow; showFailure?: boole
 function RunHead({ failures = false }: { failures?: boolean }) {
   return (
     <li className={cn(failures ? FAIL_GRID : RUN_GRID, TABLE_HEAD)}>
-      {!failures && <span>State</span>}
+      {!failures && <span className="st">State</span>}
       <span>Repository · workflow</span>
       <span className="side">Event</span>
       <span className="side">Runner</span>
-      <span className="text-right">Took</span>
+      <span className="took text-right">Took</span>
       <span className="text-right">Started</span>
     </li>
   )
@@ -172,7 +185,8 @@ export function FailuresTable({ d }: { d: Runs }) {
 }
 
 /** Name · runs · failed · median. */
-const TALLY_GRID = 'grid items-center gap-x-5 px-5 grid-cols-[minmax(8rem,1fr)_4rem_4rem_4.5rem]'
+const TALLY_GRID =
+  'grid items-center gap-x-3 px-5 grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_4rem] @min-[38rem]/table:gap-x-5'
 
 export function ByWorkflowTable({ d }: { d: Runs }) {
   return (
@@ -187,7 +201,7 @@ export function ByWorkflowTable({ d }: { d: Runs }) {
         {d.byWorkflow.length === 0 && <li className={TABLE_EMPTY}>no runs</li>}
         {d.byWorkflow.map((w) => (
           <li key={w.label} className={cn(TALLY_GRID, TABLE_ROW_DENSE)}>
-            <span className="truncate text-foreground">{w.label}</span>
+            <span className="text-foreground [overflow-wrap:anywhere]">{w.label}</span>
             <span className={cn(CELL_QUIET, 'text-right')}>{num(w.runs)}</span>
             <Failed n={w.failed} />
             <span className={cn(CELL_QUIET, 'text-right')}>{took(w.p50)}</span>
@@ -212,8 +226,8 @@ export function ByRepositoryTable({ d }: { d: Runs }) {
           const readable = r.access === 'app' || r.access === 'public'
           return (
             <li key={r.repo} className={cn(TALLY_GRID, TABLE_ROW_DENSE)}>
-              <span className="flex min-w-0 items-baseline gap-1.5">
-                <Ext href={`${r.url}/actions`} className="truncate text-foreground">
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+                <Ext href={`${r.url}/actions`} className="text-foreground [overflow-wrap:anywhere]">
                   {r.repo}
                 </Ext>
                 <span className="text-[0.75rem] text-muted-foreground">

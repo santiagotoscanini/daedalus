@@ -12,5 +12,6 @@ export const NARROW_HIDE = 'max-[50rem]:hidden'
    a fixed label column, left-aligned, instead of being pushed to the far edge
    where the eye has to cross the whole board to pair it with its label. A
    wrapper over `Facts list`, which right-aligns for the narrow boards. */
+// Below ~30rem of board a label column does not fit, so label stacks over value.
 export const LEFT_FACTS =
-  '[&_dl>div]:justify-start [&_dl>div]:flex-nowrap [&_dt]:w-[12.5rem] [&_dd]:min-w-0 [&_dd]:text-left'
+  '[&_dl>div]:justify-start [&_dl>div]:flex-nowrap [&_dt]:w-[12.5rem] [&_dd]:min-w-0 [&_dd]:text-left [&_dd]:[overflow-wrap:anywhere] @max-[30rem]/board:[&_dl>div]:flex-col @max-[30rem]/board:[&_dl>div]:items-start @max-[30rem]/board:[&_dl>div]:gap-0.5 @max-[30rem]/board:[&_dt]:w-auto'

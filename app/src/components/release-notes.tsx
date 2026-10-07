@@ -26,7 +26,7 @@ import { Board, Chip } from './viz'
 // a card, and a box in a card is one frame too many.
 const REL = 'group border-hairline border-t first:border-t-0'
 const REL_SUMMARY = cn(
-  'flex min-w-0 cursor-pointer list-none items-baseline gap-2.5 px-0.5 py-2.5',
+  'flex min-w-0 cursor-pointer list-none flex-wrap items-baseline gap-x-2.5 gap-y-1 px-0.5 py-2.5',
   'hover:bg-foreground/[0.025] [&::-webkit-details-marker]:hidden',
   "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
   'group-open:before:rotate-90',
@@ -44,7 +44,7 @@ const CHAIN_LAST =
   'border-[color-mix(in_oklch,var(--warning)_45%,transparent)] text-foreground after:content-none'
 
 const COMMIT =
-  'grid min-w-0 grid-cols-[4.5rem_1fr_auto] items-baseline gap-2.5 border-hairline border-t px-0.5 py-2 text-[0.8rem] first:border-t-0'
+  'grid min-w-0 grid-cols-[4.5rem_1fr_auto] items-baseline gap-2.5 max-[40rem]:grid-cols-[1fr_auto] border-hairline border-t px-0.5 py-2 text-[0.8rem] first:border-t-0'
 
 export type Release = {
   version: string
@@ -80,7 +80,7 @@ export function ReleaseNotes({
             <span className="text-[0.75rem] whitespace-nowrap text-muted-foreground tabular-nums">
               {rel.date}
             </span>
-            <span className="ml-auto truncate text-[0.72rem] text-muted-foreground">
+            <span className="ml-auto truncate text-[0.72rem] text-muted-foreground max-[40rem]:ml-0 max-[40rem]:basis-full max-[40rem]:whitespace-normal! max-[40rem]:pl-4">
               {rel.sections.map((s) => s.name).join(' · ')}
             </span>
           </summary>
@@ -203,7 +203,9 @@ export function Changelog({
               >
                 {c.sha}
               </a>
-              <span className="truncate text-foreground">{c.subject}</span>
+              <span className="truncate text-foreground max-[40rem]:col-span-2 max-[40rem]:row-start-2 max-[40rem]:whitespace-normal!">
+                {c.subject}
+              </span>
               <span className="text-[0.72rem] whitespace-nowrap text-muted-foreground tabular-nums">
                 {c.date}
               </span>

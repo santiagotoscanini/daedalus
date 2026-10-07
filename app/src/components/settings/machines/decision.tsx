@@ -68,7 +68,7 @@ export function Decision({ m }: { m: Machine }) {
         )}
         {id !== null && (
           <span
-            className={cn(MONO, 'text-[0.72rem] text-muted-foreground')}
+            className={cn(MONO, 'text-[0.75rem] text-muted-foreground')}
             title="sha256 of the machine's public key, the first 16 hex digits: what the box trusts"
           >
             key {id}
