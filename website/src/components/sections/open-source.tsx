@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { GitHubLogo } from "~/components/icons";
 import { Labyrinth } from "~/components/labyrinth";
 import { Reveal } from "~/components/reveal";
 
@@ -47,13 +46,13 @@ export function OpenSource() {
               template. This one is for the visitor who wants to see how it
               is built before deciding to. */}
           <p className="mx-auto mt-5 max-w-lg text-pretty text-[15px] leading-relaxed text-muted">
-            Read the code. Every module, the control plane and this site are one repository.
+            The NixOS modules a host imports, the control plane they run, the template a new host
+            starts from, and this site. One repository.
           </p>
         </Reveal>
         <Reveal delay={0.08}>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <a href={REPO} className="btn btn-primary h-11 px-5">
-              <GitHubLogo size={15} />
               View on GitHub
             </a>
             <Link to="/docs" className="btn btn-ghost h-11 px-5">
@@ -83,17 +82,6 @@ export function OpenSource() {
               {copied ? "copied" : "copy"}
             </button>
           </div>
-        </Reveal>
-        {/* The scope note, kept honest as the scope moved: the modules are in
-            the repository since 2026-09-21 and a host imports them, but no
-            release is tagged yet, so what a clone gets is main. Same quiet
-            register as the docs page's closing line. */}
-        <Reveal delay={0.2}>
-          <p className="mx-auto mt-6 max-w-lg text-pretty text-[12.5px] leading-relaxed text-dim">
-            What's in there: the NixOS modules a host imports, the control plane they run, the
-            template a new host starts from, and this site. Pre-release — there is no tagged
-            version yet, so a clone follows main.
-          </p>
         </Reveal>
       </div>
     </section>

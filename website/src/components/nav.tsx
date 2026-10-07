@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { GitHubLogo } from "~/components/icons";
 import { Logo } from "~/components/logo";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
@@ -10,9 +9,9 @@ const REPO = "https://github.com/santiagotoscanini/daedalus";
 // nothing and goes nowhere.
 const links = [
   { label: "The idea", hash: "cloud" },
-  { label: "The pages", hash: "features" },
   { label: "How it works", hash: "loop" },
   { label: "Get it", hash: "get" },
+  { label: "Questions", hash: "faq" },
 ];
 
 /** Slim full-width header: invisible over the hero, gaining a hairline
@@ -54,9 +53,8 @@ export function Nav() {
         </div>
 
         {/* Docs is the one nav link that survives to phone widths, and it has
-            to: the section links above are hidden below md and the primary
-            button below sm, so without it the mobile header offers no
-            navigation at all and the site's other page is reachable only from
+            to: the section links above are hidden below md, so without it
+            the mobile header offers no navigation within the site and the site's other page is reachable only from
             the hero and the footer. `ml-auto` here, dropped at md where the
             section links already took it. */}
         <Link
@@ -67,14 +65,7 @@ export function Nav() {
         </Link>
 
         <div className="ml-2 flex items-center gap-1.5 md:ml-4">
-          <a
-            href={REPO}
-            aria-label="daedalus on GitHub"
-            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-muted transition-colors hover:text-fg"
-          >
-            <GitHubLogo size={16} />
-          </a>
-          <a href={REPO} className="btn btn-primary hidden h-9 px-3.5 text-[13px] sm:inline-flex">
+          <a href={REPO} className="btn btn-primary h-9 px-3.5 text-[13px]">
             View on GitHub
           </a>
         </div>

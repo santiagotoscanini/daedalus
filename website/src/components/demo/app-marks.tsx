@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
  * Hand-copied from each app's own icon, like the rest of `demo/` — the
  * landing is a static build with no network, so it cannot fetch what the
  * real UI fetches. Sources: `stacks/pocket-id/assets/logos/<name>.svg` for
- * six of them, `public/icon.svg` in the chismed repo for the seventh. Resync
+ * six of them, `public/icon.svg` in the chismed and lintel repos for the rest. Resync
  * by hand if a mark is redrawn.
  *
  * Three deliberate departures from the source files:
@@ -199,6 +199,21 @@ const MARKS: Record<string, MarkSpec> = {
     ),
   },
 
+  lintel: {
+    viewBox: "0 0 32 32",
+    body: (
+      <>
+        <rect width="32" height="32" rx="6" fill="#0A2342" />
+        <g fill="none" stroke="#F2EFE6">
+          <rect x="4" y="6.5" width="24" height="4" fill="#F2EFE6" stroke="none" />
+          <rect x="4.75" y="10.5" width="4.5" height="15.75" strokeWidth="1.5" />
+          <rect x="22.75" y="10.5" width="4.5" height="15.75" strokeWidth="1.5" />
+          <path d="M11.5 18.5h9" strokeWidth="1.25" />
+          <path d="M13.5 16.5l-2 2 2 2M18.5 16.5l2 2-2 2" strokeWidth="1.25" />
+        </g>
+      </>
+    ),
+  },
   voyra: {
     viewBox: "0 0 64 64",
     body: (

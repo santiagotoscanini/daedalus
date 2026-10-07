@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { BrandMark } from "~/components/brand-marks";
 
-/** The hero's rolling headline: the services this box replaces, sliding
- * up one at a time under their own mark.
+/** The hero's rolling headline: the services the engine stands in for,
+ * sliding up one at a time.
  *
- * Every name here has something real behind it — apps platform, pocket-id,
- * the prometheus/grafana/loki stack, immich, nextcloud, jellyfin, and the
- * lemonade/litellm/open-webui chain. Nothing is listed that the box does
- * not actually run.
+ * Only what the engine itself provides is listed: push-to-deploy, the
+ * identity provider, monitoring and logs, the registry, the database. The
+ * apps a box happens to run (a media server, a photo library) are not the
+ * engine, so they are not here. Names only, never their logos.
  *
  * Three things this has to get right:
  *
@@ -18,23 +17,9 @@ import { BrandMark } from "~/components/brand-marks";
  *    as churn. The roll is aria-hidden and the h1 carries one static
  *    sentence naming every vendor, so it reads once and says everything.
  *  - **The line never reflows.** The roll is its own centered block, so a
- *    long name like "Google Photos" changes nothing above or below it.
- *    That is why the width is free to vary and needs no animation. */
+ *    long name changes nothing above or below it. */
 
-const VENDORS = [
-  "Vercel",
-  "AWS",
-  "GCP",
-  "Heroku",
-  "Auth0",
-  "Datadog",
-  "Google Photos",
-  "iCloud",
-  "Dropbox",
-  "Netflix",
-  "ChatGPT",
-  "Claude",
-];
+const VENDORS = ["Vercel", "Heroku", "Auth0", "Datadog", "Docker Hub", "Supabase"];
 
 const HOLD_MS = 1900;
 
@@ -108,13 +93,11 @@ export function VendorRoll() {
       >
         {VENDORS.map((v) => (
           <span key={v} className="vendor-roll-item">
-            <BrandMark name={v} className="vendor-roll-mark" />
             <span className="text-ember-word">{v}</span>
           </span>
         ))}
         {/* The clone. Same content as the first item, by construction. */}
         <span key="__clone" className="vendor-roll-item">
-          <BrandMark name={VENDORS[0] ?? ""} className="vendor-roll-mark" />
           <span className="text-ember-word">{VENDORS[0]}</span>
         </span>
       </span>

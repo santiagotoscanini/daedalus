@@ -1,13 +1,5 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
-import {
-  AppleLogo,
-  CheckIcon,
-  CopyIcon,
-  DownloadIcon,
-  GitHubLogo,
-  LinuxLogo,
-  WindowsLogo,
-} from "~/components/icons";
+import { CheckIcon, CopyIcon, DownloadIcon } from "~/components/icons";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 /** The newest release's disk image, by the fixed name every release gives
@@ -35,7 +27,6 @@ type OsId = "windows" | "macos" | "linux";
 const OSES: {
   id: OsId;
   label: string;
-  Icon: typeof WindowsLogo;
   download?: string;
   commandLabel?: string;
   command: string;
@@ -45,7 +36,6 @@ const OSES: {
   {
     id: "windows",
     label: "Windows",
-    Icon: WindowsLogo,
     command: INSTALL_WINDOWS,
     note: "In PowerShell as administrator.",
     after: "When it finishes, it asks for your box's key, which Settings › Machines shows.",
@@ -53,7 +43,6 @@ const OSES: {
   {
     id: "macos",
     label: "macOS",
-    Icon: AppleLogo,
     download: MAC_DMG,
     commandLabel: "Headless or over ssh, the same install from Terminal:",
     command: INSTALL_UNIX,
@@ -64,7 +53,6 @@ const OSES: {
   {
     id: "linux",
     label: "Linux",
-    Icon: LinuxLogo,
     command: INSTALL_UNIX,
     note: "Any systemd distribution (systemd 240+), x86_64 or aarch64. Tray icon on x86_64 desktops.",
     after: "When it finishes, it asks for your box's key, which Settings › Machines shows.",
@@ -205,7 +193,6 @@ export function AgentInstall() {
                   : "text-muted hover:bg-white/[0.03] hover:text-fg"
               }`}
             >
-              <o.Icon size={15} className="shrink-0" />
               {o.label}
             </button>
           );
@@ -246,7 +233,6 @@ export function AgentInstall() {
           </button>
         )}
         <a href={AGENT_RELEASES} className="btn btn-ghost h-11 grow px-5 sm:grow-0">
-          <GitHubLogo size={15} />
           All releases
         </a>
       </div>

@@ -1,215 +1,216 @@
-import { APP, AppTile, Chip, Dot, PageHead, Shell, Spark, Tabs, type Tone } from "../chrome";
+import { APP, AppTile, Btn, PageHead, Shell, Spark, Table, Tabs, Tr, alpha } from "../chrome";
 
-/** The flagship screen: the fleet as a list — status, hostname, exposure,
- * traffic — with the Apply bar pinned to the bottom edge. */
+/** The flagship screen: Apps as the app now draws it, one table of every
+ * app on the box with its address, exposure (Off, Lab, Public), traffic and
+ * last deploy, the control plane in its own row group, and the Apply bar
+ * floating over the foot with one change queued. Mirrors
+ * app/src/routes/apps.index.tsx. */
+
+const COLS = "minmax(0,2.1fr) minmax(0,1.45fr) 78px 104px 74px 70px";
 
 interface AppRow {
   name: string;
   desc: string;
-  host: string;
-  tone: Tone;
-  exposure: "external" | "internal";
-  spark: number[];
+  sub: string;
+  stage: "Public" | "Lab";
   rpm: string;
-  chips?: Array<{ tone: Tone; label: string }>;
+  spark: number[];
+  deployed: string;
 }
 
 const ROWS: AppRow[] = [
   {
     name: "anansi",
     desc: "Task-tracking experiment",
-    host: "anansi.toscanini.me",
-    tone: "ok",
-    exposure: "external",
-    spark: [2, 3, 2, 5, 4, 6, 3, 4, 5, 4],
-    rpm: "2.4 rpm",
+    sub: "anansi",
+    stage: "Public",
+    rpm: "23.4",
+    spark: [0, 0, 0, 0, 0, 0, 0, 0, 1, 6],
+    deployed: "8h ago",
   },
   {
     name: "argus",
     desc: "Internet exposure catalogue",
-    host: "argus.toscanini.me",
-    tone: "bad",
-    exposure: "internal",
-    spark: [3, 3, 4, 2, 6, 1, 1, 1, 1, 1],
-    rpm: "0.3 rpm",
+    sub: "argus",
+    stage: "Lab",
+    rpm: "1.1",
+    spark: [0, 5, 6, 0, 0, 0, 0, 0, 0, 0],
+    deployed: "2d ago",
   },
   {
     name: "chismed",
     desc: "WhatsApp chat analyzer",
-    host: "chismed.toscanini.me",
-    tone: "ok",
-    exposure: "external",
-    spark: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-    rpm: "0.1 rpm",
+    sub: "chismed",
+    stage: "Public",
+    rpm: "6.5",
+    spark: [0, 1, 0, 0, 0, 0, 0, 0, 0, 5],
+    deployed: "2d ago",
   },
   {
     name: "hermes",
-    desc: "RSS reader with AI TL;DRs and a Hacker News lens",
-    host: "hermes.toscanini.me",
-    tone: "ok",
-    exposure: "external",
-    spark: [1, 4, 2, 5, 3, 6, 2, 5, 3, 4],
-    rpm: "1.8 rpm",
-    chips: [{ tone: "warn", label: "unapplied" }],
+    desc: "Smart reader: RSS with AI TL;DRs and a Hacker News lens",
+    sub: "hermes",
+    stage: "Public",
+    rpm: "12.0",
+    spark: [0, 0, 0, 0, 0, 0, 0, 0, 0, 6],
+    deployed: "8h ago",
   },
   {
     name: "iris",
-    desc: "Retargetable QR codes and a linktree",
-    host: "iris.toscanini.me",
-    tone: "ok",
-    exposure: "external",
-    spark: [2, 2, 3, 5, 6, 5, 4, 3, 3, 2],
-    rpm: "0.9 rpm",
+    desc: "One QR code, forever: retargetable QR codes and a linktree",
+    sub: "iris",
+    stage: "Public",
+    rpm: "17.5",
+    spark: [0, 0, 0, 0, 0, 0, 0, 0, 0, 6],
+    deployed: "7h ago",
+  },
+  {
+    name: "lintel",
+    desc: "Scan a room with an iPhone and walk through it in the browser",
+    sub: "lintel",
+    stage: "Public",
+    rpm: "23.8",
+    spark: [0, 0, 0, 0, 0, 0, 0, 0, 0, 6],
+    deployed: "8h ago",
   },
   {
     name: "voyra",
     desc: "Trips, shared and remembered",
-    host: "voyra.toscanini.me",
-    tone: "ok",
-    exposure: "external",
-    spark: [3, 2, 3, 2, 4, 3, 2, 3, 4, 3],
-    rpm: "0.5 rpm",
+    sub: "voyra",
+    stage: "Public",
+    rpm: "12.8",
+    spark: [0, 0, 0, 0, 0, 0, 0, 0, 1, 6],
+    deployed: "8h ago",
   },
 ];
 
-function Row({ row }: { row: AppRow }) {
+function Flask() {
   return (
-    <div
-      className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto_auto_auto] items-center gap-[16px] border-t px-[16px] py-[11px]"
-      style={{ borderColor: APP.hairline }}
-    >
-      <Dot tone={row.tone} pulse={row.tone === "bad"} />
-      <AppTile name={row.name} />
-      <span className="flex min-w-0 flex-col">
-        <span className="flex items-center gap-[8px]">
-          <span className="text-[14.5px] font-semibold" style={{ color: APP.text }}>
+    <svg width={12} height={12} viewBox="0 0 24 24" aria-hidden className="shrink-0">
+      <path
+        d="M9 3.5 H15 M10 3.5 V9.5 L4.8 18.6 A1.3 1.3 0 0 0 6 20.5 H18 A1.3 1.3 0 0 0 19.2 18.6 L14 9.5 V3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function Row({ row, first }: { row: AppRow; first?: boolean }) {
+  return (
+    <Tr cols={COLS} first={first}>
+      <span className="flex min-w-0 items-center gap-[12px]">
+        <AppTile name={row.name} size={28} />
+        <span className="flex min-w-0 flex-col">
+          <span className="text-[13.5px] font-semibold" style={{ color: APP.text }}>
             {row.name}
           </span>
-          {row.chips?.map((c) => (
-            <Chip key={c.label} tone={c.tone}>
-              {c.label}
-            </Chip>
-          ))}
-        </span>
-        <span className="truncate text-[12px]" style={{ color: APP.dim }}>
-          {row.desc}
+          <span className="truncate text-[12px]" style={{ color: APP.subdued }}>
+            {row.desc}
+          </span>
         </span>
       </span>
-      <code className="font-mono text-[12.5px]" style={{ color: APP.muted }}>
-        {row.host}
+      <code className="truncate font-mono text-[11.5px]" style={{ color: APP.text }}>
+        {row.sub}
+        <span style={{ color: APP.muted }}>.toscanini.me</span>
       </code>
-      <Chip tone={row.exposure === "external" ? "ok" : "info"}>{row.exposure}</Chip>
-      <span className="flex items-center gap-[10px]">
-        <Spark pts={row.spark} tone={row.tone === "bad" ? "bad" : "muted"} />
-        <span className="w-[52px] text-right text-[11.5px]" style={{ color: APP.dim }}>
-          {row.rpm}
-        </span>
+      <span className="flex items-center gap-[6px] text-[12.5px]" style={{ color: APP.subdued }}>
+        {row.stage === "Lab" ? <Flask /> : null}
+        {row.stage}
       </span>
-    </div>
+      <span className="flex items-center gap-[8px] text-[12.5px]" style={{ color: APP.text }}>
+        <span className="w-[30px] text-right">{row.rpm}</span>
+        <Spark pts={row.spark} />
+      </span>
+      <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+        {row.deployed}
+      </span>
+      <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+        Running
+      </span>
+    </Tr>
   );
 }
 
 export function AppsView() {
   return (
     <Shell active="apps">
-      <PageHead
-        title="Apps"
-        lede="What this box runs of its own, what lives on someone else's infrastructure, and the two registries everything here is built out of."
-      />
-      {/* capitalize={false}: these three are the app's own written labels
-          (src/routes/apps.index.tsx), and title-casing them prints
-          "Npm Packages". */}
-      <Tabs
-        items={[{ label: "Apps" }, { label: "Container registry" }, { label: "npm packages" }]}
-        active="Apps"
-        capitalize={false}
-      />
+      <PageHead title="Apps" action={<Btn>Add an app</Btn>} />
+      <Tabs items={["Overview", "Container registry", "npm packages", "Builder"]} active="Overview" />
 
-      {/* Tallies + primary action */}
-      <div className="mt-[14px] flex items-center gap-[24px] text-[13px]" style={{ color: APP.muted }}>
-        <span className="flex items-center gap-[8px]">
-          <Dot tone="ok" />
-          <b style={{ color: APP.text, fontWeight: 600 }}>5</b> running
-        </span>
-        <span className="flex items-center gap-[8px]">
-          <Dot tone="bad" />
-          <b style={{ color: APP.text, fontWeight: 600 }}>1</b> needs attention
-        </span>
-        <span className="flex items-center gap-[8px]">
-          <Dot tone="muted" />
-          <b style={{ color: APP.text, fontWeight: 600 }}>0</b> stopped
+      {/* Filters */}
+      <div className="mt-[16px] flex items-center gap-[8px] text-[12.5px]">
+        <span
+          className="flex w-[250px] items-center gap-[8px] rounded-[8px] border px-[11px] py-[6px]"
+          style={{ borderColor: APP.hairline, background: APP.surface, color: APP.muted }}
+        >
+          <svg width={12} height={12} viewBox="0 0 24 24" aria-hidden>
+            <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M16 16 L20 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          Search apps
         </span>
         <span
-          className="ml-auto rounded-[8px] px-[13px] py-[6px] text-[12.5px] font-semibold"
-          style={{ background: APP.accent, color: "#1a0d08" }}
+          className="rounded-[8px] border px-[10px] py-[6px] font-semibold"
+          style={{ borderColor: APP.border, background: APP.panel2, color: APP.text }}
         >
-          Add an app
+          All <span style={{ color: APP.subdued, fontWeight: 400 }}>&ensp;8</span>
+        </span>
+        <span
+          className="rounded-[8px] border px-[11px] py-[6px]"
+          style={{ borderColor: APP.hairline, color: APP.subdued }}
+        >
+          Any exposure&ensp;⌄
         </span>
       </div>
 
-      {/* Section head */}
-      <div className="mt-[16px] flex items-baseline gap-[10px]">
-        <p className="text-[14px] font-semibold" style={{ color: APP.text }}>
-          Daedalus
-        </p>
-        <span className="text-[12px]" style={{ color: APP.dim }}>
-          deployed and watched on this box
-        </span>
+      <div className="mt-[14px]">
+        <Table cols={COLS} head={["App", "Address", "Exposure", "Req/min", "Deployed", "Status"]}>
+          {ROWS.map((r, i) => (
+            <Row key={r.name} row={r} first={i === 0} />
+          ))}
+          <div
+            className="flex items-baseline gap-[10px] border-t px-[18px] py-[7px] text-[12px]"
+            style={{ borderColor: APP.hairline, background: APP.rail }}
+          >
+            <span className="font-semibold" style={{ color: APP.text }}>
+              Control plane
+            </span>
+            <span style={{ color: APP.subdued }}>Declared in Nix</span>
+          </div>
+          <Row
+            row={{
+              name: "daedalus",
+              desc: "The control plane",
+              sub: "daedalus-app",
+              stage: "Lab",
+              rpm: "38.1",
+              spark: [0, 0, 0, 0, 0, 0, 0, 0, 2, 6],
+              deployed: "",
+            }}
+          />
+        </Table>
       </div>
 
-      {/* The list — one bordered container, hairline-divided rows */}
+      {/* The Apply bar: a glass dock over the page's foot, its edge in the
+          brand because something is waiting (app/src/components/apply-bar.tsx). */}
       <div
-        className="mt-[9px] overflow-hidden rounded-[12px] border [&>div:first-child]:border-t-0"
-        style={{ background: APP.panel, borderColor: APP.hairline }}
-      >
-        {ROWS.map((r) => (
-          <Row key={r.name} row={r} />
-        ))}
-      </div>
-
-      {/* Control plane */}
-      <div className="mt-[14px] flex items-baseline gap-[10px]">
-        <p className="text-[14px] font-semibold" style={{ color: APP.text }}>
-          Control plane
-        </p>
-        <span className="text-[12px]" style={{ color: APP.dim }}>
-          declared in Nix, not editable here
-        </span>
-      </div>
-      <div
-        className="mt-[9px] overflow-hidden rounded-[12px] border [&>div:first-child]:border-t-0"
-        style={{ background: APP.panel, borderColor: APP.hairline }}
-      >
-        <Row
-          row={{
-            name: "daedalus",
-            desc: "S2 control plane",
-            host: "daedalus-app.toscanini.me",
-            tone: "ok",
-            exposure: "internal",
-            spark: [2, 2, 3, 2, 2, 3, 2, 2, 2, 3],
-            rpm: "0.8 rpm",
-            chips: [{ tone: "muted", label: "nix" }],
-          }}
-        />
-      </div>
-
-      {/* The Apply bar — pinned to the window's bottom edge */}
-      <div
-        className="absolute inset-x-0 bottom-0 flex items-center gap-[14px] border-t px-[34px] py-[13px] text-[13px]"
+        className="absolute inset-x-[22px] bottom-[16px] flex items-center gap-[12px] rounded-[16px] border px-[18px] py-[11px] text-[13px]"
         style={{
-          background: "rgba(17,17,19,0.94)",
-          borderColor: APP.accentDim,
-          color: APP.muted,
+          background: alpha("oklch(0.245 0.004 270)", 88),
+          borderColor: alpha(APP.accent, 35),
+          boxShadow: `0 18px 50px -12px rgba(0,0,0,0.7), 0 0 40px -14px ${APP.accent}`,
+          backdropFilter: "blur(20px)",
         }}
       >
         <b style={{ color: APP.text, fontWeight: 600 }}>1 app changed</b>
-        <span>hermes (litellm key · stage)</span>
-        <span
-          className="ml-auto rounded-[8px] px-[16px] py-[6px] text-[12.5px] font-semibold"
-          style={{ background: APP.accent, color: "#1a0d08" }}
-        >
-          Apply
+        <span style={{ color: APP.muted }}>lintel (stage)</span>
+        <span className="ml-auto flex gap-[8px]">
+          <Btn ghost>Discard</Btn>
+          <Btn>Apply</Btn>
         </span>
       </div>
     </Shell>

@@ -1,5 +1,4 @@
 import { type ReactNode, useState } from "react";
-import { GitHubLogo } from "~/components/icons";
 import { Reveal } from "~/components/reveal";
 import { AgentInstall } from "~/components/sections/agent-install";
 import { SectionHeading } from "~/components/ui/section-heading";
@@ -7,26 +6,50 @@ import { SectionHeading } from "~/components/ui/section-heading";
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 const INIT = "nix flake init -t github:santiagotoscanini/daedalus#config";
 
-/** The two downloads: the engine for the box, the agent for the machine the
+/** The catalog (nix/README.md, "The catalog"): the spine example-host
+ * switches on, with stirling-pdf as its one example leaf, and the leaves a
+ * host turns on itself. */
+const CATALOG = [
+  {
+    label: "On in the template",
+    ids: [
+      "apps",
+      "app-db",
+      "cloudflared",
+      "gatus",
+      "healthchecks",
+      "logging",
+      "monitoring",
+      "pihole",
+      "pocket-id",
+      "registry",
+      "traefik",
+      "stirling-pdf",
+    ],
+  },
+  {
+    label: "Yours to switch on",
+    ids: ["factorio", "grocy", "intel-gpu-exporter", "metube", "myspeed", "verdaccio", "wg-easy"],
+  },
+];
+
+/** The two pieces: the engine for the box, the agent for the machines the
  * box does not run. Two cards on one row. The engine's is one line and a
- * button to where it lives; the agent's picks a system first, then copies
- * that system's line (agent-install.tsx). The state tag says how far each
- * has come — the engine runs a box in production, the agent is early — so
- * the page never dresses one as the other. */
+ * link to where it lives; the agent's picks a system first, then copies that
+ * system's line (agent-install.tsx). */
 export function GetIt() {
   return (
     <section id="get" className="scroll-mt-28 py-32">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeading
           kicker="Get it"
-          title="Two machines, two pieces."
-          sub="The engine runs the box. The agent runs the other machines the box only talks to — a GPU box serving models, a Mac on the desk."
+          title="Two pieces."
+          sub="The engine runs the box. The agent runs on the other machines you want it to see, a desktop with a GPU or a laptop, and links each one back to it."
         />
         <div className="mx-auto mt-16 grid max-w-4xl gap-5 md:grid-cols-2">
           <Reveal>
             <Card
-              platform="Linux · NixOS"
-              state="ships"
+              platform="NixOS"
               title="The engine"
               body="A flake input. One import gives a NixOS host the control plane, the catalog of modules it can switch on, and a configuration to start from."
             >
@@ -34,10 +57,23 @@ export function GetIt() {
               <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">
                 In an empty directory; then fill in the host and rebuild.
               </p>
+              {/* The catalog as nix/README.md lists it: what example-host switches
+                  on, and the leaves beside it. Resync when a module moves in. */}
+              <dl className="mt-7 grid gap-4 border-t border-hairline pt-6">
+                {CATALOG.map((c) => (
+                  <div key={c.label}>
+                    <dt className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-dim">
+                      {c.label}
+                    </dt>
+                    <dd className="mt-2 font-mono text-[12px] leading-[1.9] text-muted">
+                      {c.ids.join(" · ")}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
               <div className="mt-auto flex flex-wrap gap-3 pt-7">
                 <a href={REPO} className="btn btn-primary h-11 px-5">
-                  <GitHubLogo size={15} />
-                  Get it on GitHub
+                  The engine on GitHub
                 </a>
               </div>
             </Card>
@@ -45,9 +81,8 @@ export function GetIt() {
           <Reveal delay={0.08}>
             <Card
               platform="Windows · macOS · Linux"
-              state="early"
               title="The agent"
-              body="A service for the machines the box does not run. It keeps them awake, shows itself in the tray or the menu bar, runs Claude Code's remote control there, and updates itself from each new release — one install, then never a walk to it again."
+              body="One outbound TLS link to the box per machine, each side pinning the other's key, approved on Settings › Machines before anything is sent to it. It reports the machine, keeps it awake, runs Claude Code's remote control, installs and runs a local model server, and updates itself from signed releases."
             >
               <AgentInstall />
             </Card>
@@ -60,20 +95,18 @@ export function GetIt() {
 
 function Card({
   platform,
-  state,
   title,
   body,
   children,
 }: {
   platform: string;
-  state: "ships" | "early";
   title: string;
   body: string;
   children: ReactNode;
 }) {
   return (
     <div className="card flex h-full min-w-0 flex-col p-7">
-      <Kicker platform={platform} state={state} />
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-2">{platform}</p>
       <h3 className="mt-4 text-[1.35rem] font-semibold leading-snug tracking-[-0.01em]">
         {title}
       </h3>
@@ -115,18 +148,3 @@ function Command({ text }: { text: string }) {
   );
 }
 
-/** The platform and how far it has come, on one line above the card's title. */
-function Kicker({ platform, state }: { platform: string; state: "ships" | "early" }) {
-  const color = state === "ships" ? "#4ea87a" : "#d9a441";
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-2">{platform}</p>
-      <span
-        className="inline-flex rounded-full border px-2 py-px font-mono text-[9.5px] uppercase tracking-[0.1em]"
-        style={{ color, borderColor: `${color}59` }}
-      >
-        {state}
-      </span>
-    </div>
-  );
-}

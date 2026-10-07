@@ -1,6 +1,9 @@
-@import "tailwindcss";
-/* Tailwind v4 scans outward from THIS file's directory — without explicit
- * @source directives the build succeeds and emits an empty utility layer. */
+@import "tailwindcss" source(none);
+/* source(none): no automatic detection, only the two directories below.
+ * Detection honours .gitignore, so a tree without the repo's ignore file (a
+ * container mounting website/ alone) scanned the client build's own output
+ * during the server pass, and the prerendered page linked a stylesheet the
+ * client never emitted. */
 @source "./routes";
 @source "./components";
 
@@ -295,41 +298,107 @@ html {
   background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(226, 121, 90, 0.18), transparent 70%);
 }
 
-/* The commit thread in the apply-flow section: one unbroken vertical
- * hairline with an ember pulse walking it top to bottom. */
-.thread-rail {
-  width: 1px;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    rgba(255, 255, 255, 0.1) 8%,
-    rgba(255, 255, 255, 0.1) 92%,
-    transparent
-  );
-  overflow: hidden;
+/* The hero labyrinth's lower courses rise in after the top one has drawn
+ * itself: from nothing to their own inline opacity. */
+.lab3d-course {
+  animation: lab-course 0.9s ease-out both;
 }
-.thread-rail::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 120px;
-  background: linear-gradient(180deg, transparent, rgba(226, 121, 90, 0.9), transparent);
-  animation: thread-pulse 6s linear infinite;
-}
-@keyframes thread-pulse {
+@keyframes lab-course {
   from {
-    top: -120px;
-  }
-  to {
-    top: 100%;
+    opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .thread-rail::after {
+  .lab3d-course {
     animation: none;
-    opacity: 0;
   }
+}
+
+/* The receipt's strike: an ember hairline drawn through each rented
+ * service as its row scrolls in. The static page ships it drawn; only a row
+ * the reveal hid (.reveal-pre) starts undrawn. */
+.strike {
+  position: relative;
+  display: inline-block;
+}
+.strike::after {
+  content: "";
+  position: absolute;
+  left: -0.2em;
+  right: -0.2em;
+  top: 54%;
+  height: 1px;
+  background: var(--color-accent);
+  transform-origin: left center;
+  transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1) 0.35s;
+}
+.reveal-pre .strike::after {
+  transform: scaleX(0);
+}
+.reveal-pre.reveal-in .strike::after {
+  transform: scaleX(1);
+}
+
+/* The Apply bar at landing scale: glass over the page, its edge in ember
+ * while a change waits or runs, as the app draws it. */
+.apply-bar {
+  background: rgba(22, 22, 26, 0.72);
+  border-color: rgba(226, 121, 90, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 24px 60px -12px rgba(0, 0, 0, 0.7),
+    0 0 40px -14px rgba(226, 121, 90, 0.8);
+  backdrop-filter: blur(20px) saturate(1.5);
+  transition:
+    border-color 0.4s ease,
+    box-shadow 0.4s ease;
+}
+.apply-bar.is-applied {
+  border-color: rgba(78, 168, 122, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 24px 60px -12px rgba(0, 0, 0, 0.7),
+    0 0 40px -16px rgba(78, 168, 122, 0.7);
+}
+
+/* The phases under it: the one running is lit, the ones passed are struck
+ * through, the ones ahead wait in the dim ink. `still` is the prerendered
+ * and reduced-motion state: all legible, none struck. */
+.phase .phase-name,
+.phase .phase-body {
+  transition:
+    color 0.35s ease,
+    opacity 0.35s ease;
+}
+.phase[data-state="still"] .phase-name {
+  color: var(--color-accent);
+}
+.phase[data-state="still"] .phase-body {
+  color: var(--color-muted);
+}
+.phase[data-state="now"] .phase-name {
+  color: var(--color-accent);
+}
+.phase[data-state="now"] .phase-body {
+  color: var(--color-fg);
+}
+.phase[data-state="done"] .phase-name {
+  color: var(--color-dim);
+  text-decoration: line-through;
+  text-decoration-color: rgba(226, 121, 90, 0.7);
+}
+.phase[data-state="done"] .phase-body {
+  color: var(--color-dim);
+}
+.phase[data-state="next"] .phase-name,
+.phase[data-state="next"] .phase-body {
+  color: var(--color-dim);
+  opacity: 0.55;
+}
+
+/* The FAQ's disclosure marker is the + in the summary, not the browser's. */
+.faq summary::-webkit-details-marker {
+  display: none;
 }
 
 /* ---------------------------------------------------------------- *
@@ -487,12 +556,6 @@ html {
   gap: 0.26em;
   line-height: 1;
   white-space: nowrap;
-}
-.vendor-roll-mark {
-  height: 0.74em;
-  width: 0.74em;
-  flex-shrink: 0;
-  color: #f5b8a2;
 }
 /* Reduced motion holds vendor 0 in `vendor-roll.tsx`, so the track never
  * moves; drop the transition too rather than leave it armed. */

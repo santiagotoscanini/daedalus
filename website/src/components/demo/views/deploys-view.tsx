@@ -1,185 +1,197 @@
-import { APP, AppTile, Board, Chip, Shell, TONE, Tabs, type Tone } from "../chrome";
+import { APP, AppTile, Btn, Chip, SectionHead, Shell, Table, Tr } from "../chrome";
 
-/** App detail → deployments: a build running on the box, and the
- * timeline of runs where the digest actually moved. */
+/** App detail → Deployments, as the app now draws it: the app's head with
+ * the exposure ladder (Off, Lab, Public), the builds the box ran for it
+ * (one in flight, at the repo's own checks), and the deploys where the
+ * image digest actually moved. Mirrors app/src/routes/apps.$name.tsx. */
 
-const HISTORY: Array<{
+const BUILD_COLS = "110px 90px minmax(0,1fr) 70px 80px";
+const DEPLOY_COLS = "minmax(0,1.3fr) 80px minmax(0,1.5fr) 56px 120px 46px";
+
+const BUILDS: Array<{ state: string; commit: string; by: string; took: string; at: string }> = [
+  { state: "succeeded", commit: "4600f0b", by: "push", took: "1m 4s", at: "10h ago" },
+  { state: "succeeded", commit: "ed67d03", by: "push", took: "32.8 s", at: "2d ago" },
+  { state: "succeeded", commit: "7fe05fb", by: "push", took: "37.4 s", at: "5d ago" },
+  { state: "cancelled", commit: "ebcf9d2", by: "push", took: "10.2 s", at: "5d ago" },
+  { state: "succeeded", commit: "d3ee838", by: "push", took: "57.0 s", at: "13d ago" },
+];
+
+const DEPLOYS: Array<{
   rev: string;
-  sub: string;
-  chip: { tone: Tone; label: string };
   current?: boolean;
+  result: string;
+  at: string;
+  took: string;
+  digest: string;
 }> = [
   {
-    rev: "8f2c1d0",
-    sub: "2 hours ago · 1m 42s · a3f91c8e2b04 · HTTP 200",
-    chip: { tone: "warn", label: "current" },
+    rev: "4600f0b0",
     current: true,
+    result: "success",
+    at: "2026-10-06 18:10 · 8h ago",
+    took: "3.0 s",
+    digest: "9ef9a8964c67",
   },
   {
-    rev: "41ba9c2",
-    sub: "yesterday · 1m 05s · 7d2e4b91c033 · HTTP 200",
-    chip: { tone: "ok", label: "success" },
+    rev: "ed67d03a",
+    result: "success",
+    at: "2026-10-04 11:52 · 2d ago",
+    took: "4.1 s",
+    digest: "1c0e47b2d9a3",
   },
   {
-    rev: "c09e7f1",
-    sub: "3 days ago · 2m 18s · 1f8a0c33e5b7 · HTTP 502",
-    chip: { tone: "bad", label: "failed" },
-  },
-  {
-    rev: "b3d80e4",
-    sub: "4 days ago · 1m 21s · 9c4f7a20d811 · HTTP 200",
-    chip: { tone: "ok", label: "success" },
+    rev: "7fe05fb2",
+    result: "success",
+    at: "2026-10-01 09:37 · 5d ago",
+    took: "3.6 s",
+    digest: "b84f10e6a2c5",
   },
 ];
 
+function Seg() {
+  const opts = ["Off", "Lab", "Public"];
+  return (
+    <span className="flex items-center gap-[10px]">
+      <span className="text-[12px]" style={{ color: APP.subdued }}>
+        Exposure
+      </span>
+      <span
+        className="flex rounded-[9px] border p-[3px] text-[12px]"
+        style={{ borderColor: APP.hairline, background: APP.surface }}
+      >
+        {opts.map((o) => (
+          <span
+            key={o}
+            className="rounded-[6px] px-[10px] py-[3px]"
+            style={
+              o === "Public"
+                ? { background: APP.panel2, color: APP.text, fontWeight: 600 }
+                : { color: APP.subdued }
+            }
+          >
+            {o}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export function DeploysView() {
   return (
-    <Shell active="apps">
-      {/* Breadcrumb */}
-      <p className="text-[12.5px]" style={{ color: APP.dim }}>
-        Apps <span className="mx-[5px]">›</span>
-        <span style={{ color: APP.muted }}>iris</span>
-      </p>
-
-      {/* Hero */}
-      <div
-        className="mt-[10px] flex items-center gap-[16px] rounded-[14px] border px-[20px] py-[16px]"
-        style={{ background: APP.panel, borderColor: APP.hairline }}
-      >
+    <Shell active="deployments" app="hermes">
+      {/* The app's head */}
+      <div className="flex items-start gap-[14px]">
         <span
-          className="flex size-[50px] items-center justify-center rounded-[12px] border"
-          style={{ borderColor: `${APP.ok}4d`, background: `${APP.ok}14` }}
+          className="flex size-[46px] items-center justify-center rounded-[11px] border"
+          style={{ borderColor: APP.hairline, background: APP.surface }}
         >
-          <AppTile name="iris" size={32} />
+          <AppTile name="hermes" size={30} />
         </span>
-        <span className="flex flex-col gap-[3px]">
-          <span className="flex items-center gap-[10px]">
-            <span className="text-[19px] font-semibold" style={{ color: APP.text }}>
-              iris
-            </span>
-            <Chip tone="ok">● running</Chip>
+        <span className="flex min-w-0 flex-col gap-[4px]">
+          <span className="text-[24px] font-semibold tracking-[-0.02em]" style={{ color: APP.text }}>
+            hermes
           </span>
-          <span className="font-mono text-[12.5px]" style={{ color: APP.muted }}>
-            ↗ iris.toscanini.me&ensp;&ensp;⎇ santiagotoscanini/iris
+          <span className="text-[13px]" style={{ color: APP.subdued }}>
+            Smart reader: RSS with AI TL;DRs, an opinions library, and a Hacker News lens.
+          </span>
+          <span className="mt-[3px] flex gap-[22px] font-mono text-[11.5px]" style={{ color: APP.text }}>
+            <span>hermes.toscanini.me ↗</span>
+            <span>santiagotoscanini/hermes ↗</span>
           </span>
         </span>
-        <span className="ml-auto flex flex-col items-end gap-[6px]">
-          <span
-            className="text-[10px] uppercase tracking-[0.14em]"
-            style={{ color: APP.dim }}
-          >
-            exposure
-          </span>
-          <span
-            className="flex overflow-hidden rounded-[8px] border text-[12px]"
-            style={{ borderColor: APP.border, color: APP.muted }}
-          >
-            <span className="px-[11px] py-[4px]">Off</span>
-            <span className="px-[11px] py-[4px]">Internal</span>
-            <span className="px-[11px] py-[4px]" style={{ background: APP.raise, color: APP.text }}>
-              External
-            </span>
-          </span>
+        <span className="ml-auto">
+          <Seg />
         </span>
       </div>
 
-      <Tabs
-        items={[
-          { label: "overview" },
-          { label: "deployments" },
-          { label: "database" },
-          { label: "access" },
-          { label: "settings" },
-          { label: "logs" },
-        ]}
-        active="deployments"
-      />
-
-      <div className="mt-[16px] grid grid-cols-[1fr_1.6fr] gap-[13px]">
-        {/* The box's own build, mid-run */}
-        <Board title="Build" note={<Chip tone="warn">building</Chip>}>
-          <code className="font-mono text-[12.5px]" style={{ color: APP.text }}>
-            8f2c1d0 · push to main
+      {/* Builds */}
+      <div className="mt-[26px] flex items-center justify-between">
+        <SectionHead title="Builds" />
+        <Btn ghost>Build now</Btn>
+      </div>
+      <p className="-mt-[2px] mb-[10px] text-[12px]" style={{ color: APP.subdued }}>
+        Built on this box with Railpack. One build runs at a time; a newer push replaces one still
+        waiting in the queue.
+      </p>
+      <Table cols={BUILD_COLS} head={["State", "Commit", "Requested by", "Took", "Started"]}>
+        <Tr cols={BUILD_COLS} first>
+          <span>
+            <Chip tone="accent">checking</Chip>
+          </span>
+          <code className="font-mono text-[12px] font-semibold" style={{ color: APP.text }}>
+            a91c2e7
           </code>
-          <div
-            className="rounded-[9px] border px-[12px] py-[10px]"
-            style={{ background: APP.panel2, borderColor: APP.hairline }}
-          >
-            <div className="flex items-baseline justify-between text-[12.5px]">
-              <span style={{ color: APP.text }}>⚙ build image</span>
-              <span className="font-mono" style={{ color: APP.dim }}>
-                1m 12s
-              </span>
-            </div>
-            <p className="mt-[3px] text-[11.5px]" style={{ color: APP.dim }}>
-              installing dependencies
-            </p>
-            <div
-              className="mt-[8px] h-[5px] overflow-hidden rounded-full"
-              style={{ background: APP.raise }}
+          <span className="flex items-center gap-[10px] text-[12.5px]" style={{ color: APP.subdued }}>
+            push
+            <span
+              className="relative h-[3px] w-[120px] overflow-hidden rounded-full"
+              style={{ background: APP.panel2 }}
             >
-              <div
-                className="h-full rounded-full"
-                style={{ width: "58%", background: APP.accent }}
+              <span
+                className="absolute inset-y-0 left-0 w-[58%] rounded-full"
+                style={{ background: APP.accent }}
               />
-            </div>
-          </div>
-          <p className="text-[11.5px] leading-snug" style={{ color: APP.dim }}>
-            Builds run on the box itself; images land in its own registry. The pipeline never
-            leaves the house.
-          </p>
-        </Board>
-
-        {/* Deploy history timeline */}
-        <div>
-          <div className="flex items-baseline gap-[10px]">
-            <p className="text-[14px] font-semibold" style={{ color: APP.text }}>
-              Deploy history
-            </p>
-            <span className="text-[12px]" style={{ color: APP.dim }}>
-              only the runs where the digest moved
             </span>
-          </div>
-          <ol
-            className="relative mt-[10px] flex flex-col gap-[9px] border-l pl-[18px]"
-            style={{ borderColor: APP.border }}
-          >
-            {HISTORY.map((h) => (
-              <li key={h.rev} className="relative">
-                <span
-                  className="absolute -left-[24px] top-[16px] size-[11px] rounded-full border-2"
-                  style={{
-                    background: h.current ? APP.accent : APP.bg,
-                    borderColor: APP.bg,
-                    boxShadow: `0 0 0 1.5px ${h.current ? APP.accent : TONE[h.chip.tone]}`,
-                  }}
-                />
-                <div
-                  className="rounded-[12px] border px-[15px] py-[10px]"
-                  style={{
-                    background: h.current ? `${APP.accent}0f` : APP.panel,
-                    borderColor: h.current ? `${APP.accent}66` : APP.hairline,
-                  }}
-                >
-                  <div className="flex items-center gap-[12px]">
-                    <code className="font-mono text-[13.5px] font-semibold" style={{ color: APP.text }}>
-                      {h.rev}
-                    </code>
-                    <span className="text-[11.5px]" style={{ color: APP.dim }}>
-                      view commit ↗
-                    </span>
-                    <span className="ml-auto">
-                      <Chip tone={h.chip.tone}>{h.chip.label}</Chip>
-                    </span>
-                  </div>
-                  <p className="mt-[3px] font-mono text-[11.5px]" style={{ color: APP.dim }}>
-                    {h.sub}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
+          </span>
+          <span className="text-right text-[12.5px]" style={{ color: APP.subdued }}>
+            21 s
+          </span>
+          <span className="text-right text-[12.5px]" style={{ color: APP.subdued }}>
+            just now
+          </span>
+        </Tr>
+        {BUILDS.map((b) => (
+          <Tr key={b.commit + b.at} cols={BUILD_COLS}>
+            <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+              {b.state === "cancelled" ? <Chip tone="muted">cancelled</Chip> : b.state}
+            </span>
+            <code className="font-mono text-[12px] font-semibold" style={{ color: APP.text }}>
+              {b.commit}
+            </code>
+            <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+              {b.by}
+            </span>
+            <span className="text-right text-[12.5px]" style={{ color: APP.subdued }}>
+              {b.took}
+            </span>
+            <span className="text-right text-[12.5px]" style={{ color: APP.subdued }}>
+              {b.at}
+            </span>
+          </Tr>
+        ))}
+      </Table>
+
+      {/* Deploys */}
+      <div className="mt-[24px]">
+        <SectionHead title="Deploys" note="Only the runs where the image digest actually moved." />
+        <Table cols={DEPLOY_COLS} head={["Revision", "Result", "Deployed", "Took", "Digest", "HTTP"]}>
+          {DEPLOYS.map((d, i) => (
+            <Tr key={d.rev} cols={DEPLOY_COLS} first={i === 0}>
+              <span className="flex items-center gap-[10px]">
+                <code className="font-mono text-[12px] font-semibold" style={{ color: APP.text }}>
+                  {d.rev}
+                </code>
+                {d.current ? <Chip tone="muted">current</Chip> : null}
+              </span>
+              <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+                {d.result}
+              </span>
+              <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+                {d.at}
+              </span>
+              <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+                {d.took}
+              </span>
+              <code className="font-mono text-[11.5px]" style={{ color: APP.subdued }}>
+                {d.digest}
+              </code>
+              <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+                200
+              </span>
+            </Tr>
+          ))}
+        </Table>
       </div>
     </Shell>
   );

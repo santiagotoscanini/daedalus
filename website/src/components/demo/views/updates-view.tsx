@@ -1,175 +1,187 @@
-import { APP, Board, Chip, PageHead, Shell, Tabs, type Tone } from "../chrome";
+import { APP, Btn, Chip, PageHead, SectionHead, Shell, Table, Tabs, Tr } from "../chrome";
 
-/** System › Updates: the fleet's digest-pinned images — what moved, the
- * changelog, and the one-at-a-time update button. The settled rows sit
- * back dimmed so the ones that need reading come forward. */
+/** System › Updates, as the app now draws it: the machines strip across
+ * the top (this box, and the machines whose agents link to it), the
+ * engine's pin, and the containers behind their registry, one of them
+ * opened to its release notes and its one-at-a-time update button.
+ * Mirrors app/src/modules/system. Machine names are generic on purpose. */
 
-const BEHIND: Array<{
-  name: string;
-  from: string;
-  to: string;
-  chip: { tone: Tone; label: string };
-  open?: boolean;
-}> = [
-  {
-    name: "jellyfin",
-    from: "10.10.6",
-    to: "10.11.1",
-    chip: { tone: "warn", label: "newer tag" },
-    open: true,
-  },
-  { name: "traefik", from: "v3.3.2", to: "v3.4.0", chip: { tone: "warn", label: "newer tag" } },
-  { name: "pihole", from: "2025.07.1", to: "new digest", chip: { tone: "info", label: "tag moved" } },
-];
+const COLS = "18px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) 90px";
 
-const CURRENT = ["grafana", "prometheus", "loki", "immich", "jellyseerr", "factorio"] as const;
+function Machines() {
+  const items = [
+    { label: "This box", on: true },
+    { label: "Windows PC", n: 2 },
+    { label: "MacBook Pro" },
+  ];
+  return (
+    <div
+      className="mt-[16px] flex w-fit gap-[2px] rounded-[10px] border p-[3px] text-[12.5px]"
+      style={{ borderColor: APP.hairline, background: APP.surface }}
+    >
+      {items.map((m) => (
+        <span
+          key={m.label}
+          className="flex items-center gap-[7px] rounded-[7px] px-[10px] py-[4px]"
+          style={
+            m.on
+              ? { background: APP.panel2, color: APP.text, fontWeight: 600 }
+              : { color: APP.subdued }
+          }
+        >
+          <span
+            className="size-[6px] rounded-full"
+            style={{ background: m.on ? APP.accent : APP.ok }}
+          />
+          {m.label}
+          {m.n ? <span style={{ color: APP.muted }}>{m.n}</span> : null}
+        </span>
+      ))}
+    </div>
+  );
+}
 
-function UpdRow({
+function Fact({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <span className="flex flex-col gap-[4px]">
+      <span className="text-[11.5px]" style={{ color: APP.subdued }}>
+        {label}
+      </span>
+      <span
+        className={`${mono ? "font-mono" : ""} text-[12.5px] font-semibold`}
+        style={{ color: APP.text }}
+      >
+        {value}
+      </span>
+    </span>
+  );
+}
+
+function Row({
   name,
   from,
   to,
-  chip,
-  quiet = false,
+  open = false,
 }: {
   name: string;
   from: string;
   to: string;
-  chip: { tone: Tone; label: string };
-  quiet?: boolean;
+  open?: boolean;
 }) {
   return (
-    <div
-      className="flex items-baseline gap-[14px] rounded-[9px] border px-[13px] py-[8px]"
-      style={{ background: APP.panel2, borderColor: APP.hairline, opacity: quiet ? 0.72 : 1 }}
-    >
-      <span className="text-[11px]" style={{ color: APP.dim }}>
-        ▸
-      </span>
-      <span className="min-w-[130px] text-[13px]" style={{ color: APP.text }}>
-        {name}
-      </span>
-      <code className="font-mono text-[12px]" style={{ color: APP.muted }}>
-        {from}
-      </code>
-      <code className="font-mono text-[12px]" style={{ color: APP.text }}>
-        <span style={{ color: APP.dim }}>→ </span>
-        {to}
-      </code>
-      <span className="ml-auto">
-        <Chip tone={chip.tone}>{chip.label}</Chip>
-      </span>
-    </div>
+    <>
+      <Tr cols={COLS}>
+        <span className="text-[9px]" style={{ color: APP.muted }}>
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="text-[13px] font-semibold" style={{ color: APP.text }}>
+          {name}
+        </span>
+        <code className="font-mono text-[12px]" style={{ color: APP.subdued }}>
+          {from}
+        </code>
+        <code className="font-mono text-[12px]" style={{ color: APP.text }}>
+          <span style={{ color: APP.muted }}>→ </span>
+          {to}
+        </code>
+        <span className="text-right">
+          <Chip tone="warn">newer</Chip>
+        </span>
+      </Tr>
+      {open ? (
+        <div className="px-[50px] pb-[14px] pt-[2px]">
+          <p className="text-[12px] leading-relaxed" style={{ color: APP.subdued }}>
+            <span style={{ color: APP.text }}>13.2.3 · 13.3.0</span>&ensp;Two releases since
+            the running one, their notes read from the project's own releases.
+          </p>
+          <div className="mt-[10px] flex items-center gap-[8px]">
+            <Btn>Update to 13.3.0</Btn>
+            <Btn ghost>Add to queue</Btn>
+            <span className="ml-[6px] text-[11.5px]" style={{ color: APP.muted }}>
+              pull · rewrite the pin · commit · rebuild · verify · revert if it does not come back
+            </span>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
 export function UpdatesView() {
   return (
     <Shell active="system">
-      <PageHead
-        title="System"
-        lede="The machine itself: what it is running on, what it is storing, and what survives it."
-      />
+      <PageHead title="System" />
+      <Machines />
+      <p className="mt-[10px] text-[12.5px]" style={{ color: APP.subdued }}>
+        <span className="font-semibold" style={{ color: APP.text }}>
+          box
+        </span>
+        &ensp;NixOS 26.05 (Yarara) · 6.18.55 · x86_64
+      </p>
       <Tabs
-        items={[
-          { label: "Host" },
-          { label: "Memory" },
-          { label: "Disks" },
-          { label: "Pools" },
-          { label: "Build" },
-          { label: "Database" },
-          { label: "Updates" },
-          { label: "Backups" },
-        ]}
+        items={["Host", "Memory", "Disks", "Pools", "Build", "Updates", "Backups", "Claude"]}
         active="Updates"
       />
 
-      <div className="mt-[16px] flex flex-col gap-[13px]">
-        <Board title="3 behind" note="registry checked 2026-08-21">
-          {BEHIND.map((r) =>
-            r.open ? (
-              <div
-                key={r.name}
-                className="overflow-hidden rounded-[9px] border"
-                style={{ background: APP.panel2, borderColor: APP.border }}
-              >
-                <div className="flex items-baseline gap-[14px] px-[13px] py-[8px]">
-                  <span className="rotate-90 text-[11px]" style={{ color: APP.dim }}>
-                    ▸
-                  </span>
-                  <span className="min-w-[130px] text-[13px]" style={{ color: APP.text }}>
-                    {r.name}
-                  </span>
-                  <code className="font-mono text-[12px]" style={{ color: APP.muted }}>
-                    {r.from}
-                  </code>
-                  <code className="font-mono text-[12px]" style={{ color: APP.text }}>
-                    <span style={{ color: APP.dim }}>→ </span>
-                    {r.to}
-                  </code>
-                  <span className="ml-auto">
-                    <Chip tone={r.chip.tone}>{r.chip.label}</Chip>
-                  </span>
-                </div>
-                <div className="px-[13px] pb-[12px] pl-[38px]">
-                  {/* the upgrade chain */}
-                  <div className="flex items-center gap-[6px] font-mono text-[11px]">
-                    {["10.10.6", "10.10.7", "10.11.0", "10.11.1"].map((v, i, a) => (
-                      <span key={v} className="flex items-center gap-[6px]">
-                        <span
-                          className="rounded-[6px] border px-[7px] py-[2px]"
-                          style={{
-                            borderColor: i === a.length - 1 ? `${APP.warn}73` : APP.border,
-                            color: i === a.length - 1 ? APP.warn : APP.muted,
-                          }}
-                        >
-                          {v}
-                        </span>
-                        {i < a.length - 1 ? <span style={{ color: APP.dim }}>→</span> : null}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="mt-[9px] text-[12px] leading-snug" style={{ color: APP.muted }}>
-                    10.11: transcode pipeline rework, HDR tone-mapping fixes, trickplay on by
-                    default. Two point releases since; no breaking config changes.
-                  </p>
-                  <div className="mt-[10px] flex items-center gap-[10px]">
-                    <span
-                      className="rounded-[8px] px-[12px] py-[5px] text-[12px] font-semibold"
-                      style={{ background: APP.accent, color: "#1a0d08" }}
-                    >
-                      Update to 10.11.1
-                    </span>
-                    <span className="text-[11.5px]" style={{ color: APP.dim }}>
-                      resolve · pre-pull · commit · rebuild · verify · revert if it doesn't come
-                      back
-                    </span>
-                  </div>
-                  <code
-                    className="mt-[10px] block font-mono text-[10.5px]"
-                    style={{ color: APP.dim }}
-                  >
-                    ghcr.io/jellyfin/jellyfin@sha256:a3f91c8e2b04d17c9e0b52aa8f…
-                  </code>
-                </div>
-              </div>
-            ) : (
-              <UpdRow key={r.name} {...r} />
-            ),
-          )}
-        </Board>
+      <div className="mt-[18px]">
+        <SectionHead title="Engine" />
+        <div
+          className="grid grid-cols-3 gap-[20px] rounded-[12px] border px-[18px] py-[14px]"
+          style={{ borderColor: APP.hairline, background: APP.surface }}
+        >
+          <Fact label="Pinned" value="d8ea570 2026-10-07" />
+          <Fact label="Clone" value="d8ea570 main" />
+          <Fact label="Last fetch" value="2026-10-07" />
+        </div>
+      </div>
 
-        <Board title="On the newest tag" note="57 containers">
-          {CURRENT.map((n) => (
-            <UpdRow
-              key={n}
-              name={n}
-              from="pinned digest"
-              to="—"
-              chip={{ tone: "ok", label: "current" }}
-              quiet
-            />
-          ))}
-        </Board>
+      <div className="mt-[20px]">
+        <div className="flex items-baseline justify-between">
+          <SectionHead title="4 containers behind" />
+          <span className="text-[11.5px]" style={{ color: APP.subdued }}>
+            registry checked 2026-10-07
+          </span>
+        </div>
+        <Table cols={COLS} head={["", "Container", "Running", "Available", "State"]}>
+          <div
+            className="flex items-baseline gap-[10px] px-[18px] py-[7px] text-[12px]"
+            style={{ background: APP.rail }}
+          >
+            <span className="font-semibold" style={{ color: APP.text }}>
+              Newer release · 3
+            </span>
+            <span style={{ color: APP.subdued }}>a newer version is published</span>
+          </div>
+          <Row name="grafana" from="13.2.2" to="13.3.0" open />
+          <Row name="traefik" from="v3.6.1" to="v3.6.2" />
+          <Row name="pocket-id" from="v1.14.0" to="v1.15.0" />
+          <div
+            className="flex items-baseline gap-[10px] border-t px-[18px] py-[7px] text-[12px]"
+            style={{ background: APP.rail, borderColor: APP.hairline }}
+          >
+            <span className="font-semibold" style={{ color: APP.text }}>
+              Tag moved · 1
+            </span>
+            <span style={{ color: APP.subdued }}>same tag, a new image behind it</span>
+          </div>
+          <Tr cols={COLS}>
+            <span className="text-[9px]" style={{ color: APP.muted }}>
+              ▸
+            </span>
+            <span className="text-[13px] font-semibold" style={{ color: APP.text }}>
+              gluetun
+            </span>
+            <code className="font-mono text-[12px]" style={{ color: APP.subdued }}>
+              latest
+            </code>
+            <code className="font-mono text-[12px]" style={{ color: APP.text }}>
+              <span style={{ color: APP.muted }}>→ </span>new digest
+            </code>
+            <span className="text-right">
+              <Chip tone="info">moved</Chip>
+            </span>
+          </Tr>
+        </Table>
       </div>
     </Shell>
   );

@@ -13,7 +13,7 @@ export function Footer() {
             <span className="text-[15px] tracking-tight">daedalus</span>
           </div>
           <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-muted">
-            A cloud of your own, on one box. NixOS is the backend that keeps it reproducible.
+            A cloud of your own, on one machine. NixOS keeps it reproducible.
           </p>
         </div>
         <nav aria-label="Project">
@@ -70,23 +70,18 @@ export function Footer() {
               </Link>
             </li>
             <li>
-              <Link to="/" hash="features" className="transition-colors hover:text-fg">
-                The pages
-              </Link>
-            </li>
-            <li>
               <Link to="/" hash="loop" className="transition-colors hover:text-fg">
                 How it works
               </Link>
             </li>
             <li>
-              <Link to="/" hash="principles" className="transition-colors hover:text-fg">
-                Principles
+              <Link to="/" hash="get" className="transition-colors hover:text-fg">
+                Get it
               </Link>
             </li>
             <li>
-              <Link to="/" hash="get" className="transition-colors hover:text-fg">
-                Get it
+              <Link to="/" hash="faq" className="transition-colors hover:text-fg">
+                Questions
               </Link>
             </li>
           </ul>
