@@ -59,15 +59,15 @@ export const APP_TABLE =
 /** Six columns wide, four in a laptop half-window, two on a phone. */
 export const APP_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_4.5rem_7.5rem_5rem_6.5rem]',
-  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_6.5rem]',
-  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_6.5rem]',
+  'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_4.5rem_7.5rem_5rem_8.5rem]',
+  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_4.5rem_7.5rem_8.5rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8.5rem]',
 )
 const SITE_GRID = cn(
   'grid items-center gap-x-6 px-5',
-  'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_5rem_6.5rem]',
-  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6.5rem]',
-  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_6.5rem]',
+  'grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_5rem_8.5rem]',
+  '@max-[64rem]/applist:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8.5rem]',
+  '@max-[38rem]/applist:grid-cols-[minmax(0,1fr)_8.5rem]',
 )
 /** A cell that steps away below a laptop half-window, and one below a phone. */
 export const WIDE = '@max-[64rem]/applist:hidden'
