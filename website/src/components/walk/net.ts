@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { T } from "./story";
-import { APPS, INGEST, LINKS, NODES, WALLS, WALL_H, appPos, type NodeId } from "./geo";
+import { APPS, INGEST, LINKS, MODULE_R, NODES, PORT_R, WALLS, WALL_H, appPos, type NodeId } from "./geo";
 
 /** The labyrinth, as a place you walk. One WebGL2 canvas, plain three.js,
  * hand-written shaders: the work is thousands of fine lines and a little
@@ -528,22 +528,22 @@ export function createScene(o: Options) {
   scene.add(glow([lp.x, 3, lp.z], 20, landG));
   mkLink("app", V(0, 7, 0), V(lp.x, 2, lp.z), 10, 0.22, 40);
 
-  // —— the ingest: six ports, six modules, a link each ——
+  // —— the ingest: a port, a module and a link for each service ——
   const modG = INGEST.map(() => g(0));
   const portG = INGEST.map(() => g(0));
   const orbG = INGEST.map(() => g(0));
   const orbs: THREE.Points[] = [];
   INGEST.forEach((_, i) => {
     const a = (i / INGEST.length) * Math.PI * 2 + Math.PI / 6;
-    const px = Math.cos(a) * 176;
-    const pz = Math.sin(a) * 176;
-    const mx = Math.cos(a) * 66;
-    const mz = Math.sin(a) * 66;
+    const px = Math.cos(a) * PORT_R;
+    const pz = Math.sin(a) * PORT_R;
+    const mx = Math.cos(a) * MODULE_R;
+    const mz = Math.sin(a) * MODULE_R;
     const pr = ribbons(ring(11), { w: 0.12, a: 0.5, litA: 0, gain: portG[i]!, halo: [6, 0.2] });
     pr.position.set(px, 0.1, pz);
     scene.add(pr);
-    scene.add(ribbons(boxEdges(mx, 2, mz, 9, 4, 9), { w: 0.14, a: 1, tint: 0.9, litA: 0, gain: modG[i]!, halo: [8, 0.3], minPx: 1 }));
-    scene.add(glow([mx, 3, mz], 22, modG[i]!));
+    scene.add(ribbons(boxEdges(mx, 2, mz, 9, 4, 9), { w: 0.14, a: 1, tint: INGEST[i]!.kind === "built" ? 0.9 : 0.12, litA: 0, gain: modG[i]!, halo: [8, 0.3], minPx: 1 }));
+    if (INGEST[i]!.kind === "built") scene.add(glow([mx, 3, mz], 22, modG[i]!));
     mkLink(`in${i}`, V(px, 4, pz), V(0, 7, 0), 14, 0.0, 56);
     // the link is only drawn once something travels it: its base alpha is the shared amt
     const orb = glow([0, 0, 0], 8, orbG[i]!);
@@ -557,25 +557,27 @@ export function createScene(o: Options) {
   const anchors = new Map<string, THREE.Vector3>();
   (Object.keys(NODES) as NodeId[]).forEach((id) => {
     anchors.set(`node:${id}`, V(NODES[id].x, 0, NODES[id].z));
+    anchors.set(`lab:${id}`, V(NODES[id].x + (NODES[id].lab?.[0] ?? 0), 0, NODES[id].z + (NODES[id].lab?.[1] ?? 24)));
     anchors.set(`top:${id}`, nodeTop(id).clone().setY(id === "box" ? 14 : 42));
   });
   for (const l of LINKS) anchors.set(`link:${l.id}`, linkCurve[l.id]!.getPoint(0.5));
   anchors.set("app", V(lp.x, 12, lp.z));
   INGEST.forEach((_, i) => {
     const a = (i / INGEST.length) * Math.PI * 2 + Math.PI / 6;
-    anchors.set(`port:${i}`, V(Math.cos(a) * 176, 6, Math.sin(a) * 176));
-    anchors.set(`module:${i}`, V(Math.cos(a) * 66, 6, Math.sin(a) * 66));
+    anchors.set(`port:${i}`, V(Math.cos(a) * PORT_R, 6, Math.sin(a) * PORT_R));
+    anchors.set(`module:${i}`, V(Math.cos(a) * MODULE_R, 6, Math.sin(a) * MODULE_R));
+    anchors.set(`orb:${i}`, orbs[i]!.position);
   });
   const screen = new Map<string, Anchor>();
 
   // —— poses ——
   const OFF: [number, number] = mobile ? [0, -0.14] : [0, 0];
   const POSES = {
-    hero: { pos: V(14, 196, 255), tgt: V(0, 0, 8), fov: 50, fog: 0.0018, dof: 4, expo: 2.3, off: mobile ? OFF : [0.22, -0.1] } as Pose,
+    hero: { pos: V(30, 150, 192), tgt: V(16, 0, -4), fov: 44, fog: 0.0018, dof: 4, expo: 2.3, off: mobile ? OFF : [0.18, -0.05] } as Pose,
     ai: { pos: V(-30, 180, 240), tgt: V(10, 0, 14), fov: 44, fog: 0.0018, dof: 4, expo: 2.3, off: OFF } as Pose,
     claude: { pos: V(60, 176, 210), tgt: V(30, 0, -26), fov: 44, fog: 0.0018, dof: 4, expo: 2.3, off: OFF } as Pose,
     push: { pos: V(0, 170, 210), tgt: V(0, 0, -8), fov: 44, fog: 0.0018, dof: 4, expo: 2.3, off: OFF } as Pose,
-    ingest: { pos: V(0, 330, 130), tgt: V(0, 0, 0), fov: 42, fog: 0.0012, dof: 3, expo: 2.2, off: mobile ? OFF : [0, 0] } as Pose,
+    ingest: { pos: V(0, 330, 146), tgt: V(0, 0, 14), fov: 42, fog: 0.0012, dof: 3, expo: 2.2, off: mobile ? OFF : [0, 0] } as Pose,
   };
   const pose = (f: number): Pose => {
     if (f < 0.08) return POSES.hero;
@@ -744,7 +746,7 @@ export function createScene(o: Options) {
     camera.up.set(0, 1, 0);
     camera.lookAt(p.tgt);
     camera.aspect = w / h;
-    camera.fov = p.fov * (mobile ? 2.05 : w / h < 1.35 ? 1.2 : 1);
+    camera.fov = p.fov * (mobile ? 2.05 - 0.4 * (1 - smooth(span(f, 0.0, 0.12))) : w / h < 1.35 ? 1.2 : 1);
     camera.setViewOffset(w, h, -p.off[0] * w, -p.off[1] * h, w, h);
     camera.updateProjectionMatrix();
     GLOBAL.uFocus.value = camera.position.distanceTo(p.tgt);
@@ -770,6 +772,9 @@ export function createScene(o: Options) {
   function resize(cw: number, ch: number) {
     w = Math.max(1, cw);
     h = Math.max(1, ch);
+    // a short window leaves less room beside the headline: the graph rises and slides over a little
+    const k = clamp01((900 - h) / 180);
+    if (!mobile) POSES.hero.off = [0.18 + 0.04 * k, -0.05 - 0.02 * k];
     const dpr = Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 1.75);
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
@@ -822,7 +827,7 @@ export function createScene(o: Options) {
       camera.position.copy(p.pos);
       camera.lookAt(p.tgt);
       camera.aspect = w / h;
-      camera.fov = p.fov * (mobile ? 2.05 : w / h < 1.35 ? 1.2 : 1);
+      camera.fov = p.fov * (mobile ? 1.65 : w / h < 1.35 ? 1.2 : 1);
       camera.setViewOffset(w, h, -p.off[0] * w, -p.off[1] * h, w, h);
       camera.updateProjectionMatrix();
       GLOBAL.uFocus.value = camera.position.distanceTo(p.tgt);

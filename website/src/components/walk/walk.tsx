@@ -2,7 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { DemoWindow, type DemoView } from "~/components/demo/demo-window";
 import { INGEST, NODES, type NodeId } from "./geo";
-import { INGEST_NOTE, INSPECTORS, STEPS, T } from "./story";
+import { Mark } from "./marks";
+import { INGEST_LEGAL, INGEST_NOTE, INSPECTORS, STEPS, T } from "./story";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 
@@ -27,6 +28,17 @@ type Mode = "static" | "pinned" | "still";
 const span = (f: number, a: number, b: number) => Math.min(1, Math.max(0, (f - a) / (b - a)));
 const smooth = (x: number) => x * x * (3 - 2 * x);
 const win = (f: number, a: number, b: number, tail = 0.02) => smooth(span(f, a, a + tail)) * (1 - smooth(span(f, b - tail, b)));
+
+/** The scroll runs in two gears: everything up to the ingest keeps the pace it was composed at
+ * (BASE svh of run for f 0..HOLD), then the eight services get the rest, so each one has room
+ * to be read and drawn in. */
+const BASE = 880;
+const HOLD = 0.8;
+const RUN = 1280;
+const gear = (r: number) => {
+  const a = (HOLD * BASE) / RUN;
+  return r <= a ? (r / a) * HOLD : HOLD + ((r - a) / (1 - a)) * (1 - HOLD);
+};
 
 const NODE_IDS = Object.keys(NODES) as NodeId[];
 const REQUESTS = ["An AI query", "A Claude session", "A push to main"].map((name) => ({
@@ -72,6 +84,7 @@ export function Walk() {
     let fs = 0;
     let last = performance.now();
     let booted = false;
+    let lastCap = -2;
 
     const fit = () => scene?.resize(holder.clientWidth, holder.clientHeight);
 
@@ -80,15 +93,45 @@ export function Walk() {
       const S = scene.screen;
       const W = holder.clientWidth;
       const H = holder.clientHeight;
+      // the hero copy's boxes: a label that would sit on the words steps aside
+      const words: DOMRect[] = [];
+      if (hero.current && f < 0.12) hero.current.querySelectorAll("p, h1, a").forEach((n) => {
+          const rg = document.createRange();
+          rg.selectNodeContents(n);
+          words.push(rg.getBoundingClientRect());
+        });
+      const sh = holder.getBoundingClientRect();
+      if (f > 0.05) {
+        stepEls.current.forEach((el) => {
+          if (Number(el.style.opacity) > 0.3) words.push(el.getBoundingClientRect());
+        });
+        insEls.current.forEach((el) => {
+          if (el && Number(el.style.opacity) > 0.3) words.push(el.getBoundingClientRect());
+        });
+      }
       // node labels: quiet, always on, brighter while a request is at them
       for (const id of NODE_IDS) {
         const e = nodeEls.current.get(id);
-        const a = S.get(`node:${id}`);
+        const a = S.get(`lab:${id}`);
         if (!e || !a) continue;
         const busy = STEPS.some((s) => "node" in s.at && s.at.node === id && f >= s.f[0] && f < s.f[1]);
-        const ingest = f > 0.82 && id !== "box" ? 0.18 : 1;
-        e.style.opacity = a.on && !mobile ? String((busy ? 1 : 0.85) * ingest) : "0";
-        e.style.transform = `translate3d(${a.x.toFixed(1)}px, ${a.y.toFixed(1)}px, 0)`;
+        const ingest = 1 - smooth(span(f, 0.79, 0.83));
+        const ew = e.offsetWidth;
+        const side = NODES[id].side;
+        // a label stays whole at the edge, and goes once its node has left the screen
+        const lo = side === "right" ? 14 : side === "left" ? ew + 14 : ew / 2 + 14;
+        const hi = side === "right" ? W - ew - 14 : side === "left" ? W - 14 : W - ew / 2 - 14;
+        const cx = Math.min(hi, Math.max(lo, a.x));
+        const edge = 1 - smooth(span(Math.max(lo - a.x, a.x - hi), 40, 150));
+        const eh = e.offsetHeight;
+        const x0 = side === "right" ? cx : side === "left" ? cx - ew : cx - ew / 2;
+        const y0 = side ? a.y - eh / 2 : a.y + 28;
+        const hit = words.some((r) => x0 < r.right - sh.left + 14 && x0 + ew > r.left - sh.left - 14 && y0 < r.bottom - sh.top + 10 && y0 + eh > r.top - sh.top - 10);
+        const off = y0 + eh > H - 10 || y0 < 62;
+        e.style.opacity = a.on && !mobile ? String(ingest * edge * (hit || off ? 0 : 1)) : "0";
+        if (busy) e.setAttribute("data-busy", "");
+        else e.removeAttribute("data-busy");
+        e.style.transform = `translate3d(${cx.toFixed(1)}px, ${a.y.toFixed(1)}px, 0)`;
       }
       // captions: on the node or link they concern, on the side with room
       let active: (typeof STEPS)[number] | null = null;
@@ -168,23 +211,30 @@ export function Walk() {
         const m = S.get(`module:${i}`);
         if (tile && port) {
           const inn = smooth(span(f, 0.8 + i * 0.004, 0.84));
-          const shrink = smooth(span(pp, 0.2, 0.46));
-          const gone = ig > 0 && pp > 0.46;
-          tile.style.opacity = gone ? "0" : String(inn * (1 - shrink * 0.7));
-          const tx = mobile ? Math.min(W - 64, Math.max(64, port.x)) : port.x;
-          const ty = mobile ? Math.min(H - 170, Math.max(96, port.y)) : port.y;
-          tile.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) translate(-50%, -50%) scale(${(1 - shrink * 0.8).toFixed(3)})`;
-          tile.style.filter = shrink > 0.01 ? `blur(${(shrink * 5).toFixed(1)}px)` : "none";
+          // at its port until the light leaves; then the mark rides the same link the light does,
+          // read from the scene each frame, so the two are one motion on one clock
+          const trav = smooth(span(pp, 0.4, 0.8));
+          const orb = trav > 0 ? S.get(`orb:${i}`) : undefined;
+          const gone = smooth(span(pp, 0.74, 0.86));
+          tile.style.opacity = String(ig > 0 && pp >= 1 ? 0 : inn * (1 - gone));
+          tile.style.setProperty("--d", String(1 - smooth(span(pp, 0.36, 0.5))));
+          // a port near the edge is held inside the screen; the hold lets go as the mark leaves it
+          const capZone = Math.abs(port.x - W / 2) < 300;
+          const hx = Math.min(W - 70, Math.max(70, port.x));
+          const hy = mobile ? Math.min(H - 190, Math.max(96, port.y)) : Math.min(capZone ? H - 215 : H - 90, Math.max(96, port.y));
+          const tx = (orb ? orb.x : port.x) + (hx - port.x) * (1 - trav);
+          const ty = (orb ? orb.y : port.y) + (hy - port.y) * (1 - trav);
+          tile.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) scale(${(1 - trav * 0.5).toFixed(3)})`;
         }
         if (mod && m) {
           const lit = smooth(span(pp, 0.62, 0.86)) * (ig > 0 ? 1 : 0);
           const vis = smooth(span(f, 0.83, 0.86));
-          mod.style.opacity = String(vis * (0.3 + 0.7 * lit));
+          mod.style.opacity = String(vis * (0.62 + 0.38 * lit));
           mod.style.transform = `translate3d(${m.x.toFixed(1)}px, ${m.y.toFixed(1)}px, 0)`;
           if (lit > 0.5) mod.setAttribute("data-lit", "");
           else mod.removeAttribute("data-lit");
         }
-        if (ig > 0 && pp > 0 && pp < 1) nowI = i;
+        if (nowI < 0 && ig > 0 && pp > 0 && pp < 0.88) nowI = i;
       });
       if (ingestCap.current) {
         const done = ig >= 0.97;
@@ -192,13 +242,26 @@ export function Walk() {
         ingestCap.current.style.opacity = String(f > 0.84 && (i >= 0 || done) ? 1 : 0);
         const t = ingestCap.current.querySelector("[data-t]");
         const k = ingestCap.current.querySelector("[data-k]");
-        if (t && k) {
+        const mo = ingestCap.current.querySelector("[data-m]");
+        const lg = ingestCap.current.querySelector("[data-l]");
+        if (t && k && mo && lg) {
+          if (i !== lastCap) {
+            lastCap = i;
+            for (const n of Array.from(ingestCap.current.children)) {
+              n.animate([{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+            }
+          }
           if (i >= 0) {
-            k.textContent = `${INGEST[i]!.name} · the part you used for ${INGEST[i]!.part}`;
-            t.textContent = `${INGEST[i]!.module}. ${INGEST[i]!.made}`;
+            const s = INGEST[i]!;
+            k.textContent = `${s.name} · ${s.part}`;
+            mo.textContent = `${s.module} · ${s.kind === "built" ? "in the catalog" : "beside the box"}`;
+            t.textContent = s.made;
+            lg.textContent = "";
           } else if (done) {
             k.textContent = "What the box takes in";
+            mo.textContent = "";
             t.textContent = INGEST_NOTE;
+            lg.textContent = INGEST_LEGAL;
           }
         }
       }
@@ -219,7 +282,7 @@ export function Walk() {
       if (!visible || document.hidden) return;
       const r = section.getBoundingClientRect();
       const run = r.height - window.innerHeight;
-      const target = run > 0 ? Math.min(1, Math.max(0, -r.top / run)) : 0;
+      const target = run > 0 ? gear(Math.min(1, Math.max(0, -r.top / run))) : 0;
       // the camera and the text ease toward the scroll, frame-rate independent,
       // so a flick and a crawl, up or down, both land without a step
       fs += (target - fs) * (1 - Math.exp(-dt * 7));
@@ -298,7 +361,7 @@ export function Walk() {
       data-mode={mode}
       data-ready={ready ? "" : undefined}
       className="net relative"
-      style={mode === "pinned" ? { height: "980svh" } : undefined}
+      style={mode === "pinned" ? { height: `${RUN + 100}svh` } : undefined}
     >
       <div ref={stage} className="net-stage">
         <Poster />
@@ -326,8 +389,12 @@ export function Walk() {
                 else nodeEls.current.delete(id);
               }}
               className="net-node"
+              data-side={NODES[id].side}
             >
-              <b>{NODES[id].name}</b>
+              <b>
+                {NODES[id].mark ? <Mark id={NODES[id].mark} size={13} /> : null}
+                {NODES[id].name}
+              </b>
               <i>{NODES[id].state}</i>
             </span>
           ))}
@@ -362,9 +429,15 @@ export function Walk() {
                 tileEls.current[i] = n;
               }}
               className="net-tile"
+              data-kind={s.kind}
             >
+              <span className="net-tile-marks">
+                {s.marks.map((m) => (
+                  <Mark key={m} id={m} size={20} />
+                ))}
+              </span>
               <strong>{s.name}</strong>
-              <span>{s.part}</span>
+              <span className="net-tile-part">{s.part}</span>
             </div>
           ))}
           {INGEST.map((s, i) => (
@@ -374,13 +447,21 @@ export function Walk() {
                 modEls.current[i] = n;
               }}
               className="net-module"
+              data-kind={s.kind}
             >
+              {s.marks.map((m) => (
+                <Mark key={m} id={m} size={12} />
+              ))}
               {s.module}
             </span>
           ))}
           <div ref={ingestCap} className="net-ingest-cap">
             <em data-k />
-            <p data-t />
+            <p>
+              <b data-m />
+              <span data-t />
+            </p>
+            <small data-l />
           </div>
           <div ref={card} className="net-card">
             <p ref={cardKick} />
@@ -448,16 +529,23 @@ export function Walk() {
           <ul className="mt-10 grid gap-x-10 border-t border-hairline sm:grid-cols-2">
             {INGEST.map((s) => (
               <li key={s.name} className="grid gap-1 border-b border-hairline py-4">
-                <span className="font-mono text-[13px] text-fg">
-                  {s.name} <span className="text-dim">· the part you used for {s.part}</span>
+                <span className="flex items-center gap-2.5 font-mono text-[13px] text-fg">
+                  {s.marks.map((m) => (
+                    <Mark key={m} id={m} size={16} />
+                  ))}
+                  {s.name} <span className="text-muted">· {s.part}</span>
                 </span>
-                <span className="text-[14px] text-[#a8a8b3]">
-                  {s.module}. {s.made}
+                <span className="text-[14px] text-[#b4b4be]">
+                  <b className="font-mono text-[12.5px] font-medium text-fg">{s.module}</b>
+                  {" · "}
+                  {s.kind === "built" ? "in the catalog" : "beside the box"}. {s.made}
                 </span>
               </li>
             ))}
           </ul>
-          <p className="mt-6 max-w-xl text-[13px] leading-relaxed text-dim">{INGEST_NOTE}</p>
+          <p className="mt-6 max-w-xl text-[13px] leading-relaxed text-dim">
+            {INGEST_NOTE} {INGEST_LEGAL}
+          </p>
         </div>
       </div>
     </section>

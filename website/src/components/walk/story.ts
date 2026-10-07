@@ -107,4 +107,5 @@ export const T = {
 } as const;
 
 export const INGEST_NOTE =
-  "Each one replaces the part of the service a box can stand in for. The catalog is small and pre-release.";
+  "Each name is the part of a service a box can stand in for. The catalog is small and pre-release; the services marked beside the box are not in it yet.";
+export const INGEST_LEGAL = "Logos are trademarks of their owners, shown only to say which service is meant.";
