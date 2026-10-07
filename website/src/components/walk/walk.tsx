@@ -1,25 +1,23 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { DemoWindow, type DemoView } from "~/components/demo/demo-window";
-import { INGEST, NODES, type NodeId } from "./geo";
+import { NODES, type NodeId } from "./geo";
 import { Mark } from "./marks";
-import { INGEST_LEGAL, INGEST_NOTE, INSPECTORS, STEPS, T } from "./story";
+import { INSPECTORS, STEPS } from "./story";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 
 /** The page, as a network you watch. One pinned stage holds a topology: the
  * box (the mark's labyrinth as its body), the machines linked to it over
  * pinned TLS, GitHub and the internet outside it. Scrolling sends three
- * requests through it, each lighting the path it really takes (story.ts),
- * and then the box takes in six services you would otherwise rent.
+ * requests through it, each lighting the path it really takes (story.ts).
  *
  * Text in the graph is anchored to things in it: a caption on the node or
  * link it concerns, the real app screen popping out of the node it is about
  * and receding when the request has moved on.
  *
  * The page is complete without any of it. The prerendered HTML carries the
- * hero, a poster of the graph, and the three requests and the six services
- * as a plain list; the 3D chunk loads after first paint and only then does
+ * hero, a poster of the graph, and the three requests as a plain list; the 3D chunk loads after first paint and only then does
  * the stage pin. Reduced motion renders one finished frame and keeps the
  * list. With no WebGL the poster stands. */
 
@@ -29,16 +27,11 @@ const span = (f: number, a: number, b: number) => Math.min(1, Math.max(0, (f - a
 const smooth = (x: number) => x * x * (3 - 2 * x);
 const win = (f: number, a: number, b: number, tail = 0.02) => smooth(span(f, a, a + tail)) * (1 - smooth(span(f, b - tail, b)));
 
-/** The scroll runs in two gears: everything up to the ingest keeps the pace it was composed at
- * (BASE svh of run for f 0..HOLD), then the eight services get the rest, so each one has room
- * to be read and drawn in. */
-const BASE = 880;
+/** The scroll runs the story to f = HOLD (the deploy has landed) over RUN svh; the scene's beats are
+ * written in f, so the run maps onto 0..HOLD. */
 const HOLD = 0.8;
-const RUN = 1280;
-const gear = (r: number) => {
-  const a = (HOLD * BASE) / RUN;
-  return r <= a ? (r / a) * HOLD : HOLD + ((r - a) / (1 - a)) * (1 - HOLD);
-};
+const RUN = 704;
+const gear = (r: number) => r * HOLD;
 
 const NODE_IDS = Object.keys(NODES) as NodeId[];
 const REQUESTS = ["An AI query", "A Claude session", "A push to main"].map((name) => ({
@@ -55,12 +48,9 @@ export function Walk() {
   const card = useRef<HTMLDivElement>(null);
   const cardText = useRef<HTMLParagraphElement>(null);
   const cardKick = useRef<HTMLParagraphElement>(null);
-  const ingestCap = useRef<HTMLDivElement>(null);
   const stepEls = useRef(new Map<string, HTMLElement>());
   const nodeEls = useRef(new Map<string, HTMLElement>());
   const insEls = useRef<Array<HTMLDivElement | null>>([]);
-  const tileEls = useRef<Array<HTMLElement | null>>([]);
-  const modEls = useRef<Array<HTMLElement | null>>([]);
   const lineEls = useRef<Array<SVGLineElement | null>>([]);
   const [mode, setMode] = useState<Mode>("static");
   const [ready, setReady] = useState(false);
@@ -84,7 +74,6 @@ export function Walk() {
     let fs = 0;
     let last = performance.now();
     let booted = false;
-    let lastCap = -2;
 
     const fit = () => scene?.resize(holder.clientWidth, holder.clientHeight);
 
@@ -115,7 +104,6 @@ export function Walk() {
         const a = S.get(`lab:${id}`);
         if (!e || !a) continue;
         const busy = STEPS.some((s) => "node" in s.at && s.at.node === id && f >= s.f[0] && f < s.f[1]);
-        const ingest = 1 - smooth(span(f, 0.79, 0.83));
         const ew = e.offsetWidth;
         const side = NODES[id].side;
         // a label stays whole at the edge, and goes once its node has left the screen
@@ -128,7 +116,7 @@ export function Walk() {
         const y0 = side ? a.y - eh / 2 : a.y + 28;
         const hit = words.some((r) => x0 < r.right - sh.left + 14 && x0 + ew > r.left - sh.left - 14 && y0 < r.bottom - sh.top + 10 && y0 + eh > r.top - sh.top - 10);
         const off = y0 + eh > H - 10 || y0 < 62;
-        e.style.opacity = a.on && !mobile ? String(ingest * edge * (hit || off ? 0 : 1)) : "0";
+        e.style.opacity = a.on && !mobile ? String(edge * (hit || off ? 0 : 1)) : "0";
         if (busy) e.setAttribute("data-busy", "");
         else e.removeAttribute("data-busy");
         e.style.transform = `translate3d(${cx.toFixed(1)}px, ${a.y.toFixed(1)}px, 0)`;
@@ -198,73 +186,6 @@ export function Walk() {
           ln.setAttribute("opacity", String(v * 0.5));
         }
       });
-      // the ingest: each name sits at its port, then is drawn in
-      const ig = span(f, ...T.ingest);
-      const per = 1 / INGEST.length;
-      let nowI = -1;
-      INGEST.forEach((_, i) => {
-        const p = (ig - i * per * 0.92) / (per * 1.3);
-        const pp = Math.min(1, Math.max(0, p));
-        const tile = tileEls.current[i];
-        const mod = modEls.current[i];
-        const port = S.get(`port:${i}`);
-        const m = S.get(`module:${i}`);
-        if (tile && port) {
-          const inn = smooth(span(f, 0.8 + i * 0.004, 0.84));
-          // at its port until the light leaves; then the mark rides the same link the light does,
-          // read from the scene each frame, so the two are one motion on one clock
-          const trav = smooth(span(pp, 0.4, 0.8));
-          const orb = trav > 0 ? S.get(`orb:${i}`) : undefined;
-          const gone = smooth(span(pp, 0.74, 0.86));
-          tile.style.opacity = String(ig > 0 && pp >= 1 ? 0 : inn * (1 - gone));
-          tile.style.setProperty("--d", String(1 - smooth(span(pp, 0.36, 0.5))));
-          // a port near the edge is held inside the screen; the hold lets go as the mark leaves it
-          const capZone = Math.abs(port.x - W / 2) < 300;
-          const hx = Math.min(W - 70, Math.max(70, port.x));
-          const hy = mobile ? Math.min(H - 190, Math.max(96, port.y)) : Math.min(capZone ? H - 215 : H - 90, Math.max(96, port.y));
-          const tx = (orb ? orb.x : port.x) + (hx - port.x) * (1 - trav);
-          const ty = (orb ? orb.y : port.y) + (hy - port.y) * (1 - trav);
-          tile.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) scale(${(1 - trav * 0.5).toFixed(3)})`;
-        }
-        if (mod && m) {
-          const lit = smooth(span(pp, 0.62, 0.86)) * (ig > 0 ? 1 : 0);
-          const vis = smooth(span(f, 0.83, 0.86));
-          mod.style.opacity = String(vis * (0.62 + 0.38 * lit));
-          mod.style.transform = `translate3d(${m.x.toFixed(1)}px, ${m.y.toFixed(1)}px, 0)`;
-          if (lit > 0.5) mod.setAttribute("data-lit", "");
-          else mod.removeAttribute("data-lit");
-        }
-        if (nowI < 0 && ig > 0 && pp > 0 && pp < 0.88) nowI = i;
-      });
-      if (ingestCap.current) {
-        const done = ig >= 0.97;
-        const i = done ? -1 : nowI;
-        ingestCap.current.style.opacity = String(f > 0.84 && (i >= 0 || done) ? 1 : 0);
-        const t = ingestCap.current.querySelector("[data-t]");
-        const k = ingestCap.current.querySelector("[data-k]");
-        const mo = ingestCap.current.querySelector("[data-m]");
-        const lg = ingestCap.current.querySelector("[data-l]");
-        if (t && k && mo && lg) {
-          if (i !== lastCap) {
-            lastCap = i;
-            for (const n of Array.from(ingestCap.current.children)) {
-              n.animate([{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
-            }
-          }
-          if (i >= 0) {
-            const s = INGEST[i]!;
-            k.textContent = `${s.name} · ${s.part}`;
-            mo.textContent = `${s.module} · ${s.kind === "built" ? "in the catalog" : "beside the box"}`;
-            t.textContent = s.made;
-            lg.textContent = "";
-          } else if (done) {
-            k.textContent = "What the box takes in";
-            mo.textContent = "";
-            t.textContent = INGEST_NOTE;
-            lg.textContent = INGEST_LEGAL;
-          }
-        }
-      }
       // the hero's copy gives way to the first request
       if (hero.current) {
         const v = 1 - smooth(span(f, 0.035, 0.1));
@@ -422,47 +343,6 @@ export function Walk() {
               <DemoWindow view={views[i]!} />
             </div>
           ))}
-          {INGEST.map((s, i) => (
-            <div
-              key={s.name}
-              ref={(n) => {
-                tileEls.current[i] = n;
-              }}
-              className="net-tile"
-              data-kind={s.kind}
-            >
-              <span className="net-tile-marks">
-                {s.marks.map((m) => (
-                  <Mark key={m} id={m} size={20} />
-                ))}
-              </span>
-              <strong>{s.name}</strong>
-              <span className="net-tile-part">{s.part}</span>
-            </div>
-          ))}
-          {INGEST.map((s, i) => (
-            <span
-              key={s.module}
-              ref={(n) => {
-                modEls.current[i] = n;
-              }}
-              className="net-module"
-              data-kind={s.kind}
-            >
-              {s.marks.map((m) => (
-                <Mark key={m} id={m} size={12} />
-              ))}
-              {s.module}
-            </span>
-          ))}
-          <div ref={ingestCap} className="net-ingest-cap">
-            <em data-k />
-            <p>
-              <b data-m />
-              <span data-t />
-            </p>
-            <small data-l />
-          </div>
           <div ref={card} className="net-card">
             <p ref={cardKick} />
             <p ref={cardText} />
@@ -486,6 +366,7 @@ export function Walk() {
               </p>
               <div className="rise rise-2 mt-7 flex flex-wrap items-center gap-3 sm:mt-9">
                 <a href={REPO} className="btn btn-primary h-11 px-5">
+                  <Mark id="github" size={17} />
                   View on GitHub
                 </a>
                 <Link to="/" hash="get" className="btn btn-ghost h-11 px-5">
@@ -523,29 +404,6 @@ export function Walk() {
               </div>
             ))}
           </div>
-          <h2 className="mt-20 max-w-2xl text-balance text-[clamp(1.6rem,3.4vw,2.6rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
-            The box takes in what you would otherwise rent.
-          </h2>
-          <ul className="mt-10 grid gap-x-10 border-t border-hairline sm:grid-cols-2">
-            {INGEST.map((s) => (
-              <li key={s.name} className="grid gap-1 border-b border-hairline py-4">
-                <span className="flex items-center gap-2.5 font-mono text-[13px] text-fg">
-                  {s.marks.map((m) => (
-                    <Mark key={m} id={m} size={16} />
-                  ))}
-                  {s.name} <span className="text-muted">· {s.part}</span>
-                </span>
-                <span className="text-[14px] text-[#b4b4be]">
-                  <b className="font-mono text-[12.5px] font-medium text-fg">{s.module}</b>
-                  {" · "}
-                  {s.kind === "built" ? "in the catalog" : "beside the box"}. {s.made}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-6 max-w-xl text-[13px] leading-relaxed text-dim">
-            {INGEST_NOTE} {INGEST_LEGAL}
-          </p>
         </div>
       </div>
     </section>

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Logo } from "~/components/logo";
+import { Mark } from "~/components/walk/marks";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 
@@ -65,6 +66,7 @@ export function Nav() {
 
         <div className="ml-2 flex items-center gap-1.5 md:ml-4">
           <a href={REPO} className="btn btn-primary h-9 px-3.5 text-[13px]">
+            <Mark id="github" size={15} />
             View on GitHub
           </a>
         </div>

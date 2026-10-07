@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Labyrinth } from "~/components/labyrinth";
 import { Reveal } from "~/components/reveal";
+import { Mark } from "~/components/walk/marks";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 const CLONE = `git clone ${REPO}`;
@@ -53,6 +54,7 @@ export function OpenSource() {
         <Reveal delay={0.08}>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <a href={REPO} className="btn btn-primary h-11 px-5">
+              <Mark id="github" size={17} />
               View on GitHub
             </a>
             <Link to="/docs" className="btn btn-ghost h-11 px-5">

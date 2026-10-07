@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Faq } from "~/components/sections/faq";
 import { GetIt } from "~/components/sections/get-it";
 import { OpenSource } from "~/components/sections/open-source";
+import { Universe } from "~/components/universe/universe";
 import { Walk } from "~/components/walk/walk";
 import { pageHead } from "~/site-head";
 
@@ -17,15 +18,15 @@ export const Route = createFileRoute("/")({
     }),
 });
 
-/** One argument: the network at work (the hero, three requests and what the box takes in),
- * the two pieces to get, the questions, and the labyrinth again as the bookend. Each
- * screen of the app appears once, in the network. */
+/** One argument: the network at work (the hero and three requests), everything it touches (the field
+ * the camera pulls back through), the two pieces to get, the questions, and the labyrinth again as the
+ * bookend. Each screen of the app appears once, in the network. */
 
 function Landing() {
   return (
     <main id="main">
       <Walk />
-      <div className="divider mx-auto max-w-4xl" aria-hidden />
+      <Universe />
       <GetIt />
       <Faq />
       <OpenSource />

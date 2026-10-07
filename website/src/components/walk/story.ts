@@ -103,9 +103,4 @@ export const T = {
   build: [0.625, 0.7],
   deploy: [0.7, 0.76],
   land: [0.76, 0.8],
-  ingest: [0.835, 0.985],
 } as const;
-
-export const INGEST_NOTE =
-  "Each name is the part of a service a box can stand in for. The catalog is small and pre-release; the services marked beside the box are not in it yet.";
-export const INGEST_LEGAL = "Logos are trademarks of their owners, shown only to say which service is meant.";

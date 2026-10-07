@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { T } from "./story";
-import { APPS, INGEST, LINKS, MODULE_R, NODES, PORT_R, WALLS, WALL_H, appPos, type NodeId } from "./geo";
+import { APPS, LINKS, NODES, WALLS, WALL_H, appPos, type NodeId } from "./geo";
 
 /** The labyrinth, as a place you walk. One WebGL2 canvas, plain three.js,
  * hand-written shaders: the work is thousands of fine lines and a little
@@ -394,7 +394,7 @@ export function createScene(o: Options) {
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 3000);
   const mobile = o.light;
 
-  /** one gain every dimmable thing in the world shares, so the ingest can quiet the rest */
+  /** one gain every dimmable thing in the world shares */
   const world = { value: 1 };
   const g = (v = 0) => ({ value: v });
   const boxCore = g(0.35);
@@ -528,29 +528,6 @@ export function createScene(o: Options) {
   scene.add(glow([lp.x, 3, lp.z], 20, landG));
   mkLink("app", V(0, 7, 0), V(lp.x, 2, lp.z), 10, 0.22, 40);
 
-  // —— the ingest: a port, a module and a link for each service ——
-  const modG = INGEST.map(() => g(0));
-  const portG = INGEST.map(() => g(0));
-  const orbG = INGEST.map(() => g(0));
-  const orbs: THREE.Points[] = [];
-  INGEST.forEach((_, i) => {
-    const a = (i / INGEST.length) * Math.PI * 2 + Math.PI / 6;
-    const px = Math.cos(a) * PORT_R;
-    const pz = Math.sin(a) * PORT_R;
-    const mx = Math.cos(a) * MODULE_R;
-    const mz = Math.sin(a) * MODULE_R;
-    const pr = ribbons(ring(11), { w: 0.12, a: 0.5, litA: 0, gain: portG[i]!, halo: [6, 0.2] });
-    pr.position.set(px, 0.1, pz);
-    scene.add(pr);
-    scene.add(ribbons(boxEdges(mx, 2, mz, 9, 4, 9), { w: 0.14, a: 1, tint: INGEST[i]!.kind === "built" ? 0.9 : 0.12, litA: 0, gain: modG[i]!, halo: [8, 0.3], minPx: 1 }));
-    if (INGEST[i]!.kind === "built") scene.add(glow([mx, 3, mz], 22, modG[i]!));
-    mkLink(`in${i}`, V(px, 4, pz), V(0, 7, 0), 14, 0.0, 56);
-    // the link is only drawn once something travels it: its base alpha is the shared amt
-    const orb = glow([0, 0, 0], 8, orbG[i]!);
-    orbs.push(orb);
-    scene.add(orb);
-  });
-
   scene.add(motes(mobile ? 140 : 360, [-240, 2, -200, 240, 90, 220], 0.05, 0.4));
 
   // —— anchors for the page's own text ——
@@ -562,12 +539,6 @@ export function createScene(o: Options) {
   });
   for (const l of LINKS) anchors.set(`link:${l.id}`, linkCurve[l.id]!.getPoint(0.5));
   anchors.set("app", V(lp.x, 12, lp.z));
-  INGEST.forEach((_, i) => {
-    const a = (i / INGEST.length) * Math.PI * 2 + Math.PI / 6;
-    anchors.set(`port:${i}`, V(Math.cos(a) * PORT_R, 6, Math.sin(a) * PORT_R));
-    anchors.set(`module:${i}`, V(Math.cos(a) * MODULE_R, 6, Math.sin(a) * MODULE_R));
-    anchors.set(`orb:${i}`, orbs[i]!.position);
-  });
   const screen = new Map<string, Anchor>();
 
   // —— poses ——
@@ -577,7 +548,6 @@ export function createScene(o: Options) {
     ai: { pos: V(-30, 180, 240), tgt: V(10, 0, 14), fov: 44, fog: 0.0018, dof: 4, expo: 2.3, off: OFF } as Pose,
     claude: { pos: V(60, 176, 210), tgt: V(30, 0, -26), fov: 44, fog: 0.0018, dof: 4, expo: 2.3, off: OFF } as Pose,
     push: { pos: V(0, 170, 210), tgt: V(0, 0, -8), fov: 44, fog: 0.0018, dof: 4, expo: 2.3, off: OFF } as Pose,
-    ingest: { pos: V(0, 330, 146), tgt: V(0, 0, 14), fov: 42, fog: 0.0012, dof: 3, expo: 2.2, off: mobile ? OFF : [0, 0] } as Pose,
   };
   const pose = (f: number): Pose => {
     if (f < 0.08) return POSES.hero;
@@ -586,9 +556,7 @@ export function createScene(o: Options) {
     if (f < 0.4) return blend(POSES.ai, POSES.claude, inOutCubic(span(f, 0.3, 0.4)));
     if (f < 0.5) return POSES.claude;
     if (f < 0.58) return blend(POSES.claude, POSES.push, inOutCubic(span(f, 0.5, 0.58)));
-    if (f < 0.8) return POSES.push;
-    if (f < 0.86) return blend(POSES.push, POSES.ingest, inOutCubic(span(f, 0.8, 0.86)));
-    return POSES.ingest;
+    return POSES.push;
   };
 
   // —— state ——
@@ -700,32 +668,6 @@ export function createScene(o: Options) {
       landRing.value = rp > 0 && rp < 1 ? 1 - rp : 0;
       landMesh.scale.setScalar(4 + outExpo(rp) * 26);
     }
-    // the ingest: the world quiets, one service at a time is drawn in
-    const ig = span(f, ...T.ingest);
-    world.value = 1 - 0.78 * smooth(span(f, 0.815, 0.855));
-    landG.value *= 1 - smooth(span(f, 0.8, 0.84));
-    const per = 1 / INGEST.length;
-    INGEST.forEach((_, i) => {
-      const p = (ig - i * per * 0.92) / (per * 1.3);
-      const pp = clamp01(p);
-      portG[i]!.value = smooth(span(p, -0.2, 0.1)) * 0.9 * (ig > 0 ? 1 : 0);
-      const travel = smooth(span(pp, 0.4, 0.8));
-      const o = orbs[i]!;
-      const c = linkCurve[`in${i}`]!;
-      const pt = c.getPoint(1 - travel * 0.0 - (1 - travel) * 0);
-      void pt;
-      // the curve runs port -> box; the orb rides it, and the module lights as it passes
-      const q = c.getPoint(travel);
-      o.position.copy(q);
-      orbG[i]!.value = pp > 0.38 && pp < 0.86 ? 1 : 0;
-      const sh = linkSh[`in${i}`]!;
-      sh.amt.value = pp > 0.38 && pp < 0.9 ? 0.9 : 0;
-      sh.pos.value = travel;
-      sh.grow.value = 1.3;
-      modG[i]!.value = smooth(span(pp, 0.62, 0.86)) * (ig > 0 ? 1 : 0);
-    });
-    if (ig > 0) boxCore.value = 0.4 + 0.5 * smooth(ig);
-    if (f < 0.8 || ig === 0) modG.forEach((m) => (m.value = 0));
   }
 
   function frame(dt: number) {

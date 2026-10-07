@@ -11,6 +11,13 @@ path-scoped rules load as you touch files.
   `.github/workflows/website.yml`; its docs page inventories the
   operator's external setup — keep it honest about what this repo
   contains). Public: `santiagotoscanini/daedalus`.
+  The landing's services field ("Everything it touches") reads ONE file,
+  `website/src/data/services.ts`: every name, its tier (`catalog`, `beside`,
+  `connects`) and, for a catalog tile, its `module` id. Flipping an item's
+  tier there is how it graduates (a service that becomes `nix/modules/<id>`
+  gets `tier: "catalog"` and `module: "<id>"`). The site build compares the
+  module ids with `nix/modules/` and fails on a mismatch, and the counts the
+  page prints are computed from the list, never typed.
 - **The app builder.** The box's GitHub App takes the push webhook; the
   queue and the build verb's app half are `app/src/lib/` (`builds.ts`,
   `build-queue.ts`), `app/src/host/build-verb.ts` and
