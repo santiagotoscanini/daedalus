@@ -298,22 +298,6 @@ html {
   background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(226, 121, 90, 0.18), transparent 70%);
 }
 
-/* The hero labyrinth's lower courses rise in after the top one has drawn
- * itself: from nothing to their own inline opacity. */
-.lab3d-course {
-  animation: lab-course 0.9s ease-out both;
-}
-@keyframes lab-course {
-  from {
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lab3d-course {
-    animation: none;
-  }
-}
-
 /* The receipt's strike: an ember hairline drawn through each rented
  * service as its row scrolls in. The static page ships it drawn; only a row
  * the reveal hid (.reveal-pre) starts undrawn. */
@@ -517,51 +501,307 @@ html {
   color: transparent;
 }
 
-/* The hero's cycling vendor name. Flat ember, deliberately NOT the gradient
- * the other headings use.
- *
- * A background clipped to text is sized to that text, so the gradient's
- * stops land wherever the word happens to end. That is fine for a heading
- * that never changes, and wrong here: this word grows a character at a
- * time, so the ramp rescales on every keystroke and the name visibly
- * shifts colour as it types. A single "A" samples the entire sweep and
- * comes out muddy brown. One flat tone holds still. */
-.text-ember-word {
-  color: #f5b8a2;
 }
 
-/* The hero's vendor roll: a one-line window onto a stacked column of
- * names, which slides up a name at a time.
- *
- * --roll-h is the window, and every item is exactly that tall, so one step
- * is one item. It is set above 1em on purpose: at 1em the window clips
- * the ascenders and descenders the names actually use ("Google Photos"
- * has both), and the overflow that makes the roll work would cut them. */
-.vendor-roll {
-  --roll-h: 1.16em;
-  display: block;
-  height: var(--roll-h);
-  overflow: hidden;
-}
-.vendor-roll-track {
-  display: flex;
-  flex-direction: column;
-  transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.vendor-roll-item {
-  display: flex;
-  height: var(--roll-h);
-  align-items: center;
-  justify-content: center;
-  gap: 0.26em;
-  line-height: 1;
-  white-space: nowrap;
-}
-/* Reduced motion holds vendor 0 in `vendor-roll.tsx`, so the track never
- * moves; drop the transition too rather than leave it armed. */
-@media (prefers-reduced-motion: reduce) {
-  .vendor-roll-track {
-    transition: none;
+/* ---------------------------------------------------------------- *
+ * The walk: the hero and its pinned scroll (components/walk)
+ * ---------------------------------------------------------------- */
+@layer components {
+  .walk-stage {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 100svh;
+    overflow: hidden;
+    z-index: 0;
+  }
+  .walk[data-mode="pinned"] .walk-stage {
+    position: sticky;
+    top: 0;
+  }
+  .walk-stations {
+    position: relative;
+    z-index: 1;
+  }
+  .walk[data-mode="pinned"] .walk-stations {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    margin-top: -100svh;
+  }
+
+  /* The canvas fades in over the poster once its first frame is drawn */
+  .walk-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  .walk[data-ready] .walk-canvas {
+    opacity: 1;
+  }
+  .walk-poster {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 1600px;
+    transition: opacity 1.2s ease 0.1s;
+    -webkit-mask-image: radial-gradient(closest-side, #000 40%, transparent 96%);
+    mask-image: radial-gradient(closest-side, #000 40%, transparent 96%);
+    filter: drop-shadow(0 0 12px rgba(226, 121, 90, 0.3));
+  }
+  .walk[data-ready] .walk-poster {
+    opacity: 0;
+  }
+  .walk-poster-plan {
+    position: relative;
+    flex: none;
+    width: min(62rem, 150vw);
+    transform-style: preserve-3d;
+    transform: translateX(14%) rotateX(56deg) rotateZ(-40deg);
+  }
+
+  /* Legibility and focus: the type sits in a darker pocket on the left, the
+   * edges fall off to the page */
+  .walk-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(0deg, rgba(8, 8, 10, 0.8) 0%, rgba(8, 8, 10, 0.3) 26%, transparent 46%),
+      linear-gradient(90deg, rgba(8, 8, 10, 0.7) 0%, rgba(8, 8, 10, 0.3) 30%, transparent 54%),
+      radial-gradient(ellipse 80% 75% at 50% 48%, transparent 50%, rgba(8, 8, 10, 0.7) 100%);
+  }
+
+  /* Stations. Stacked in the flow until the stage pins, then layered. */
+  .station {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 5.5rem 0 4rem;
+  }
+  .station[data-i="0"] {
+    min-height: 100svh;
+    padding-bottom: 5rem;
+  }
+  .walk[data-mode="pinned"] .station {
+    position: absolute;
+    inset: 0;
+    padding: 4.5rem 0 2rem;
+    will-change: opacity, transform;
+    transform: translate3d(0, var(--y, 0px), 0);
+  }
+  .walk[data-mode="pinned"] .station:not([data-i="0"]) {
+    opacity: 0;
+  }
+  .station-win {
+    transform-origin: 14% 50%;
+  }
+  .walk[data-mode="pinned"] .station-win {
+    transform: perspective(1900px) rotateY(calc(var(--t, 0) * -9deg)) translate3d(calc(var(--t, 0) * 44px), 0, 0);
+  }
+
+  .hero-strike {
+    position: relative;
+    display: inline-block;
+  }
+  .hero-strike::after {
+    content: "";
+    position: absolute;
+    left: -0.2em;
+    right: -0.2em;
+    top: 54%;
+    height: 1px;
+    background: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    animation: hero-strike 0.8s cubic-bezier(0.65, 0, 0.35, 1) var(--d, 1.5s) forwards;
+  }
+  @keyframes hero-strike {
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  .walk-cue {
+    position: absolute;
+    left: max(1.5rem, calc((100vw - 72rem) / 2 + 1.5rem));
+    bottom: 1.6rem;
+    display: none;
+    align-items: center;
+    gap: 0.9rem;
+    font: 500 10.5px/1 var(--font-mono);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-dim);
+  }
+  .walk-cue i {
+    display: block;
+    width: 38px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--color-accent), transparent);
+    transform-origin: left;
+    animation: cue 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+  @keyframes cue {
+    0% {
+      transform: scaleX(0);
+    }
+    55% {
+      transform: scaleX(1);
+    }
+    100% {
+      transform: scaleX(1);
+      opacity: 0;
+    }
+  }
+
+  .walk-rail {
+    display: none;
+  }
+
+  /* Labels anchored to things in the scene: placed by the scene each frame */
+  .walk-label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+  .walk-label::before {
+    content: "";
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    box-shadow: 0 0 14px 3px rgba(226, 121, 90, 0.65);
+  }
+  .walk-label > span {
+    position: relative;
+    display: block;
+    margin: -6px 0 0 18px;
+    padding-top: 0;
+    font: 500 11px/1 var(--font-mono);
+    letter-spacing: 0.05em;
+    color: #ececf0;
+    white-space: nowrap;
+    text-shadow: 0 0 10px rgba(8, 8, 10, 0.9);
+  }
+  .walk-label > span::before {
+    content: "";
+    position: absolute;
+    left: -14px;
+    top: 5px;
+    width: 10px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.4);
+  }
+
+  @media (min-width: 1024px) {
+    .walk-cue {
+      display: flex;
+    }
+    .walk[data-mode="pinned"] .walk-rail {
+      position: absolute;
+      right: 1.4rem;
+      top: 50%;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 1rem;
+      transform: translateY(-50%);
+    }
+    .walk-rail span {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font: 500 9.5px/1 var(--font-mono);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: transparent;
+      transition: color 0.4s ease;
+    }
+    .walk-rail span::after {
+      content: "";
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.22);
+      transition:
+        background 0.4s ease,
+        box-shadow 0.4s ease;
+    }
+    .walk-rail span[data-on] {
+      color: var(--color-muted);
+    }
+    .walk-rail span[data-on]::after {
+      background: var(--color-accent);
+      box-shadow: 0 0 10px 2px rgba(226, 121, 90, 0.6);
+    }
+  }
+
+  /* Phones: the art sits above, the copy and the window below it */
+  @media (max-width: 767px) {
+    .walk-vignette {
+      background:
+        linear-gradient(0deg, rgba(8, 8, 10, 0.92) 0%, rgba(8, 8, 10, 0.7) 42%, transparent 68%),
+        radial-gradient(ellipse 90% 60% at 50% 30%, transparent 50%, rgba(8, 8, 10, 0.6) 100%);
+    }
+    .station {
+      align-items: flex-end;
+    }
+    .walk[data-mode="pinned"] .station {
+      padding: 4rem 0 1.25rem;
+    }
+    .walk-poster-plan {
+      transform: translateY(-16%) rotateX(56deg) rotateZ(-40deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-strike::after {
+      animation: none;
+      transform: scaleX(1);
+    }
+    .walk-cue i {
+      animation: none;
+    }
+    .walk-canvas,
+    .walk-poster {
+      transition: none;
+    }
   }
 }
+
+@layer components {
+  /* Desktop: the art is a band across the top, the copy and the screen sit
+   * under it on one baseline */
+  @media (min-width: 1024px) {
+    .station:not([data-i="0"]) {
+      align-items: flex-end;
+    }
+    .walk[data-mode="pinned"] .station:not([data-i="0"]) {
+      padding-bottom: 2.6rem;
+    }
+  }
+}
+
+@layer components {
+  /* A short laptop screen: the screen shrinks, the list of facts goes, so the art keeps its band */
+  @media (min-width: 1024px) and (max-height: 780px) {
+    .station-win {
+      width: min(100%, 34rem) !important;
+    }
+    .station-copy ul {
+      display: none;
+    }
+  }
 }
