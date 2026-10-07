@@ -100,8 +100,10 @@ export function AppsList({ data }: { data: ListData }) {
           <StateDot state="running" /> <b className={TALLY_COUNT}>{counts.running}</b> running
         </span>
         <span className={TALLY}>
-          <StateDot state="attention" /> <b className={TALLY_COUNT}>{counts.attention}</b> need
-          attention
+          {/* Red only when something IS in trouble: a red dot beside a zero
+              reads as an alarm about nothing. */}
+          <StateDot state={counts.attention > 0 ? 'attention' : 'unknown'} />{' '}
+          <b className={TALLY_COUNT}>{counts.attention}</b> need attention
         </span>
         <span className={TALLY}>
           <StateDot state="stopped" /> <b className={TALLY_COUNT}>{counts.stopped}</b> stopped
