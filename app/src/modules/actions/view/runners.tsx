@@ -1,4 +1,13 @@
 import {
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  TABLE,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import {
   CAPTION,
   FOOT,
   LIST,
@@ -9,6 +18,7 @@ import {
   ROW_SIDE,
 } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Progress, Pulse, Stat, StatStrip } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
 import { num, since } from '../../../lib/format'
 import { LINK_UNKNOWN } from '../../../lib/node-link'
 import type { ActionsData } from '../data'
@@ -49,17 +59,17 @@ export function RunnersView({ d }: { d: Runners }) {
       </StatStrip>
 
       <BoardGrid>
-        <MachinesThatCouldTakeAJobBoard f={f} />
+        <MachinesThatCouldTakeAJobTable f={f} />
 
         <RegisteredWithGitHubBoard f={f} />
-
-        <DefineARunnerBoard />
-
-        <RunnersNowBoard />
 
         <QueueBoard />
 
         <ThisMonthHereInsteadOfHostedBoard />
+
+        <DefineARunnerBoard />
+
+        <RunnersNowBoard />
 
         <HowARunnerHereWouldWorkBoard />
       </BoardGrid>
@@ -79,50 +89,55 @@ function runnersFacts({ d }: { d: Runners }) {
 
 type RunnersFacts = NonNullable<ReturnType<typeof runnersFacts>>
 
-function MachinesThatCouldTakeAJobBoard({ f }: { f: RunnersFacts }) {
+/** Machine · platform · labels · demand · state. Labels and platform step away first. */
+const MACHINE_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(9rem,0.9fr)_8rem] @max-[52rem]/table:grid-cols-[minmax(9rem,1fr)_minmax(8rem,0.9fr)_7rem] @max-[52rem]/table:[&>.side]:hidden'
+
+function MachinesThatCouldTakeAJobTable({ f }: { f: RunnersFacts }) {
   const { d } = f
   return (
-    <Board
-      title="Machines that could take a job"
-      icon="grid"
-      span={8}
-      aside={<span className={NOTE}>this box and every approved node</span>}
-    >
-      <ul className={LIST}>
+    <TableSection title="Machines that could take a job" aside="this box and every approved node">
+      <ul className={TABLE} aria-label="Machines that could run a job">
+        <li className={cn(MACHINE_GRID, TABLE_HEAD)}>
+          <span>Machine</span>
+          <span className="side">Platform</span>
+          <span className="side">Would answer to</span>
+          <span>Asked for, a month</span>
+          <span className="text-right">State</span>
+        </li>
         {d.machines.map((m) => (
-          <li key={m.id} className="border-hairline border-t py-2.5 first:border-t-0">
-            <div className="flex min-w-0 items-center gap-2 text-[0.8rem]">
-              <Pulse on={m.online === true} tone={m.online === true ? 'ok' : 'muted'} />
-              <span className={ROW_MAIN}>
-                <b className="[font-weight:560]">{m.name}</b>
-                <span className="ml-1.5 text-muted-foreground">
-                  {osWord(m.os)} · {m.arch}
-                  {m.agentVersion !== null && ` · agent ${m.agentVersion}`}
-                </span>
-              </span>
-              <span className={ROW_SIDE}>
-                {m.box
-                  ? 'the control plane'
-                  : m.online === null
-                    ? LINK_UNKNOWN
-                    : m.online
-                      ? 'online'
-                      : `last heard ${since(m.lastSeenAgo)}`}
-              </span>
-            </div>
-            <p className="m-0 mt-1.5 flex flex-wrap items-center gap-1.5 text-[0.75rem] text-muted-foreground">
-              <span>would answer to</span>
-              {m.labels.map((l) => (
-                <Chip key={l} className={MONO}>
-                  {l}
-                </Chip>
-              ))}
-              <span className="ml-auto tabular-nums">
-                {m.demand === 0
-                  ? 'no job asked for this OS'
-                  : `${num(m.demand)} jobs · ${num(m.minutes)} min a month ask for it`}
-              </span>
-            </p>
+          <li key={m.id} className={cn(MACHINE_GRID, TABLE_ROW)}>
+            <span className={CELL_NAME}>{m.name}</span>
+            <span className={cn(CELL_QUIET, 'side truncate')}>
+              {osWord(m.os)} · {m.arch}
+              {m.agentVersion !== null && ` · agent ${m.agentVersion}`}
+            </span>
+            {/* The same labels on every row, so they recede to one quiet line
+                rather than a chip each. */}
+            <span className={cn(CELL_MONO, 'side')} title={m.labels.join(', ')}>
+              {m.labels.join(', ')}
+            </span>
+            <span className={cn(CELL_QUIET, m.demand > 0 && 'text-subdued')}>
+              {m.demand === 0
+                ? 'no job asked for this OS'
+                : `${num(m.demand)} jobs · ${num(m.minutes)} min`}
+            </span>
+            {/* Online is the norm; only a machine that has gone quiet, or
+                cannot be read, gets a mark. */}
+            <span className="flex items-center justify-end gap-2 text-right text-[0.78rem]">
+              {m.box ? (
+                <span className="text-muted-foreground">the control plane</span>
+              ) : m.online === true ? (
+                <span className="text-muted-foreground">online</span>
+              ) : m.online === null ? (
+                <span className="text-muted-foreground">{LINK_UNKNOWN}</span>
+              ) : (
+                <>
+                  <Pulse on={false} tone="muted" />
+                  <span className="text-warning">last heard {since(m.lastSeenAgo)}</span>
+                </>
+              )}
+            </span>
           </li>
         ))}
       </ul>
@@ -131,7 +146,7 @@ function MachinesThatCouldTakeAJobBoard({ f }: { f: RunnersFacts }) {
         container; a node would take its own as a service the agent supervises, the way it runs
         Claude's remote control. Nothing is started from this page yet.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 
@@ -143,9 +158,7 @@ function RegisteredWithGitHubBoard({ f }: { f: RunnersFacts }) {
       icon="panels"
       span={4}
       aside={
-        <Chip tone={d.canListRunners ? 'ok' : 'warn'}>
-          {d.canListRunners ? 'read' : 'unreadable'}
-        </Chip>
+        d.canListRunners ? <span className={NOTE}>read</span> : <Chip tone="warn">unreadable</Chip>
       }
     >
       {d.canListRunners ? (
@@ -247,7 +260,7 @@ function QueueBoard() {
   return (
     <WipBoard
       title="Queue"
-      span={6}
+      span={4}
       waits="needs the workflow_job webhook: a queued job with a matching label starts a runner"
     >
       <SampleRows
@@ -265,7 +278,7 @@ function ThisMonthHereInsteadOfHostedBoard() {
   return (
     <WipBoard
       title="This month, here instead of hosted"
-      span={6}
+      span={4}
       waits="counted once runners take jobs"
     >
       <SampleRows

@@ -155,14 +155,14 @@ function SupportChip({ support }: { support: Support | null }) {
       </Chip>
     )
   }
-  return <Chip tone="ok">supported until {support.eol}</Chip>
+  // Supported is the norm: a quiet line. Only ending or ended is a chip.
+  return <span className={NOTE}>supported until {support.eol}</span>
 }
 
 function Channel({ live }: { live: Live }) {
   if (live.state === 'asking') return <Skeleton className="h-4 w-36" />
   if (live.state === 'failed') return <span className={NOTE}>not asked</span>
   const c = live.release.channel
-  const ended = live.release.support?.state === 'ended'
   return (
     <span className="inline-flex flex-col gap-0.5">
       <span className="inline-flex flex-wrap items-center gap-2">
@@ -170,7 +170,7 @@ function Channel({ live }: { live: Live }) {
         {c.newer === null ? (
           <Chip tone="muted">not compared</Chip>
         ) : c.newer === 0 ? (
-          <Chip tone={ended ? 'muted' : 'ok'}>no newer commits</Chip>
+          <span className={NOTE}>no newer commits</span>
         ) : (
           <Chip tone="warn">
             {num(c.newer)} newer commit{c.newer === 1 ? '' : 's'}
@@ -187,7 +187,7 @@ function Latest({ facts, live }: { facts: NixosFacts; live: Live }) {
   if (live.state === 'failed') return <span className={NOTE}>not asked</span>
   const l = live.release.latest
   if (l === null) return <span className={NOTE}>endoflife.date did not answer</span>
-  if (l.cycle === facts.release) return <Chip tone="ok">this release</Chip>
+  if (l.cycle === facts.release) return <span className="text-muted-foreground">this release</span>
   const eol = live.release.latestSupport?.eol ?? null
   return (
     <span className="inline-flex flex-col gap-0.5">

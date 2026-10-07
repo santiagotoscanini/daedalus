@@ -43,7 +43,9 @@ export function Chips({
 }) {
   return (
     <span className={cn(REPO_CHIPS, className)}>
-      {repo.private && <Chip className={cn(CHIP, 'text-subdued')}>private</Chip>}
+      {/* Nearly every repo here is private, so the word is quiet text, not a
+          pill: the pills are left for what differs (archived, already an app). */}
+      {repo.private && <span className="text-[0.75rem] text-muted-foreground">private</span>}
       {repo.archived && (
         <Chip tone="warn" className={CHIP}>
           archived
@@ -128,7 +130,7 @@ function fmtWhen(iso: string): string {
   return `pushed ${iso.slice(0, 7)}`
 }
 
-export const REPO_CHIPS = 'flex items-baseline gap-1.5'
+export const REPO_CHIPS = 'flex items-center gap-1.5'
 
 export const REPO_DESC = 'min-w-0 truncate text-[0.85rem] text-subdued'
 

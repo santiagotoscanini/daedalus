@@ -58,6 +58,10 @@ export function AppCrumbs({
   )
 }
 
+/** Two boards in one half-width column of the board grid. */
+const STACK =
+  'flex min-w-0 flex-col gap-4 [grid-column:span_6] max-[78rem]:[grid-column:span_12] [&>section:last-child]:flex-1'
+
 export function BuildDetail({
   name,
   app,
@@ -96,17 +100,20 @@ export function BuildDetail({
           <Detection build={build} />
         </Board>
 
-        <Board title="Resolved tools" span={6}>
-          <Tools build={build} />
-        </Board>
-
         <Board title="Image" span={6}>
           <ImageBoard build={build} />
         </Board>
 
-        <Board title="Railpack said" span={12}>
-          <RailpackSaid build={build} />
-        </Board>
+        {/* The two short boards stacked beside the tall one, the last taking
+            the slack, so the row has one bottom edge and no empty half. */}
+        <div className={STACK}>
+          <Board title="Resolved tools" span={12}>
+            <Tools build={build} />
+          </Board>
+          <Board title="Railpack said" span={12}>
+            <RailpackSaid build={build} />
+          </Board>
+        </div>
 
         <LogBoard build={build} open={open} />
       </BoardGrid>

@@ -53,9 +53,7 @@ export const MORE = `${FOLD} mt-1.5 border-t border-hairline pt-1 [&>summary]:te
 /** A folded group inside a board. */
 export const GROUP = `${FOLD} [&>summary]:text-[0.8rem] [&>summary]:text-foreground`
 
-/** The bar that carries a tab's route/tunnel switch. The switch is always at
-    the right, whether or not anything sits to its left — `ml-auto` on the last
-    child does both cases, where `justify-between` would park a lone child at
-    the start. */
-export const SWITCH_BAR =
-  'mx-0 mt-7 mb-6 flex flex-wrap items-center gap-4 border-b border-hairline pb-4 [&>*:last-child]:ml-auto'
+/** The bar that carries a tab's route/tunnel switch: a toolbar, so it sits
+    where every toolbar does — left, under the tabs, above what it switches —
+    with no rule of its own. */
+export const SWITCH_BAR = 'mx-0 mt-0 mb-6 flex flex-wrap items-center gap-3'

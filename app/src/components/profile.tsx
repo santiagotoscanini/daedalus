@@ -1,4 +1,4 @@
-import { ExternalLinkIcon, KeyRoundIcon, LogOutIcon } from 'lucide-react'
+import { ExternalLinkIcon, LogOutIcon } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import type { OperatorAccount, Profile, ProfilePatch, ProfileRead } from '../core/settings/types'
 import { cn } from '../lib/cn'
@@ -11,8 +11,18 @@ import {
 
 import { mailAddressError } from '../lib/site-fields'
 import { resetProfilePictureFn, saveProfileFn, uploadProfilePictureFn } from '../server/profile'
-import { NOTE_SHOWN } from './settings/form'
-import { ASIDE, ERROR_NOTE, Mono, NOTE, Pending, Section, Stack, Unset } from './settings/shared'
+import {
+  ASIDE,
+  ERROR_NOTE,
+  Mono,
+  NOTE,
+  NOTE_SHOWN,
+  Pending,
+  SECTIONS,
+  Section,
+  Stack,
+  Unset,
+} from './settings/shared'
 import { Button, buttonVariants } from './ui/button'
 import { Card, CardContent } from './ui/card'
 import { Field, FieldDescription, FieldError, FieldLabel } from './ui/field'
@@ -46,7 +56,7 @@ export function ProfilePage({
   profile: ProfileRead | null
 }) {
   return (
-    <div className="flex flex-col gap-5">
+    <div className={SECTIONS}>
       {profile === null ? (
         <Card>
           <CardContent className="py-8">
@@ -151,11 +161,7 @@ function Account({ profile: p }: { profile: Profile }) {
         </div>
       </Section>
 
-      <Section
-        title="Sign-in"
-        icon={<KeyRoundIcon />}
-        description="Your passkeys are kept by Pocket ID, not by this box."
-      >
+      <Section title="Sign-in" description="Your passkeys are kept by Pocket ID, not by this box.">
         <div className="flex flex-wrap items-center gap-2">
           {p.accountUrl !== '' && (
             <a

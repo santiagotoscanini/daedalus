@@ -1,27 +1,12 @@
-import { useRouter } from '@tanstack/react-router'
-import { DASH, num, since } from '../../lib/format'
-import { type AppTabData, triggerDeploy } from '../../server/registry'
-import { Ago } from '../ago'
-import { useNow } from '../poll'
-import { useRootAction } from '../root-action'
-import { EMPTY } from '../tokens'
-import { Button } from '../ui/button'
-import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
-import { CloneButton } from '../workspace'
-import { DetectionLine } from './builds'
-import { type AppRecord, GHOST_BTN, type LoaderData, STRIP_FOOT } from './shared'
-
-/**
- * An image reference short enough to sit in a value column.
- *
- * The registry host is the same for every app here and the tag is `latest` for
- * almost all of them, so the middle is the only part that identifies anything.
- * The full string stays in the title.
- */
-function shortImage(ref: string): string {
-  const slash = ref.lastIndexOf('/')
-  return slash === -1 ? ref : ref.slice(slash + 1)
-}
+import { cn } from '../../lib/cn'
+import { DASH, num } from '../../lib/format'
+import type { AppTabData } from '../../server/registry'
+import { ExplainToggle, useExplain } from '../explain'
+import { SECTION_TITLE } from '../table'
+import { CAPTION } from '../tokens'
+import { Board, BoardGrid, Stat, StatStrip } from '../viz'
+import { DeploymentBoard, PreviewBoard, WorkspaceBoard } from './overview-boards'
+import type { AppRecord, LoaderData } from './shared'
 
 export function Overview({
   app,
@@ -44,7 +29,7 @@ export function Overview({
   workspaceRoot: NonNullable<LoaderData>['workspaceRoot']
   d: Extract<AppTabData, { kind: 'overview' }>
 }) {
-  const now = useNow(false)
+  const explain = useExplain()
   // `notes` is jsonb, so the database can hand back anything — an array, a
   // nested object, a number. Rendering an unexpected value throws
   // "Objects are not valid as a React child" and takes down the WHOLE page,
@@ -54,30 +39,40 @@ export function Overview({
     (app.notes ?? {}) as Record<string, unknown>,
   ).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])
 
+  const healthy = status?.healthy ?? null
+  const oomKills = d.resources.oomKills
+  const oom = oomKills !== null && oomKills > 0
+  const span = deployShot === null ? 6 : 4
+
   return (
     <>
-      {/* Six readings in the order you would ask them: is it up, is anyone
-          using it, what is it costing, is it being noisy. */}
+      {/* The page's one focal reading: six numbers in the order you would ask
+          them — is it up, is anyone using it, what is it costing, is it being
+          noisy. Their working folds behind the ⓘ rather than sitting under the
+          strip as a paragraph nobody reads twice. */}
+      <h2 className={cn(SECTION_TITLE, 'mt-0 gap-x-1')}>
+        Last hour
+        <ExplainToggle
+          open={explain.open}
+          onToggle={explain.toggle}
+          className="-my-1 inline-flex"
+        />
+      </h2>
+      {explain.open && (
+        <p className={cn(CAPTION, '-mt-1 mb-3 max-w-[74ch] animate-in fade-in-0 duration-200')}>
+          CPU and memory come from cgroup v2 at 60-second resolution. Memory is{' '}
+          <code>memory.current</code>, which counts page cache, so an app doing file I/O sits at its
+          limit and is fine. The signal that a cap is too tight is the OOM counter moving.
+        </p>
+      )}
       <StatStrip>
-        {/* The probe, not the container state — the hero above already
-            carries running/stopped, and a second copy of it here would
-            spend a cell of the strip agreeing with itself. */}
+        {/* The probe, not the container state — the head above already
+            carries running/stopped. Only a failing probe takes a colour:
+            "ok" is the norm and reads in plain ink. */}
         <Stat
           label="Health"
-          value={
-            status?.healthy === undefined || status.healthy === null
-              ? 'not probed'
-              : status.healthy
-                ? 'ok'
-                : 'failing'
-          }
-          tone={
-            status?.healthy === undefined || status.healthy === null
-              ? undefined
-              : status.healthy
-                ? 'ok'
-                : 'bad'
-          }
+          value={healthy === null ? 'not probed' : healthy ? 'ok' : 'failing'}
+          tone={healthy === false ? 'bad' : undefined}
           sub={status?.containerUp === false ? 'container down' : 'probed every 60s'}
           title={`gatus probes ${app.authHealthPath ?? '/'} from outside every 60s. Container liveness: ${fmtBool(status?.containerUp)}.`}
         />
@@ -93,12 +88,14 @@ export function Overview({
           value={d.resources.cpu.used === null ? DASH : d.resources.cpu.used.toFixed(2)}
           unit={d.resources.cpu.limit === null ? 'cores' : `of ${String(d.resources.cpu.limit)}`}
           spark={d.resources.cpu.spark}
+          title="cgroup v2, 60-second resolution"
         />
         <Stat
           label="Memory"
           value={d.resources.memory.used === null ? DASH : fmtMb(d.resources.memory.used)}
           unit={d.resources.memory.limit === null ? 'MB' : `of ${fmtMb(d.resources.memory.limit)}`}
           spark={d.resources.memory.spark}
+          title="memory.current counts page cache: an app doing file I/O sits at its limit and is fine"
         />
         <Stat
           label="Processes"
@@ -108,12 +105,8 @@ export function Overview({
           // so it is the one allowed to take a colour — and it replaces
           // the caption rather than sitting beside it, because "no OOM
           // kills" is not news and "3 OOM kills" is.
-          tone={d.resources.oomKills !== null && d.resources.oomKills > 0 ? 'bad' : undefined}
-          sub={
-            d.resources.oomKills !== null && d.resources.oomKills > 0
-              ? `${String(d.resources.oomKills)} OOM kill${d.resources.oomKills === 1 ? '' : 's'}`
-              : 'no OOM kills'
-          }
+          tone={oom ? 'bad' : undefined}
+          sub={oom ? `${String(oomKills)} OOM kill${oomKills === 1 ? '' : 's'}` : 'no OOM kills'}
         />
         <Stat
           label="Logs"
@@ -123,250 +116,49 @@ export function Overview({
         />
       </StatStrip>
 
-      <p className={STRIP_FOOT}>
-        CPU and memory come from cgroup v2 at 60-second resolution. Memory is{' '}
-        <code>memory.current</code>, which counts page cache, so an app doing file I/O sits at its
-        limit and is fine. The signal that a cap is too tight is the OOM counter moving.
-      </p>
-
-      <BoardGrid>
-        <Board
-          title="Deployment"
-          icon="◲"
-          span={6}
-          aside={app.sourceMode === 'local' ? null : <RedeployButton name={app.name} />}
-        >
-          {/* What the app looked like moments after its last deploy — taken
-              by shot-deploy-<name> on the host, anonymous-visitor view. Not
-              live: it ages with the deploy, which is the point. */}
-          {deployShot !== null && (
-            <a
-              // A fixed 16:10 frame at the board's width — the same shape the
-              // capture uses (shot-deploy passes --viewport 1280x800), so a
-              // fresh shot fits exactly and an older, taller one crops from
-              // the top rather than squashing.
-              className="relative mb-3 block aspect-16/10 overflow-hidden rounded-xl border border-hairline bg-foreground/[0.04]"
-              href={`/api/deploy-shot/${app.name}?v=${deployShot.v}`}
-              target="_blank"
-              rel="noreferrer"
-              title={
-                (deployShot.ok
-                  ? 'Taken right after the last deploy'
-                  : 'The page ERRORED under the camera right after the last deploy') +
-                (deployShot.at === null || now === null
-                  ? ''
-                  : ` — ${since((now - deployShot.at) / 1000)}`)
-              }
-            >
-              <img
-                className="block size-full object-cover object-top"
-                src={`/api/deploy-shot/${app.name}?v=${deployShot.v}`}
-                alt={`${app.name} right after its last deploy`}
-                loading="lazy"
-              />
-              {!deployShot.ok && (
-                <span className="absolute top-2 right-2 rounded-full bg-danger px-2 py-0.5 text-[0.72rem] font-[550] text-foreground">
-                  page errored
-                </span>
-              )}
-            </a>
-          )}
-          <Facts
-            list
-            rows={[
-              {
-                k: 'source',
-                v: app.sourceMode === 'local' ? 'local (hot reload)' : 'registry',
-              },
-              {
-                k: 'image',
-                v: <code title={app.effectiveImage}>{shortImage(app.effectiveImage)}</code>,
-              },
-              {
-                // A push is the real trigger — the box build starts the deploy
-                // unit itself — so an app is live in seconds; the timer is the safety net.
-                // "Every 2 min" alone had the operator believing the poll was
-                // the mechanism.
-                k: 'auto-deploy',
-                v: app.sourceMode === 'local' ? 'n/a, source is live' : 'on push · 2-min fallback',
-              },
-              ...(lastDeploy
-                ? [
-                    {
-                      k: 'running digest',
-                      v: <code>{lastDeploy.digest.replace('sha256:', '').slice(0, 12)}</code>,
-                    },
-                    {
-                      k: 'last deploy',
-                      v: (
-                        <span
-                          className={lastDeploy.result === 'ok' ? 'text-success' : 'text-danger'}
-                        >
-                          {lastDeploy.result}
-                        </span>
-                      ),
-                    },
-                  ]
-                : []),
-              ...(pullBroken
-                ? [
-                    {
-                      k: 'pulls',
-                      v: <span className="text-danger">failing, check the registry</span>,
-                    },
-                  ]
-                : []),
-              { k: 'container', v: <code>app-{app.name}</code> },
-            ]}
+      <div className="mt-6">
+        <BoardGrid>
+          {/* Three boards of one height when there is a picture of the last
+            deploy: the picture fills its board, so it never leaves the tall/
+            short pair the two fact lists used to make beside it. */}
+          {deployShot !== null && <PreviewBoard name={app.name} shot={deployShot} />}
+          <DeploymentBoard
+            app={app}
+            lastDeploy={lastDeploy}
+            pullBroken={pullBroken}
+            build={d.build}
+            span={span}
           />
-          {/* What the last box build found in the repo. Nothing at all for an
-              app that has never built here. */}
-          {d.build !== null && <DetectionLine app={app.name} build={d.build} />}
-        </Board>
-
-        {/* No Database, Access or VPN boards here: each is a section in
+          {/* No Database, Access or VPN boards here: each is a section in
             the app rail with a fuller page, and the overview repeating their
             facts was the rail's list restated as cards. */}
+          <WorkspaceBoard
+            repo={repo}
+            workspace={workspace}
+            workspaceRoot={workspaceRoot}
+            span={span}
+          />
 
-        {/* The clone of this app's repo under ~/projects on the host, where a
-            Claude Code session works on it directly from this box. The host
-            keeps it current — a deploy landing pulls it, a 30-minute timer
-            backstops — so the button is only ever "make it exist" or "don't
-            wait for the timer". */}
-        <Board
-          title="Workspace"
-          icon="⎇"
-          span={6}
-          aside={<CloneButton repo={repo} cloned={workspace !== null} />}
-        >
-          {workspace ? (
-            <Facts
-              list
-              rows={[
-                {
-                  k: 'repo',
-                  v: (
-                    <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
-                      {repo}
-                    </a>
-                  ),
-                },
-                {
-                  k: 'path',
-                  v: <code>{`${workspaceRoot}/${workspace.name}`}</code>,
-                },
-                {
-                  k: 'checked out',
-                  v: (
-                    <code>
-                      {workspace.branch ?? DASH} @ {workspace.head ?? DASH}
-                    </code>
-                  ),
-                },
-                {
-                  k: 'tree',
-                  v: workspace.dirty ? (
-                    <span className="text-warning">uncommitted changes</span>
-                  ) : (
-                    'clean'
-                  ),
-                },
-                {
-                  k: 'vs origin',
-                  v:
-                    workspace.ahead === null || workspace.behind === null
-                      ? DASH
-                      : workspace.ahead === 0 && workspace.behind === 0
-                        ? 'current'
-                        : [
-                            workspace.ahead > 0 ? `${String(workspace.ahead)} ahead` : null,
-                            workspace.behind > 0 ? `${String(workspace.behind)} behind` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' · '),
-                },
-                {
-                  k: 'last sync',
-                  v: workspace.sync ? (
-                    <span
-                      className={workspace.sync.result === 'failed' ? 'text-danger' : undefined}
-                      title={workspace.sync.detail || undefined}
-                    >
-                      {workspace.sync.result} · <Ago at={workspace.sync.at} />
-                    </span>
-                  ) : (
-                    'not yet'
-                  ),
-                },
-              ]}
-            />
-          ) : (
-            <p className={EMPTY}>
-              Not cloned on this box.{' '}
-              <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
-                {repo}
-              </a>{' '}
-              would land in <code>{workspaceRoot}</code> and stay current on its own.
-            </p>
-          )}
-        </Board>
-
-        {notes.length > 0 && (
-          <Board title="Why it is configured this way" icon="✎" span={12}>
-            {/* Columns rather than one stack: these are several short
+          {notes.length > 0 && (
+            <Board title="Why it is configured this way" icon="✎" span={12}>
+              {/* Columns rather than one stack: these are several short
                 rationales, not one long document, and full-width paragraphs in
                 a 12-span board leave most of the row empty. */}
-            <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-x-7 gap-y-4">
-              {notes.map(([k, v]) => (
-                <div key={k} className="min-w-0">
-                  <dt className="text-[0.75rem] font-[550] text-muted-foreground">{k}</dt>
-                  <dd className="mt-1 mr-0 mb-0 ml-0 text-[0.875rem] leading-[1.55] text-subdued">
-                    {v}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </Board>
-        )}
-      </BoardGrid>
+              <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-x-7 gap-y-4">
+                {notes.map(([k, v]) => (
+                  <div key={k} className="min-w-0">
+                    <dt className="text-[0.75rem] font-[550] text-muted-foreground">{k}</dt>
+                    <dd className="mt-1 mr-0 mb-0 ml-0 text-[0.875rem] leading-[1.55] text-subdued">
+                      {v}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Board>
+          )}
+        </BoardGrid>
+      </div>
     </>
-  )
-}
-
-/**
- * Runs the app's deploy unit now rather than waiting for its 2-minute timer.
- * Same unit either way, so a redeploy that finds an unchanged digest is a
- * no-op — this is not a "restart" button. The host answers when the unit has
- * finished; a refusal (the timer's run is going) or a failure is shown here.
- */
-function RedeployButton({ name }: { name: string }) {
-  const router = useRouter()
-  const { running, answer, start } = useRootAction({
-    onSettle: () => {
-      void router.invalidate()
-    },
-  })
-
-  return (
-    <span className="inline-flex items-center gap-2.5 text-[0.75rem]">
-      {answer !== null && answer.outcome !== 'done' && (
-        <span className="text-danger" title={answer.detail || undefined}>
-          {answer.outcome === 'refused' ? answer.detail : 'the deploy failed'}
-        </span>
-      )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className={GHOST_BTN}
-        disabled={running}
-        onClick={() => {
-          start(() => triggerDeploy({ data: name }))
-        }}
-      >
-        {running ? '↻ deploying…' : '↻ Redeploy'}
-      </Button>
-    </span>
   )
 }
 

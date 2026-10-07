@@ -41,8 +41,6 @@ export function NodeMemoryView({ d }: { d: NodeSystemData }) {
 
       <TheModulesBoard f={f} />
 
-      <Panel f={f} />
-
       <HeaviestProcessesBoard f={f} />
 
       <NotReadable t={t} />
@@ -68,6 +66,9 @@ function nodeMemoryFacts({ d }: { d: NodeSystemData }) {
 
 type NodeMemoryFacts = NonNullable<ReturnType<typeof nodeMemoryFacts>>
 
+const HEADLINE =
+  'm-0 text-[2.25rem] leading-none tracking-[-0.035em] text-foreground tabular-nums [font-weight:560]'
+
 function MemoryBoard({ f }: { f: NodeMemoryFacts }) {
   const { node, m, usedPct } = f
   return (
@@ -77,11 +78,15 @@ function MemoryBoard({ f }: { f: NodeMemoryFacts }) {
       span={8}
       aside={<span className={NOTE}>{bytes(m.total_bytes)} total</span>}
     >
+      {/* The reading the note below says to read, set as the page's figure. */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[0.75rem] text-muted-foreground">available</span>
+        <p className={HEADLINE}>{bytes(m.available_bytes)}</p>
+      </div>
       <Progress pct={usedPct} tone={loadTone(usedPct)} />
       <Measures
         items={[
           { k: 'used', v: bytes(m.used_bytes) },
-          { k: 'available', v: bytes(m.available_bytes) },
           { k: 'file cache', v: bytes(m.cached_bytes) },
           { k: 'compressed', v: bytes(m.compressed_bytes) },
         ]}
@@ -93,6 +98,10 @@ function MemoryBoard({ f }: { f: NodeMemoryFacts }) {
           ? 'macOS goes further and compresses cold pages in place before it swaps — the compressed figure is memory pressure that has already happened, and a large one is the machine telling you it would like more.'
           : 'The file cache is the standby list, which Windows counts as available; the compressed figure is the Memory Compression store, which it does not.'}
       </p>
+      {/* Where the overflow goes, under the bar it overflows — a board of
+          its own beside a list of ten processes was a short board on a tall
+          row. */}
+      <Panel f={f} />
     </Board>
   )
 }
@@ -169,7 +178,8 @@ function TheModulesBoard({ f }: { f: NodeMemoryFacts }) {
 function Panel({ f }: { f: NodeMemoryFacts }) {
   const { node, m } = f
   return (
-    <Board title={node.os === 'windows' ? 'Commit' : 'Swap'} icon="⇵" span={4}>
+    <>
+      <h4 className={SUB}>{node.os === 'windows' ? 'Commit' : 'Swap'}</h4>
       {node.os === 'windows' ? (
         <>
           <Progress
@@ -194,7 +204,7 @@ function Panel({ f }: { f: NodeMemoryFacts }) {
         <>
           <Progress
             pct={share(m.swap_used_bytes, m.swap_total_bytes)}
-            tone={(m.swap_used_bytes ?? 0) > 0 ? 'warn' : 'ok'}
+            tone={(m.swap_used_bytes ?? 0) > 0 ? 'warn' : 'muted'}
           />
           <Measures
             items={[
@@ -209,14 +219,14 @@ function Panel({ f }: { f: NodeMemoryFacts }) {
           </p>
         </>
       )}
-    </Board>
+    </>
   )
 }
 
 function HeaviestProcessesBoard({ f }: { f: NodeMemoryFacts }) {
   const { t, heaviest } = f
   return (
-    <Board title="Heaviest processes" icon="grid" span={8}>
+    <Board title="Heaviest processes" icon="grid" span={12}>
       {t.processes.length === 0 ? (
         <p className={EMPTY}>nothing reporting</p>
       ) : (
@@ -226,7 +236,7 @@ function HeaviestProcessesBoard({ f }: { f: NodeMemoryFacts }) {
             value: p.memory_bytes ?? 0,
             display: bytes(p.memory_bytes),
           }))}
-          tone="info"
+          tone="muted"
           empty="nothing reporting"
         />
       )}

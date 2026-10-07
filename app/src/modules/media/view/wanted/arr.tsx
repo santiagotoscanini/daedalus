@@ -8,22 +8,21 @@ import { cn } from '../../../../lib/cn'
 import { bytes, daysAgo, inDays, num } from '../../../../lib/format'
 import {
   CAPTION,
+  CELL_QUIET,
   EMPTY,
-  FEED,
-  FEED_EVENT,
-  FEED_ROW,
-  FEED_TITLE,
-  FEED_WHEN,
   FOOT,
   HealthChecks,
+  HealthLine,
+  healthFailing,
   LIST,
   NOTE,
+  QueueTable,
   SUB,
-  TRANSFER_HEAD,
-  TRANSFER_META,
-  TRANSFER_NAME,
-  TRANSFER_ROW,
-  TRANSFERS,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableSection,
 } from '../shared'
 import type { Wanted } from './shared'
 import { WANTED_NEIGHBOURS } from './shared'
@@ -31,8 +30,9 @@ import { WANTED_NEIGHBOURS } from './shared'
 /* What is coming: a title with its episode under it, and a date on the right.
    The date is brand-coloured because it is the reading; one already on disk
    goes grey, since there is nothing left to wait for. */
-const UPNEXT = `${LIST} gap-1.5`
-const UPNEXT_ROW = 'flex items-baseline justify-between gap-3 text-[0.8rem]'
+const UPNEXT = LIST
+const UPNEXT_ROW =
+  'flex items-baseline justify-between gap-3 border-hairline border-t py-2 text-[0.8125rem] first:border-t-0 first:pt-0'
 const UPNEXT_TITLE = 'min-w-0 truncate'
 const UPNEXT_SUB = 'block truncate text-[0.72rem] text-muted-foreground not-italic'
 const UPNEXT_WHEN = 'whitespace-nowrap text-[0.75rem]'
@@ -87,23 +87,29 @@ export function ArrPage({ d }: { d: Wanted['sonarr'] }) {
         actions={<Open name={copy.name} host={d.app} />}
       />
 
+      <HealthLine checks={d.health} reachable={reachable} />
+
       <BoardGrid>
-        <Board
-          title="What it says is wrong"
-          icon="warn"
-          span={8}
-          aside={<span className={NOTE}>its own health checks</span>}
-        >
-          <HealthChecks checks={d.health} reachable={reachable} />
-        </Board>
+        {/* Its own health checks get a board only while one is failing; a
+            passing set is the quiet line under the head. */}
+        {healthFailing(d.health, reachable) && (
+          <Board
+            title="What it says is wrong"
+            icon="warn"
+            span={12}
+            aside={<span className={NOTE}>its own health checks</span>}
+          >
+            <HealthChecks checks={d.health} reachable={reachable} />
+          </Board>
+        )}
 
         <TheLibraryBoard f={f} />
 
-        <QueueBoard f={f} />
-
         <Panel f={f} />
 
-        <LatelyBoard f={f} />
+        <QueueTableSection f={f} />
+
+        <LatelyTable f={f} />
 
         <Changelog gap={d.gap} span={12} />
 
@@ -167,58 +173,10 @@ function TheLibraryBoard({ f }: { f: ArrFacts }) {
   )
 }
 
-function QueueBoard({ f }: { f: ArrFacts }) {
-  const { d, counts } = f
-  return (
-    <Board
-      title="Queue"
-      icon="down"
-      span={8}
-      aside={
-        <span className={NOTE}>
-          {num(counts.queued)} item{counts.queued === 1 ? '' : 's'}
-        </span>
-      }
-    >
-      {d.queue.length === 0 ? (
-        <p className={EMPTY}>
-          Nothing in the queue. Completed downloads are removed once imported.
-        </p>
-      ) : (
-        <ul className={TRANSFERS}>
-          {d.queue.map((q, i) => (
-            <li key={`${q.title}-${String(i)}`} className={TRANSFER_ROW}>
-              <div className={TRANSFER_HEAD}>
-                <span className={TRANSFER_NAME} title={q.title}>
-                  {q.title}
-                </span>
-                <span className={TRANSFER_META}>
-                  {q.pct.toFixed(0)}% of {bytes(q.sizeBytes)}
-                  {q.issue !== null && <span className="text-danger"> · {q.issue}</span>}
-                </span>
-              </div>
-              <Progress
-                pct={q.pct}
-                tone={q.issue !== null ? 'bad' : 'accent'}
-                active={q.issue === null && q.pct < 100}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        An item stuck at 100% with a note against it is the failure this panel exists for: the
-        download finished and the import did not, so nothing is moving and nothing is wrong anywhere
-        else.
-      </p>
-    </Board>
-  )
-}
-
 function Panel({ f }: { f: ArrFacts }) {
   const { d, copy } = f
   return (
-    <Board title={copy.upcoming} icon="clock" span={4}>
+    <Board title={copy.upcoming} icon="clock" span={8}>
       {d.upcoming.length === 0 ? (
         <p className={EMPTY}>Nothing scheduled in the next fortnight.</p>
       ) : (
@@ -240,29 +198,90 @@ function Panel({ f }: { f: ArrFacts }) {
   )
 }
 
-function LatelyBoard({ f }: { f: ArrFacts }) {
+function QueueTableSection({ f }: { f: ArrFacts }) {
+  const { d, counts } = f
+  return (
+    <TableSection
+      title="Queue"
+      note={`${num(counts.queued)} item${counts.queued === 1 ? '' : 's'}`}
+      foot={
+        <p className={FOOT}>
+          An item stuck at 100% with a note against it is the failure this table exists for: the
+          download finished and the import did not, so nothing is moving and nothing is wrong
+          anywhere else.
+        </p>
+      }
+    >
+      <QueueTable
+        label={`${f.copy.name} queue`}
+        detail="Size · issue"
+        empty="Nothing in the queue. Completed downloads are removed once imported."
+        rows={d.queue.map((q, i) => ({
+          key: `${q.title}-${String(i)}`,
+          name: q.title,
+          pct: q.pct,
+          tone: q.issue !== null ? 'bad' : 'accent',
+          active: q.issue === null && q.pct < 100,
+          detail: (
+            <>
+              {bytes(q.sizeBytes)}
+              {q.issue !== null && <span className="text-danger"> · {q.issue}</span>}
+            </>
+          ),
+        }))}
+      />
+    </TableSection>
+  )
+}
+
+/* Event, title, when. The event is a fixed column because its vocabulary is
+   small and repeated, so a reader scanning for one is scanning one column. */
+const FEED_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[8rem_minmax(0,1fr)_5.5rem]',
+  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_5.5rem]',
+)
+
+function LatelyTable({ f }: { f: ArrFacts }) {
   const { d } = f
   return (
-    <Board title="Lately" icon="≋" span={12}>
-      {d.history.length === 0 ? (
-        <p className={EMPTY}>no recorded activity</p>
-      ) : (
-        <ul className={FEED}>
-          {d.history.map((h, i) => (
-            <li key={`${h.title}-${String(i)}`} className={FEED_ROW}>
-              <span className={cn(FEED_EVENT, EVENT_INK[h.tone])}>{h.event}</span>
-              <span className={FEED_TITLE} title={h.title}>
+    <TableSection
+      title="Lately"
+      foot={
+        <p className={FOOT}>
+          Only failures are coloured. A grab and an import are the machine working, and colouring
+          those would bury the two events that mean somebody has to look.
+        </p>
+      }
+    >
+      <ul className={TABLE} aria-label="Lately">
+        <li aria-hidden="true" className={cn(FEED_GRID, TABLE_HEAD)}>
+          <span className="@max-[34rem]/table:hidden">Event</span>
+          <span>Title</span>
+          <span className="text-right">When</span>
+        </li>
+        {d.history.length === 0 ? (
+          <li className={TABLE_EMPTY}>No recorded activity.</li>
+        ) : (
+          d.history.map((h, i) => (
+            <li key={`${h.title}-${String(i)}`} className={cn(FEED_GRID, TABLE_ROW)}>
+              <span
+                className={cn(
+                  CELL_QUIET,
+                  'first-letter:uppercase @max-[34rem]/table:hidden',
+                  EVENT_INK[h.tone],
+                )}
+              >
+                {h.event}
+              </span>
+              <span className="truncate text-foreground" title={h.title}>
                 {h.title}
               </span>
-              <span className={FEED_WHEN}>{daysAgo(h.ageDays)}</span>
+              <span className={cn(CELL_QUIET, 'text-right')}>{daysAgo(h.ageDays)}</span>
             </li>
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        Only failures are coloured. A grab and an import are the machine working, and colouring
-        those would bury the two events that mean somebody has to look.
-      </p>
-    </Board>
+          ))
+        )}
+      </ul>
+    </TableSection>
   )
 }

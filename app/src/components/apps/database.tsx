@@ -3,7 +3,7 @@ import type { AppTabData } from '../../server/registry'
 import { Bytes } from '../controls'
 import { CAPTION, FOOT } from '../tokens'
 import { BarList, Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
-import { type AppRecord, LEDE, STRIP_FOOT } from './shared'
+import { type AppRecord, LEDE } from './shared'
 
 /**
  * The app's database on the shared cluster.
@@ -105,6 +105,12 @@ export function Database({
             The password is machine-generated on the box and never enters git. Rotate it by deleting{' '}
             <code>stacks/app-db/secrets/{app.name}/env</code> and rebuilding.
           </p>
+          <p className={FOOT}>
+            Everything on this tab comes from <code>postgres_exporter</code> on the shared cluster.
+            There is no table list or query log because daedalus has no connection to this database:
+            its own role can only reach <code>daedalus</code>, and that separation is worth more
+            than the panel would be.
+          </p>
         </Board>
 
         <Board title="Rows per second" icon="≣" span={4}>
@@ -135,13 +141,6 @@ export function Database({
           </p>
         </Board>
       </BoardGrid>
-
-      <p className={STRIP_FOOT}>
-        Everything here comes from <code>postgres_exporter</code> on the shared cluster. There is no
-        table list or query log because daedalus has no connection to this database: its own role
-        can only reach <code>daedalus</code>, and that separation is worth more than the panel would
-        be.
-      </p>
     </>
   )
 }

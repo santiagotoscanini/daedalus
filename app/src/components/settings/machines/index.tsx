@@ -1,13 +1,11 @@
 import { useSearch } from '@tanstack/react-router'
-import { MonitorSmartphoneIcon, NetworkIcon } from 'lucide-react'
-
 import type { MachinesData } from '../../../lib/dashboard/machines'
 import { Ago } from '../../ago'
-import { NOTE_SHOWN } from '../form'
 import { BoxProvider, GatewaySync } from '../provider-models'
-import { ASIDE, Mono, Rows, Section } from '../shared'
+import { ASIDE, Band, Mono, NOTE_SHOWN, SECTIONS, Section } from '../shared'
 import { Install } from './install'
-import { BACK, MachineSection, PendingSection } from './machine-section'
+import { BACK } from './machine-cells'
+import { MachineRow, MachinesHead, PendingRow } from './machine-section'
 import { RotateKey, RotationState } from './rotate'
 import { SessionHost } from './session-host'
 
@@ -29,7 +27,7 @@ import { SessionHost } from './session-host'
 // click, like Appearance, with no Apply bar. The policy rows appear only
 // once a machine is approved: the box sends no policy to a key it has not.
 //
-// This file is the tab and one card per machine; the trust buttons are
+// This file is the tab: the machine table (./machine-section.tsx, its cells ./machine-cells.tsx); the trust buttons are
 // ./decision.tsx, the policy rows ./policy.tsx over ./use-policy-editor.ts,
 // the install lines ./install.tsx, the controller's key rotation ./rotate.tsx, the
 // session host's line ./session-host.tsx.
@@ -40,42 +38,56 @@ export function Machines({ d }: { d: MachinesData }) {
   const search = useSearch({ from: '/settings' })
   const c = d.controller
   const sync = d.sync
+  const waiting = d.machines.filter((m) => m.node === null).length
   return (
-    <div className="flex flex-col gap-5">
-      {d.machines.length === 0 ? (
-        <Section
-          title="Machines"
-          icon={<MonitorSmartphoneIcon />}
-          description="No machine has joined yet."
-        >
-          <p className={NOTE_SHOWN}>
-            {d.listError !== null
-              ? `The controller's list could not be read: ${d.listError}`
-              : 'Install the agent on a machine with a line below and it appears here, waiting for you to approve it.'}
-          </p>
-        </Section>
-      ) : (
-        d.machines.map((m) =>
-          m.node === null ? (
-            <PendingSection
-              key={m.pending?.id ?? ''}
-              m={m}
-              controllerFingerprint={c.reachable ? c.fingerprint : null}
-            />
+    <div className={SECTIONS}>
+      <Section
+        title="Machines"
+        description="The other computers that run the agent: what each one is, whether the box trusts it, and what it asks of them. Open one for its whole story."
+        aside={
+          d.machines.length === 0 ? undefined : (
+            <>
+              {String(d.machines.length)} machine{d.machines.length === 1 ? '' : 's'}
+              {waiting > 0 && ` · ${String(waiting)} waiting`}
+            </>
+          )
+        }
+        body={
+          d.machines.length === 0 ? (
+            <Band>
+              <p className={NOTE_SHOWN}>
+                {d.listError !== null
+                  ? `The controller's list could not be read: ${d.listError}`
+                  : 'No machine has joined yet. Install the agent on a machine with a line below and it appears here, waiting for you to approve it.'}
+              </p>
+            </Band>
           ) : (
-            <MachineSection
-              key={m.node.id}
-              m={m}
-              lanDomain={d.lanDomain}
-              askSantree={search.santree === 'on' && search.node === m.node.id}
-            />
-          ),
-        )
-      )}
+            <ul className="m-0 list-none p-0">
+              <MachinesHead />
+              {d.machines.map((m) =>
+                m.node === null ? (
+                  <PendingRow
+                    key={m.pending?.id ?? ''}
+                    m={m}
+                    controllerFingerprint={c.reachable ? c.fingerprint : null}
+                  />
+                ) : (
+                  <MachineRow
+                    key={m.node.id}
+                    m={m}
+                    lanDomain={d.lanDomain}
+                    open={search.node === m.node.id || d.machines.length === 1}
+                    askSantree={search.santree === 'on' && search.node === m.node.id}
+                  />
+                ),
+              )}
+            </ul>
+          )
+        }
+      />
 
       <Section
         title="The controller"
-        icon={<NetworkIcon />}
         description="The agent on this box: every machine keeps one link to it, and this page reads them all through it."
         rows={
           c.reachable
@@ -138,20 +150,18 @@ export function Machines({ d }: { d: MachinesData }) {
 
       <Section
         title="The gateway"
-        icon={<MonitorSmartphoneIcon />}
         description="What every provider above offers becomes a route in LiteLLM, kept in step by the box."
-      >
-        <Rows
-          rows={[
-            { k: 'This box', v: <BoxProvider /> },
-            { k: 'Sync', v: <GatewaySync /> },
-          ]}
-        />
-      </Section>
+        rows={[
+          { k: 'This box', v: <BoxProvider /> },
+          { k: 'Sync', v: <GatewaySync /> },
+        ]}
+      />
 
-      <Section title="How a machine joins" icon={<MonitorSmartphoneIcon />}>
-        <Install controller={c} />
-      </Section>
+      <Section
+        title="How a machine joins"
+        description="One line per system, carrying this box's controller and the key to pin."
+        body={<Install controller={c} />}
+      />
     </div>
   )
 }

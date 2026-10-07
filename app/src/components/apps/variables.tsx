@@ -4,12 +4,13 @@ import type { AppSecretKey } from '../../lib/apps/secret-keys'
 import { cn } from '../../lib/cn'
 
 import { saveApp } from '../../server/registry'
-import { EMPTY, INPUT_ROW } from '../tokens'
+import { CELL_SUB, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../table'
+import { INPUT_ROW } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
-import { Board, BoardGrid } from '../viz'
+import { SECTION_EXPLAIN, TabSection } from './section'
 import type { AppRecord } from './shared'
 
 // The plain half of an app's environment: what is NOT a secret, and so can be
@@ -30,18 +31,21 @@ import type { AppRecord } from './shared'
 
 const FIELD = INPUT_ROW
 const SMALL_BTN = 'h-auto px-2.5 py-1 text-[0.75rem] text-subdued'
-const LEGEND =
-  'explain mt-0 mr-0 mb-3 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground'
-// Three columns, not two: the name, the value, and the actions in a column
-// of their own so they line up down the page. Trailing the buttons after the
-// value put them at a different x in every row and wrapped them onto a second
-// line whenever a value was long — a Mapbox token is long — which made one
-// row taller than its neighbours for no reason a reader could use.
-const ROW =
-  'grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] items-baseline gap-x-5 gap-y-0.5 border-hairline border-b py-2.5 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)_auto]'
-/** The note belongs under the value, not beside the key, and needs air above it. */
-const NOTE_CELL =
-  'col-start-2 col-end-4 mt-1.5 mb-0 text-[0.75rem] leading-[1.5] text-muted-foreground max-[60rem]:col-start-1'
+/** Name · value (its note under it) · the row's actions, in a column of their
+    own so they line up down the table. */
+const VAR_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,16rem)_minmax(0,1fr)_9.5rem]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_9.5rem]',
+)
+/** The actions are there on hover or focus, and always on a touch screen: a
+    column of Edit/Remove on every row was most of what the table drew. */
+const ACTIONS =
+  'flex items-center justify-end gap-1.5 whitespace-nowrap opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100'
+const KEY_CELL = 'min-w-0 font-mono text-[0.78rem] text-foreground [overflow-wrap:anywhere]'
+const VALUE_CELL =
+  'min-w-0 font-mono text-[0.78rem] text-subdued [overflow-wrap:anywhere] @max-[44rem]/table:col-start-1 @max-[44rem]/table:row-start-2'
+const ROW_SPAN = 'col-start-2 col-end-4 min-w-0 py-1 @max-[44rem]/table:col-start-1'
 
 export function Variables({
   app,
@@ -86,71 +90,104 @@ export function Variables({
   }
 
   return (
-    <BoardGrid>
-      <Board
-        title="Variables"
-        icon="rows"
-        span={12}
-        aside={
-          saving ? <span className="text-[0.75rem] text-muted-foreground">saving…</span> : null
-        }
-      >
-        <p className={LEGEND}>
-          The app's plain environment: committed in the clear in <code>site/apps.json</code>, merged
-          into the container's environment by nix, and visible in <code>podman inspect</code>.
-          Anything that should not be readable belongs in <b>Secrets</b> instead. A note is worth
-          writing — it travels with the value into git, where it is the only explanation anyone will
-          find.
-        </p>
-
-        {error !== null && (
-          <Alert className="mb-4 border-danger/35 bg-danger/7">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {readOnly && (
-          <Alert className="mb-4">
-            <AlertDescription>
-              {app.name} is declared by hand in Nix, so its variables are read-only here.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="text-[0.85rem]">
-          {vars.length === 0 && (
-            <p className={EMPTY}>
-              No variables. Everything this app sees comes from the platform, its image, or its
-              secrets.
-            </p>
+    <TabSection
+      first
+      title="Variables"
+      label="Variables"
+      note="Plain environment, committed in the clear. A change reaches the container at the next Apply."
+      aside={
+        <>
+          {saving && <span>saving…</span>}
+          {!readOnly && (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8"
+              disabled={saving || form === ''}
+              onClick={() => {
+                setConfirming(null)
+                setForm('')
+              }}
+            >
+              Add a variable
+            </Button>
           )}
-          {vars.map((v) => (
-            <div className={ROW} key={v.key}>
-              <div className="flex min-w-0 items-baseline gap-2 [&>code]:[overflow-wrap:anywhere]">
-                <code>{v.key}</code>
+        </>
+      }
+    >
+      <p className={SECTION_EXPLAIN}>
+        The app's plain environment: committed in the clear in <code>site/apps.json</code>, merged
+        into the container's environment by nix, and visible in <code>podman inspect</code>.
+        Anything that should not be readable belongs in <b>Secrets</b> instead. A note is worth
+        writing — it travels with the value into git, where it is the only explanation anyone will
+        find. A change is saved here straight away and reaches the container at the next{' '}
+        <b>Apply</b>, which writes <code>site/apps.json</code>, rebuilds and restarts it. Until then
+        the Apps page shows this app as changed.
+      </p>
+
+      {error !== null && (
+        <Alert className="mb-4 border-danger/35 bg-danger/7">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {readOnly && (
+        <Alert className="mb-4">
+          <AlertDescription>
+            {app.name} is declared by hand in Nix, so its variables are read-only here.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <ul className={TABLE} aria-label="Variables">
+        <li className={cn(VAR_GRID, TABLE_HEAD)}>
+          <span>Name</span>
+          <span className="@max-[44rem]/table:hidden">Value</span>
+          <span />
+        </li>
+        {vars.length === 0 && form !== '' && (
+          <li className={TABLE_EMPTY}>
+            No variables. Everything this app sees comes from the platform, its image, or its
+            secrets.
+          </li>
+        )}
+        {vars.map((v) => (
+          <li className={cn(VAR_GRID, TABLE_ROW, 'gap-y-1')} key={v.key}>
+            <code className={KEY_CELL}>{v.key}</code>
+            {form === v.key ? (
+              <div className={ROW_SPAN}>
+                <VariableForm
+                  fixedKey={v.key}
+                  initial={v}
+                  taken={vars.filter((o) => o.key !== v.key).map((o) => o.key)}
+                  secretKeys={secretKeys}
+                  busy={saving}
+                  onCancel={close}
+                  onSubmit={(draft) => {
+                    upsert(draft, v.key)
+                  }}
+                />
               </div>
-              {form === v.key ? (
-                <div className="col-start-2 col-end-4 min-w-0 max-[60rem]:col-start-1">
-                  <VariableForm
-                    fixedKey={v.key}
-                    initial={v}
-                    taken={vars.filter((o) => o.key !== v.key).map((o) => o.key)}
-                    secretKeys={secretKeys}
-                    busy={saving}
-                    onCancel={close}
-                    onSubmit={(draft) => {
-                      upsert(draft, v.key)
-                    }}
-                  />
+            ) : (
+              <>
+                <div className={VALUE_CELL}>
+                  {v.value}
+                  {v.note !== null && v.note !== '' && (
+                    <p className={cn(CELL_SUB, 'mt-0.5 font-sans whitespace-normal')}>{v.note}</p>
+                  )}
                 </div>
-              ) : (
-                <>
-                  <span className="min-w-0 [overflow-wrap:anywhere]">{v.value}</span>
+                <span
+                  className={cn(
+                    ACTIONS,
+                    '@max-[44rem]/table:col-start-2 @max-[44rem]/table:row-start-1',
+                    confirming === v.key && 'opacity-100',
+                  )}
+                >
                   {!readOnly && (
-                    <span className="flex items-baseline gap-2 justify-self-end whitespace-nowrap">
+                    <>
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         className={SMALL_BTN}
                         disabled={saving}
@@ -164,9 +201,9 @@ export function Variables({
                       {confirming === v.key ? (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="destructive"
                           size="sm"
-                          className={cn(SMALL_BTN, 'border-danger/50 text-danger')}
+                          className={cn(SMALL_BTN, 'text-danger')}
                           disabled={saving}
                           onClick={() => {
                             write(
@@ -181,7 +218,7 @@ export function Variables({
                       ) : (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           className={SMALL_BTN}
                           disabled={saving}
@@ -193,54 +230,30 @@ export function Variables({
                           Remove
                         </Button>
                       )}
-                    </span>
+                    </>
                   )}
-                  {v.note !== null && v.note !== '' && <p className={NOTE_CELL}>{v.note}</p>}
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {!readOnly && (
-          <div className="mt-4">
-            {form === '' ? (
-              <VariableForm
-                fixedKey={null}
-                initial={null}
-                taken={vars.map((v) => v.key)}
-                secretKeys={secretKeys}
-                busy={saving}
-                onCancel={close}
-                onSubmit={(draft) => {
-                  upsert(draft, null)
-                }}
-              />
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={SMALL_BTN}
-                disabled={saving}
-                onClick={() => {
-                  setConfirming(null)
-                  setForm('')
-                }}
-              >
-                + Add a variable
-              </Button>
+                </span>
+              </>
             )}
-          </div>
+          </li>
+        ))}
+        {!readOnly && form === '' && (
+          <li className={cn(TABLE_ROW, 'px-5 py-3')}>
+            <VariableForm
+              fixedKey={null}
+              initial={null}
+              taken={vars.map((v) => v.key)}
+              secretKeys={secretKeys}
+              busy={saving}
+              onCancel={close}
+              onSubmit={(draft) => {
+                upsert(draft, null)
+              }}
+            />
+          </li>
         )}
-
-        <p className="explain mt-4 mr-0 mb-0 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground">
-          A change is saved here straight away and reaches the container at the next <b>Apply</b>,
-          which writes <code>site/apps.json</code>, rebuilds and restarts it. Until then the Apps
-          page shows this app as changed.
-        </p>
-      </Board>
-    </BoardGrid>
+      </ul>
+    </TabSection>
   )
 }
 

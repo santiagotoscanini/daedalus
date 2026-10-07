@@ -309,12 +309,12 @@ export function ExternalRow({ entry }: { entry: ExternalEntry }) {
       />
 
       <a
-        className={cn(MONO_CELL, MID, 'relative z-10 hover:text-foreground')}
+        className={cn(MID, 'relative z-10 min-w-0 hover:[&_code]:text-foreground')}
         href={`https://${entry.host}`}
         target="_blank"
         rel="noreferrer"
       >
-        {entry.host}
+        <Host host={entry.host} />
       </a>
 
       <span className={cn(WIDE, 'relative z-10 flex min-w-0 items-center gap-2')}>

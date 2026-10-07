@@ -6,8 +6,7 @@ import { Ago } from '../../ago'
 import { NodeCommandButton } from '../../node-command'
 import { Button } from '../../ui/button'
 import { useAction } from '../../use-action'
-import { NOTE_SHOWN } from '../form'
-import { ERROR_NOTE, MONO } from '../shared'
+import { ERROR_NOTE, MONO, NOTE_SHOWN } from '../shared'
 
 // A machine's trust: waiting, approved or revoked, and the buttons that move
 // it between them. A waiting key is the controller's — it has no row until

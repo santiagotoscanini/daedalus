@@ -1,10 +1,9 @@
-import { FileCodeIcon, GitBranchIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import type { McpTokenRow } from '../../host/mcp/tokens'
 import { Chip } from '../viz'
 import { McpTokens } from './mcp-tokens'
-import { ASIDE, Line, Mono, NOTE, Section, Value } from './shared'
+import { ASIDE, Line, Mono, NOTE, SECTIONS, Section, Value } from './shared'
 import { SiteSwitch, SiteUnwritten } from './site-fields'
 
 // How this instance runs, and the credentials that let a machine drive it.
@@ -27,7 +26,7 @@ export function Developer({
 }) {
   const d = settings.developer
   return (
-    <div className="flex flex-col gap-5">
+    <div className={SECTIONS}>
       <SiteUnwritten edit={edit} />
 
       <Section
@@ -47,7 +46,7 @@ export function Developer({
               </Line>
             ) : (
               <Line>
-                <Chip tone="ok">image</Chip>
+                <span>image</span>
                 <span className={ASIDE}>
                   the built bundle (fleet.daedalus.source: published, or built on this box)
                 </span>
@@ -60,7 +59,6 @@ export function Developer({
 
       <Section
         title="Paths inside the container"
-        icon={<FileCodeIcon />}
         description="Where the host publishes what this app reads."
         rows={[
           { k: 'Exports', v: <Value v={d.exportDir} /> },
@@ -71,7 +69,6 @@ export function Developer({
 
       <Section
         title="Engine override"
-        icon={<GitBranchIcon />}
         description="Build the box from its engine clone instead of the pinned engine, to test nix work before a commit is pinned."
         rows={[
           {

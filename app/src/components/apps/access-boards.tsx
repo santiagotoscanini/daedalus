@@ -16,7 +16,7 @@ import { GHOST_BTN } from './shared'
 
 export function CountriesBoard({ access }: { access: AccessData }) {
   return (
-    <Board title="Countries" icon="⊕" span={6}>
+    <Board title="Countries" icon="⊕" span={4}>
       <Bars
         rows={access.byCountry.map((c) => ({
           key: c.code,
@@ -66,7 +66,7 @@ export function ClientsBoard({ access }: { access: AccessData }) {
 
 export function PathsBoard({ access }: { access: AccessData }) {
   return (
-    <Board title="Top paths" icon="⇢" span={6}>
+    <Board title="Top paths" icon="⇢" span={12}>
       <Bars
         rows={access.byPath.map((p) => ({
           key: `${p.path}-${p.status}`,
@@ -210,7 +210,7 @@ export function GeoPanel({ hostname, range }: { hostname: string; range: AccessW
     <Board
       title="Where from"
       icon="🌐"
-      span={12}
+      span={8}
       aside={
         <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
           <a

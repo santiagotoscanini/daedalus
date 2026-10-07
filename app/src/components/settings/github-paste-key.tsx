@@ -6,8 +6,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { useAction } from '../use-action'
-import { INSET, NOTE_SHOWN } from './form'
-import { ERROR_NOTE, FIELD_LABEL } from './shared'
+import { ERROR_NOTE, FIELD_LABEL, INSET, NOTE_SHOWN } from './shared'
 
 // The GitHub App's recovery form, and only that.
 //

@@ -1,49 +1,11 @@
-import { Ago } from '../../../components/ago'
-import {
-  AXIS,
-  CAPTION,
-  FOOT,
-  LIST,
-  MONO,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-} from '../../../components/tokens'
-import { BarList, Board, BoardGrid, Chip, Columns, Stat, StatStrip } from '../../../components/viz'
-import { DASH, duration, num, pct } from '../../../lib/format'
+import { AXIS, FOOT, NOTE } from '../../../components/tokens'
+import { BarList, Board, BoardGrid, Columns, Stat, StatStrip } from '../../../components/viz'
+import { DASH, num, pct } from '../../../lib/format'
 import type { ActionsData } from '../data'
-import type { RunRow } from '../data/runs'
-import { Ext, GrantBoard, imageWord, RunChip, took } from './shared'
+import { ByRepositoryTable, ByWorkflowTable, FailuresTable, RecentRunsTable } from './runs-tables'
+import { GrantBoard, took } from './shared'
 
 type Runs = Extract<ActionsData, { tab: 'runs' }>
-
-function RunLine({ r, showFailure = false }: { r: RunRow; showFailure?: boolean }) {
-  return (
-    <li className={ROW}>
-      <RunChip status={r.status} conclusion={r.conclusion} />
-      <span className={ROW_MAIN}>
-        <Ext href={r.url}>
-          <b className="[font-weight:560]">{r.repo}</b> · {r.workflow}
-        </Ext>
-        {r.branch !== null && r.branch !== 'main' && (
-          <span className="ml-1.5 text-muted-foreground">{r.branch}</span>
-        )}
-        {showFailure && r.failed !== null && (
-          <span className="ml-1.5 text-danger">
-            {r.failed.job}
-            {r.failed.step !== null && ` › ${r.failed.step}`}
-          </span>
-        )}
-      </span>
-      <span className={ROW_SIDE}>
-        {r.event}
-        {r.ranOn.length > 0 && ` · ${r.ranOn.map(imageWord).join(', ')}`} · {took(r.seconds)} ·{' '}
-        <Ago at={r.createdAt} />
-      </span>
-    </li>
-  )
-}
 
 export function RunsView({ d }: { d: Runs }) {
   const f = runsFacts({ d })
@@ -79,17 +41,17 @@ export function RunsView({ d }: { d: Runs }) {
 
         <ByEventBoard f={f} />
 
-        <RunningNowBoard f={f} />
-
         <GrantBoard unreadable={d.unreadable} publicRepos={d.publicRepos} budget={d.budget} />
 
-        <RecentRunsBoard f={f} />
+        {/* Failures first among the lists: they are the exception the page
+            exists to surface, and a quiet line when there are none. */}
+        <FailuresTable d={d} />
 
-        <FailuresBoard f={f} />
+        <RecentRunsTable d={d} />
 
-        <ByWorkflowBoard f={f} />
+        <ByWorkflowTable d={d} />
 
-        <ByRepositoryBoard f={f} />
+        <ByRepositoryTable d={d} />
       </BoardGrid>
     </>
   )
@@ -137,132 +99,6 @@ function ByEventBoard({ f }: { f: RunsFacts }) {
         What starts a workflow: a push, a pull request, a schedule, a tag, or a hand on "Run
         workflow". The apps deploy through daedalus's own webhook and never appear here.
       </p>
-    </Board>
-  )
-}
-
-function RunningNowBoard({ f }: { f: RunsFacts }) {
-  const { d } = f
-  return (
-    d.running.length > 0 && (
-      <Board
-        title="Running now"
-        icon="clock"
-        span={12}
-        aside={<Chip tone="accent">{String(d.running.length)} live</Chip>}
-      >
-        <ul className={LIST}>
-          {d.running.map((r) => (
-            <RunLine key={r.id} r={r} />
-          ))}
-        </ul>
-      </Board>
-    )
-  )
-}
-
-function RecentRunsBoard({ f }: { f: RunsFacts }) {
-  const { d } = f
-  return (
-    <Board
-      title="Recent runs"
-      icon="logs"
-      span={12}
-      aside={<span className={NOTE}>newest first · {num(d.recent.length)} shown</span>}
-    >
-      {d.recent.length === 0 ? (
-        <p className={CAPTION}>No run the box can read in the last {String(d.windowDays)} days.</p>
-      ) : (
-        <ul className={LIST}>
-          {d.recent.map((r) => (
-            <RunLine key={r.id} r={r} />
-          ))}
-        </ul>
-      )}
-    </Board>
-  )
-}
-
-function FailuresBoard({ f }: { f: RunsFacts }) {
-  const { d } = f
-  return (
-    <Board
-      title="Failures"
-      icon="warn"
-      span={6}
-      aside={
-        <Chip tone={d.failures.length > 0 ? 'bad' : 'ok'}>
-          {d.failures.length === 0 ? 'none' : String(d.failures.length)}
-        </Chip>
-      }
-    >
-      {d.failures.length === 0 ? (
-        <p className={CAPTION}>Nothing failed in the window.</p>
-      ) : (
-        <ul className={LIST}>
-          {d.failures.map((r) => (
-            <RunLine key={r.id} r={r} showFailure />
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        The job and the step that failed, read from the run's jobs; the link opens the run's log on
-        GitHub.
-      </p>
-    </Board>
-  )
-}
-
-function ByWorkflowBoard({ f }: { f: RunsFacts }) {
-  const { d } = f
-  return (
-    <Board title="By workflow" icon="rows" span={6}>
-      <ul className={LIST}>
-        {d.byWorkflow.map((w) => (
-          <li key={w.label} className={ROW}>
-            <span className={ROW_MAIN}>{w.label}</span>
-            <span className={ROW_SIDE}>
-              {num(w.runs)} runs
-              {w.failed > 0 && <span className="text-danger"> · {num(w.failed)} failed</span>}
-              {' · median '}
-              {took(w.p50)}
-            </span>
-          </li>
-        ))}
-        {d.byWorkflow.length === 0 && <li className={CAPTION}>no runs</li>}
-      </ul>
-    </Board>
-  )
-}
-
-function ByRepositoryBoard({ f }: { f: RunsFacts }) {
-  const { d } = f
-  return (
-    <Board title="By repository" icon="grid" span={12}>
-      <ul className={LIST}>
-        {d.byRepo.map((r) => (
-          <li key={r.repo} className={ROW}>
-            <span className={ROW_MAIN}>
-              <Ext href={`${r.url}/actions`}>{r.repo}</Ext>
-              <span className="ml-1.5 text-muted-foreground">{r.kind}</span>
-            </span>
-            <span className={ROW_SIDE}>
-              {r.access === 'app' || r.access === 'public' ? (
-                <>
-                  {num(r.runs)} runs
-                  {r.total > r.runs && ` of ${num(r.total)}`}
-                  {r.failed > 0 && <span className="text-danger"> · {num(r.failed)} failed</span>}
-                  {' · median '}
-                  {r.p50 === null ? DASH : duration(r.p50)}
-                  {r.access === 'public' && ' · public'}
-                </>
-              ) : (
-                <span className={MONO}>needs actions: read</span>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
     </Board>
   )
 }

@@ -173,9 +173,11 @@ export function Access({
 
           <ClientsBoard access={access} />
 
-          <PathsBoard access={access} />
-
           <AgentsBoard access={access} />
+
+          {/* Full width: a path is the longest label on the page, and at half
+              width every one of them was cut off. */}
+          <PathsBoard access={access} />
 
           <RejectsBoard access={access} grafanaUrl={grafanaUrl} range={range} />
         </BoardGrid>

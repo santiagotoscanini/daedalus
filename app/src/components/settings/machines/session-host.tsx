@@ -8,8 +8,7 @@ import { useRootAction } from '../../root-action'
 import { Button } from '../../ui/button'
 import { useArmed } from '../../use-armed'
 import { Chip } from '../../viz'
-import { INSET, NOTE_SHOWN } from '../form'
-import { ASIDE, ERROR_NOTE, Line, Mono } from '../shared'
+import { ASIDE, ERROR_NOTE, INSET, Line, Mono, NOTE_SHOWN } from '../shared'
 
 // The session host on one line (host/session-host.ts): how it stands, which
 // build runs, the terminals it holds and the machines connected, and the

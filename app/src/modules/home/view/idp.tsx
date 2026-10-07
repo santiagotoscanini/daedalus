@@ -3,11 +3,18 @@ import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-hea
 import { Button } from '../../../components/ui/button'
 import { BoardGrid } from '../../../components/viz'
 import type { IdpData } from '../data/signin'
-import { DeclaredBoard, LogsBoard, SigningInBoard, WhoBoard } from './idp-boards'
+import { AppsBoard, DeclaredBoard, LogsBoard, SigningInBoard } from './idp-boards'
+import { DevicesBoard, WhoBoard } from './idp-who'
 
 /**
  * Pocket ID: who can get in, and who did. The audit log is the panel — see
  * `loadIdp` on why it is the only record of a sign-in.
+ *
+ * Read top down: how much signing in happened and who has an account (the
+ * two readings), then the applications it opened (the table the page is
+ * for), then the two lists that only matter when they hold a surprise — a
+ * device nobody recognises, a client nothing declares — then the releases
+ * and the log.
  */
 export function IdpView({ data: d }: { data: IdpData }) {
   const { window: w } = d
@@ -64,18 +71,16 @@ export function IdpView({ data: d }: { data: IdpData }) {
       />
 
       <BoardGrid>
-        {/* One board, not a chronological sign-in list beside the per-app
-            aggregate: both are the same audit log, and a chronological list
-            fills with whatever re-authorises on a timer. The per-row
-            drill-down keeps the part an aggregate loses — who, from what. */}
-        <SigningInBoard d={d} w={w} shared={shared} idle={idle} max={max} />
+        <SigningInBoard d={d} w={w} />
+        <WhoBoard d={d} />
 
-        <Changelog gap={d.gap} span={6} />
+        <AppsBoard d={d} shared={shared} idle={idle} max={max} />
 
+        <DevicesBoard d={d} />
         {/* The join nothing else can make — see `IdpData['nix']`. */}
         <DeclaredBoard d={d} />
 
-        <WhoBoard d={d} />
+        <Changelog gap={d.gap} span={12} />
 
         <LogsBoard />
       </BoardGrid>

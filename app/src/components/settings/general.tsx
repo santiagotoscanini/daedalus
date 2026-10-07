@@ -1,4 +1,3 @@
-import { IdCardIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { BoxSettings, ZoneList } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
@@ -8,8 +7,19 @@ import { groupZones } from '../../lib/timezones'
 import { saveSiteEditFn } from '../../server/site'
 import { Button } from '../ui/button'
 import { useAction } from '../use-action'
-import { NOTE_SHOWN } from './form'
-import { ASIDE, ExtLink, Line, NOTE, Pending, Section, SourceNote, Stack, Value } from './shared'
+import {
+  ASIDE,
+  ExtLink,
+  Line,
+  NOTE,
+  NOTE_SHOWN,
+  Pending,
+  SECTIONS,
+  Section,
+  SourceNote,
+  Stack,
+  Value,
+} from './shared'
 import { type SelectGroupSpec, SiteSelect, SiteText, SiteUnwritten } from './site-fields'
 
 // Settings › General: what the box calls itself.
@@ -43,12 +53,11 @@ export function General({
   }))
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className={SECTIONS}>
       <SiteUnwritten edit={edit} />
 
       <Section
         title="Identity"
-        icon={<IdCardIcon />}
         description="What this box calls itself. Every hostname it publishes is exactly one label under the domain."
         rows={[
           { k: 'Hostname', v: <Value v={g.hostname} /> },

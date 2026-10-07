@@ -1,75 +1,78 @@
 import { LogBoard } from '../../../components/logs'
 import { PartHead } from '../../../components/part'
-import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import {
+  CELL_MONO,
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, num, pct } from '../../../lib/format'
 import type { SystemData } from '../data'
-import {
-  CELL_MAIN,
-  CELL_N,
-  CELL_SIDE,
-  HOST_READERS,
-  PARTS,
-  TABLE,
-  TABLE_HEAD,
-  TABLE_ROW,
-} from './shared'
+import { HOST_READERS, PARTS } from './shared'
 
 /* ── Memory ───────────────────────────────────────────────────────────── */
 
 type Memory = Extract<SystemData, { tab: 'memory' }>
 
+// Reading order, each row a pair of related heights:
+//
+//   Memory (available, large; then ZFS's share of it) ··· The modules
+//   Heaviest containers ································· Pressure that happened
+//   Caps (a table: one row per capped container)
+//   Kernel
+//
+// The focal point is AVAILABLE, the reading the Memory board's own note says
+// to read — not "used", which ZFS's cache makes look alarming on purpose.
+
+const HEADLINE =
+  'm-0 text-[2.25rem] leading-none tracking-[-0.035em] text-foreground tabular-nums [font-weight:560]'
+
 export function MemoryView({ d }: { d: Memory }) {
-  const f = memoryFacts({ d })
-
   return (
-    <BoardGrid>
-      <MemoryBoard f={f} />
+    <div className="flex flex-col gap-10">
+      <BoardGrid>
+        <MemoryBoard d={d} />
 
-      {/* The sticks behind the bar above. Every other number on this tab is
-          bytes in flight; this is what they are flying through, and it is the
-          only panel here that answers "can I add more" — which is the question
-          a memory page gets asked when the bar looks full. */}
-      <TheModulesBoard f={f} />
+        {/* The sticks behind the bar beside. Every other number on this tab is
+            bytes in flight; this is what they are flying through, and it is the
+            only panel here that answers "can I add more" — which is the question
+            a memory page gets asked when the bar looks full. */}
+        <TheModulesBoard d={d} />
 
-      <ZFSCacheBoard f={f} />
+        <Board title="Heaviest containers" icon="grid" span={8}>
+          <BarList items={d.topMemory} tone="muted" empty="nothing reporting" />
+          <p className={FOOT}>
+            This is <span className={MONO}>memory.current</span>, which <b>includes page cache</b>.
+            A container doing file I/O sits near its limit forever and is perfectly healthy; the
+            cache is reclaimed when something else needs it. The number that means a cap is too
+            tight is the OOM count beside this one, not this bar.
+          </p>
+        </Board>
 
-      <ZramBoard f={f} />
+        <AfterTheFactBoard d={d} />
+      </BoardGrid>
 
-      <Board title="Heaviest containers" icon="grid" span={8}>
-        <BarList items={d.topMemory} tone="info" empty="nothing reporting" />
-        <p className={FOOT}>
-          This is <span className={MONO}>memory.current</span>, which <b>includes page cache</b>. A
-          container doing file I/O sits near its limit forever and is perfectly healthy; the cache
-          is reclaimed when something else needs it. The number that means a cap is too tight is the
-          OOM board beside this one, not this bar.
-        </p>
-      </Board>
-
-      <OOMKillsBoard f={f} />
-
-      <CapsBoard f={f} />
+      <CapsSection d={d} />
 
       {/* The kernel is the right stream for this tab: an OOM kill, a zram
           allocation failure and ZFS shrinking the ARC under pressure are all
           kernel lines and appear in no container's log — including the log of
           the container that was killed. */}
-      <KernelBoard />
-    </BoardGrid>
+      <BoardGrid>
+        <KernelBoard />
+      </BoardGrid>
+    </div>
   )
 }
 
-/** What the page's boards read. */
-function memoryFacts({ d }: { d: Memory }) {
+function MemoryBoard({ d }: { d: Memory }) {
   const arcShare = d.arc.size === null || d.total === null ? null : (d.arc.size / d.total) * 100
-  return { d, arcShare }
-}
-
-type MemoryFacts = NonNullable<ReturnType<typeof memoryFacts>>
-
-function MemoryBoard({ f }: { f: MemoryFacts }) {
-  const { d } = f
   return (
     <Board
       title="Memory"
@@ -77,6 +80,10 @@ function MemoryBoard({ f }: { f: MemoryFacts }) {
       span={8}
       aside={<span className={NOTE}>{bytes(d.total)} total</span>}
     >
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[0.75rem] text-muted-foreground">available</span>
+        <p className={HEADLINE}>{bytes(d.available)}</p>
+      </div>
       <Progress
         pct={d.total === null || d.used === null ? null : (d.used / d.total) * 100}
         tone="info"
@@ -84,7 +91,6 @@ function MemoryBoard({ f }: { f: MemoryFacts }) {
       <Measures
         items={[
           { k: 'used', v: bytes(d.used) },
-          { k: 'available', v: bytes(d.available) },
           { k: 'page cache', v: bytes(d.cached) },
           { k: 'dirty', v: bytes(d.dirty) },
         ]}
@@ -94,12 +100,31 @@ function MemoryBoard({ f }: { f: MemoryFacts }) {
         nothing to do still reports most of its memory in use. On this one a large share of that is
         ZFS&rsquo;s cache, which is charged to the kernel and handed back on demand.
       </p>
+
+      {/* The panel that makes the bar above readable, so it lives under it. */}
+      <h4 className={SUB}>ZFS cache</h4>
+      <Progress
+        pct={d.arc.size === null || d.arc.max === null ? null : (d.arc.size / d.arc.max) * 100}
+        tone="accent"
+      />
+      <Measures
+        items={[
+          { k: 'ARC now', v: bytes(d.arc.size) },
+          { k: 'ceiling', v: bytes(d.arc.max) },
+          { k: 'share of RAM', v: pct(arcShare) },
+          { k: 'hit rate (30m)', v: pct(d.arc.hitRate, 1) },
+        ]}
+      />
+      <p className={FOOT}>
+        The single biggest consumer on this box and the reason &ldquo;used&rdquo; looks alarming.
+        ARC grows to fill what nothing else wants and shrinks under pressure. A high hit rate here
+        is what keeps the pools from being asked.
+      </p>
     </Board>
   )
 }
 
-function TheModulesBoard({ f }: { f: MemoryFacts }) {
-  const { d } = f
+function TheModulesBoard({ d }: { d: Memory }) {
   return (
     <Board
       title="The modules"
@@ -154,43 +179,51 @@ function TheModulesBoard({ f }: { f: MemoryFacts }) {
   )
 }
 
-function ZFSCacheBoard({ f }: { f: MemoryFacts }) {
-  const { d, arcShare } = f
+/**
+ * The two readings of pressure that already happened: kills, and swap. Both
+ * are zero on a healthy box and both are invisible to an instantaneous gauge,
+ * which is why they share a board — and why each takes colour only once it
+ * has moved.
+ */
+function AfterTheFactBoard({ d }: { d: Memory }) {
+  const zramUsed = d.zram.used ?? 0
   return (
-    <Board title="ZFS cache" icon="◍" span={4}>
-      <Progress
-        pct={d.arc.size === null || d.arc.max === null ? null : (d.arc.size / d.arc.max) * 100}
-        tone="accent"
-      />
-      <Facts
-        rows={[
-          { k: 'ARC now', v: bytes(d.arc.size) },
-          { k: 'Ceiling', v: bytes(d.arc.max) },
-          { k: 'Share of RAM', v: pct(arcShare) },
-          { k: 'Hit rate (30m)', v: pct(d.arc.hitRate, 1) },
-        ]}
-      />
+    <Board
+      title="OOM kills"
+      icon="warn"
+      span={4}
+      aside={
+        d.oomKills === null ? (
+          <span className={NOTE}>{DASH}</span>
+        ) : d.oomKills > 0 ? (
+          <Chip tone="warn">{num(d.oomKills)} all time</Chip>
+        ) : (
+          <span className={NOTE}>none, ever</span>
+        )
+      }
+    >
+      {/* The total tells "never" from "unreachable" — the filtered list
+          answers empty to both. */}
+      {d.oomKills !== null && d.oomKilled.length === 0 ? (
+        <p className={cn(EMPTY, 'py-3 text-left')}>no container has ever been OOM-killed</p>
+      ) : (
+        <BarList items={d.oomKilled} tone="warn" empty="prometheus not answering" />
+      )}
       <p className={FOOT}>
-        {/* The panel that makes the one to its left readable. */}
-        The single biggest consumer on this box and the reason &ldquo;used&rdquo; looks alarming.
-        ARC grows to fill what nothing else wants and shrinks under pressure. A high hit rate here
-        is what keeps the pools from being asked.
+        Named, and only the killed: a fleet of zeros would bury the one counter that matters. This
+        moving is what &ldquo;the cap is too tight&rdquo; looks like; a bar to the left resting on
+        its limit is not. The kernel log below records which process was chosen and what it was
+        holding.
       </p>
-    </Board>
-  )
-}
 
-function ZramBoard({ f }: { f: MemoryFacts }) {
-  const { d } = f
-  return (
-    <Board title="zram" icon="⇵" span={4}>
+      <h4 className={SUB}>zram</h4>
       <Progress
         pct={
           d.zram.total === null || d.zram.used === null || d.zram.total === 0
             ? null
             : (d.zram.used / d.zram.total) * 100
         }
-        tone={(d.zram.used ?? 0) > 0 ? 'warn' : 'ok'}
+        tone={zramUsed > 0 ? 'warn' : 'muted'}
       />
       <Measures
         items={[
@@ -206,71 +239,47 @@ function ZramBoard({ f }: { f: MemoryFacts }) {
   )
 }
 
-function OOMKillsBoard({ f }: { f: MemoryFacts }) {
-  const { d } = f
-  return (
-    <Board
-      title="OOM kills"
-      icon="warn"
-      span={4}
-      aside={
-        d.oomKills === null ? (
-          <span className={NOTE}>{DASH}</span>
-        ) : d.oomKills > 0 ? (
-          <span className={NOTE}>{num(d.oomKills)} all time</span>
-        ) : (
-          <Chip tone="ok">none, ever</Chip>
-        )
-      }
-    >
-      {/* The total tells "never" from "unreachable" — the filtered list
-          answers empty to both. */}
-      {d.oomKills !== null && d.oomKilled.length === 0 ? (
-        <p className={EMPTY}>no container has ever been OOM-killed</p>
-      ) : (
-        <BarList items={d.oomKilled} tone="warn" empty="prometheus not answering" />
-      )}
-      <p className={FOOT}>
-        Named, and only the killed: a fleet of zeros would bury the one counter that matters. This
-        moving is what &ldquo;the cap is too tight&rdquo; looks like; a bar to the left resting on
-        its limit is not. The kernel log below records which process was chosen and what it was
-        holding.
-      </p>
-    </Board>
-  )
-}
+const CAP_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1fr)_6rem_minmax(6rem,12rem)_5rem]',
+  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_6rem_5rem]',
+)
+const CAP_MID = '@max-[36rem]/table:hidden'
+const N = 'text-right tabular-nums'
 
-function CapsBoard({ f }: { f: MemoryFacts }) {
-  const { d } = f
+function CapsSection({ d }: { d: Memory }) {
   return (
-    <Board
-      title="Caps"
-      icon="⊟"
-      span={12}
-      aside={
-        <span className={NOTE}>
-          {num(d.capped.length)} capped · {num(d.uncapped)} not
-        </span>
-      }
-    >
-      {d.capped.length === 0 ? (
-        <p className={EMPTY}>No container has a memory cap.</p>
-      ) : (
-        <ul className={cn(TABLE, 'grid-cols-[minmax(0,1fr)_auto_auto]')}>
-          <li className={TABLE_HEAD} aria-hidden="true">
-            <span>Container</span>
-            <span>In use</span>
-            <span className="text-right">Cap</span>
-          </li>
-          {d.capped.map((c) => (
-            <li key={c.name} className={TABLE_ROW}>
-              <span className={cn(CELL_MAIN, MONO)}>{c.name}</span>
-              <span className={CELL_SIDE}>{bytes(c.usageBytes)} in use</span>
-              <span className={CELL_N}>{bytes(c.limitBytes)}</span>
+    <TableSection title="Caps" aside={`${num(d.capped.length)} capped · ${num(d.uncapped)} not`}>
+      <ul className={TABLE}>
+        <li aria-hidden="true" className={cn(CAP_GRID, TABLE_HEAD)}>
+          <span>Container</span>
+          <span className={N}>In use</span>
+          <span className={CAP_MID}>Of its cap</span>
+          <span className={N}>Cap</span>
+        </li>
+        {d.capped.length === 0 && <li className={TABLE_EMPTY}>No container has a memory cap.</li>}
+        {d.capped.map((c) => {
+          const share =
+            c.usageBytes === null || c.limitBytes === 0 ? null : (c.usageBytes / c.limitBytes) * 100
+          // Near the cap is the row that differs; the rest stay grey.
+          const tight = share !== null && share >= 85
+          return (
+            <li key={c.name} className={cn(CAP_GRID, TABLE_ROW)}>
+              <span className={cn(CELL_MONO, 'text-[0.78rem] text-foreground')}>{c.name}</span>
+              <span className={cn(N, tight ? 'text-warning' : CELL_QUIET)}>
+                {bytes(c.usageBytes)}
+              </span>
+              <span className={cn(CAP_MID, 'flex items-center gap-2.5')}>
+                <Progress pct={share} tone={tight ? 'warn' : 'muted'} height={4} />
+                <span className={cn(CELL_QUIET, 'w-9 flex-none text-right')}>
+                  {share === null ? DASH : `${share.toFixed(0)}%`}
+                </span>
+              </span>
+              <span className={cn(N, 'text-foreground')}>{bytes(c.limitBytes)}</span>
             </li>
-          ))}
-        </ul>
-      )}
+          )
+        })}
+      </ul>
       <p className={FOOT}>
         A cap is only enforced because systemd delegates <span className={MONO}>memory</span> to the
         rootless user slice — without that podman accepts the flag and the kernel ignores it. The
@@ -280,7 +289,7 @@ function CapsBoard({ f }: { f: MemoryFacts }) {
         {num(d.uncapped)} containers have no cap at all, which is the platform default. A
         silently-capped app is one that dies at 3am for a reason nobody wrote down.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 

@@ -13,8 +13,7 @@ import { Switch } from '../ui/switch'
 import { Textarea } from '../ui/textarea'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
-import { CONTROL_H } from './form'
-import { ASIDE, Mono } from './shared'
+import { ASIDE, CONTROL_H, Mono } from './shared'
 
 // The editable rows of the settings tabs — the fields nix sources from
 // site.json, and nothing else.

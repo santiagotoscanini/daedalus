@@ -1,14 +1,18 @@
 import { Link } from '@tanstack/react-router'
 import { Ago } from '../../../../components/ago'
 import { PART, PART_DETAIL, PART_ID, PART_NAME, PartPhoto } from '../../../../components/part'
+import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../../components/table'
+import { TableSection } from '../../../../components/table-section'
+import { MONO_FACE } from '../../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../../../../components/viz'
+import { cn } from '../../../../lib/cn'
 import type { BoardInfo } from '../../../../lib/dashboard/board-info'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, num, shortVendor } from '../../../../lib/format'
 import { partMatching } from '../../../../lib/hardware/catalog'
 import { gigabyteRevision } from '../../../../lib/hardware/gigabyte'
 import type { Tone } from '../../../../lib/tone'
-import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './shared'
+import { CAPTION, EMPTY, FOOT, MONO, NOTE } from './shared'
 
 /* ── Motherboard ──────────────────────────────────────────────────────── */
 
@@ -29,13 +33,15 @@ export function BoardView({ info }: { info: BoardInfo }) {
   const f = boardFacts({ info })
 
   return (
-    <BoardGrid>
-      <TheBoardBoard f={f} />
+    <div className="flex flex-col gap-10">
+      <BoardGrid>
+        <TheBoardBoard f={f} />
 
-      <FirmwareBoard f={f} />
+        <FirmwareBoard f={f} />
+      </BoardGrid>
 
       <Panel f={f} />
-    </BoardGrid>
+    </div>
   )
 }
 
@@ -53,8 +59,6 @@ function boardFacts({ info }: { info: BoardInfo }) {
           : r.behind === 0
             ? { tone: 'ok', label: 'newest' }
             : { tone: r.behind >= 4 ? 'bad' : 'warn', label: `${num(r.behind)} behind` }
-  const newerThan = (v: string) =>
-    r.behind !== null && r.releases.findIndex((x) => x.version === v) < r.behind
   // Only what is ahead of the running firmware, and the running one to
   // anchor it. The releases before it are history the board has already
   // lived through, and a list of twenty-two where three matter buried the
@@ -68,10 +72,13 @@ function boardFacts({ info }: { info: BoardInfo }) {
   // on rev 1.0/1.1 and the V2 — so the revision is inferred rather than
   // asked for, and the aside says it was.
   const revision = revisionOf(info)
-  return { info, r, newest, verdict, newerThan, matched, shown, part, revision }
+  return { info, r, newest, verdict, matched, shown, part, revision }
 }
 
 type BoardFacts = NonNullable<ReturnType<typeof boardFacts>>
+
+const HEADLINE =
+  'm-0 text-[2.25rem] leading-none tracking-[-0.035em] text-foreground tabular-nums [font-weight:560]'
 
 function TheBoardBoard({ f }: { f: BoardFacts }) {
   const { info, r, part, revision } = f
@@ -128,10 +135,23 @@ function FirmwareBoard({ f }: { f: BoardFacts }) {
       span={8}
       aside={<Chip tone={verdict.tone}>{verdict.label}</Chip>}
     >
+      {/* The focal point: where the firmware is, and where the maker is. */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[0.75rem] text-muted-foreground">running → newest</span>
+        <p className={HEADLINE}>
+          {r.running ?? info.bios.version ?? DASH}
+          <span className="mx-2.5 text-muted-foreground [font-weight:400]">→</span>
+          <span
+            className={
+              r.behind !== null && r.behind > 0 ? 'text-foreground' : 'text-muted-foreground'
+            }
+          >
+            {newest?.version ?? DASH}
+          </span>
+        </p>
+      </div>
       <Measures
         items={[
-          { k: 'running', v: r.running ?? info.bios.version ?? DASH },
-          { k: 'newest', v: newest?.version ?? DASH },
           { k: 'published', v: newest?.date ?? DASH },
           { k: 'newer', v: r.behind === null ? DASH : num(r.behind) },
         ]}
@@ -198,10 +218,20 @@ function FirmwareBoard({ f }: { f: BoardFacts }) {
   )
 }
 
+/* The releases, as a table: version · date · what changed · package. The
+   title already counts the newer ones, so no row says "newer" — only the
+   running one is marked, as the line the rest are measured from. */
+const REL_GRID = cn(
+  'grid items-start gap-x-6 px-5',
+  'grid-cols-[5rem_6rem_minmax(0,1fr)_6rem]',
+  '@max-[40rem]/table:grid-cols-[5rem_minmax(0,1fr)_5rem]',
+)
+const REL_MID = '@max-[40rem]/table:hidden'
+
 function Panel({ f }: { f: BoardFacts }) {
-  const { r, matched, shown, newerThan } = f
+  const { r, matched, shown } = f
   return (
-    <Board
+    <TableSection
       title={
         r.releases.length === 0
           ? 'Releases'
@@ -211,58 +241,74 @@ function Panel({ f }: { f: BoardFacts }) {
               ? 'Nothing newer'
               : `${num(r.behind)} newer`
       }
-      icon="⎌"
-      span={12}
       aside={
         r.source === null ? undefined : (
-          <span className={`${NOTE} ${MONO}`}>{r.source.replace(/^https?:\/\//, '')}</span>
+          <span className={MONO}>{r.source.replace(/^https?:\/\//, '')}</span>
         )
       }
     >
-      {r.releases.length === 0 ? (
-        <p className={EMPTY}>
-          {r.make === 'apple'
-            ? 'Apple publishes firmware only inside macOS updates; the machine’s own list is on Updates.'
-            : r.make === 'gigabyte'
-              ? (r.error ?? 'No list from Gigabyte yet.')
-              : r.make === null
-                ? 'No maker feed for this board.'
-                : (r.error ?? 'Nothing read yet.')}
-        </p>
-      ) : (
-        <ul className={LIST}>
-          {shown.map((rel) => (
-            <li key={rel.version} className={`${ROW} flex-wrap`}>
-              <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-1`}>
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className={MONO}>{rel.version}</span>
-                  {rel.version === r.running && <Chip tone="ok">running</Chip>}
-                  {newerThan(rel.version) && <Chip tone="warn">newer</Chip>}
-                  <span className={NOTE}>{rel.date ?? DASH}</span>
+      <ul className={TABLE}>
+        <li aria-hidden="true" className={cn(REL_GRID, TABLE_HEAD, 'items-center')}>
+          <span>Version</span>
+          <span className={REL_MID}>Published</span>
+          <span>What changed</span>
+          <span className="text-right">Package</span>
+        </li>
+        {r.releases.length === 0 && (
+          <li className={TABLE_EMPTY}>
+            {r.make === 'apple'
+              ? 'Apple publishes firmware only inside macOS updates; the machine’s own list is on Updates.'
+              : r.make === 'gigabyte'
+                ? (r.error ?? 'No list from Gigabyte yet.')
+                : r.make === null
+                  ? 'No maker feed for this board.'
+                  : (r.error ?? 'Nothing read yet.')}
+          </li>
+        )}
+        {shown.map((rel) => {
+          const running = rel.version === r.running
+          return (
+            <li key={rel.version} className={cn(REL_GRID, TABLE_ROW, 'py-3.5')}>
+              <span className="flex flex-col items-start gap-1">
+                <span
+                  className={cn(
+                    MONO_FACE,
+                    'text-[0.8rem]',
+                    running ? 'text-muted-foreground' : 'text-foreground',
+                  )}
+                >
+                  {rel.version}
                 </span>
-                {rel.notes.length === 0 ? (
-                  <span className={NOTE}>no note in the package</span>
-                ) : (
-                  <span className="flex flex-col gap-0.5 text-[0.78rem] text-muted-foreground leading-[1.5]">
-                    {rel.notes.map((n) => (
-                      <span key={n}>{n}</span>
-                    ))}
-                  </span>
-                )}
+                {running && <Chip tone="ok">running</Chip>}
               </span>
-              <span className={ROW_SIDE}>
+              <span className={cn(CELL_QUIET, REL_MID)}>{rel.date ?? DASH}</span>
+              {rel.notes.length === 0 ? (
+                <span className={CELL_QUIET}>no note in the package</span>
+              ) : (
+                <span className="flex min-w-0 flex-col gap-0.5 text-[0.8rem] text-subdued leading-[1.5]">
+                  {rel.notes.map((n) => (
+                    <span key={n}>{n}</span>
+                  ))}
+                </span>
+              )}
+              <span className={cn(CELL_QUIET, 'text-right')}>
                 {rel.url === null ? (
                   bytes(rel.sizeBytes)
                 ) : (
-                  <a href={rel.url} target="_blank" rel="noreferrer" className={MONO}>
+                  <a
+                    href={rel.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-muted-foreground no-underline hover:text-foreground"
+                  >
                     {bytes(rel.sizeBytes)} ↗
                   </a>
                 )}
               </span>
             </li>
-          ))}
-        </ul>
-      )}
+          )
+        })}
+      </ul>
       <p className={FOOT}>
         {r.releases.length > 0 && r.behind !== null && (
           <>
@@ -283,7 +329,7 @@ function Panel({ f }: { f: BoardFacts }) {
               ? 'The Mac’s pending and installed system updates are the firmware history that exists.'
               : 'Nothing to list.'}
       </p>
-    </Board>
+    </TableSection>
   )
 }
 

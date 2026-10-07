@@ -79,7 +79,15 @@ export function EngineCard({ e }: { e: EngineFacts }) {
   const nothingToDo = e.verdict === 'current'
 
   return (
-    <Board title="Engine" icon="logs" span={12} aside={<Chip tone={v.tone}>{v.label}</Chip>}>
+    <Board
+      title="Engine"
+      icon="logs"
+      span={12}
+      // Current is the norm and reads as a word; anything else is a chip.
+      aside={
+        nothingToDo ? <span className={NOTE}>{v.label}</span> : <Chip tone={v.tone}>{v.label}</Chip>
+      }
+    >
       <Facts
         rows={[
           {

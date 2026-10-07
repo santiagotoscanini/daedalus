@@ -15,9 +15,8 @@ import type { NodeRow } from '../../../lib/repo/nodes'
 import { useShown } from '../../../lib/shown'
 import { Input } from '../../ui/input'
 import { Switch } from '../../ui/switch'
-import { CONTROL_H } from '../form'
 import { ProviderModels } from '../provider-models'
-import { ASIDE, ERROR_NOTE, Mono, Rows, Stack } from '../shared'
+import { ASIDE, Band, CONTROL_H, ERROR_NOTE, HINT, Mono, Rows, Stack } from '../shared'
 import {
   blurOnEnter,
   policyAlert,
@@ -58,9 +57,15 @@ export function Policy({
   // share: it joins the line once hydration is done (lib/hydrated.ts).
   const hydrated = useHydrated()
   return (
-    <div className="flex flex-col gap-3 border-hairline border-t pt-4">
-      <h3 className="m-0 text-[0.875rem] [font-weight:560]">Policy</h3>
+    <>
+      <div className="flex h-8 items-center gap-2.5 border-hairline border-t bg-foreground/[0.02] px-5 text-[0.75rem]">
+        <span className="text-foreground [font-weight:560]">Policy</span>
+        <span className="text-muted-foreground">
+          what the box asks of it · each row saves on change
+        </span>
+      </div>
       <Rows
+        framed
         rows={[
           ...policyNames(ed, n, lanDomain),
           ...policyProviders(ed, n, lanDomain),
@@ -71,9 +76,13 @@ export function Policy({
           ...policyHardware(ed, n, shape),
         ]}
       />
-      {ed.error !== null && <p className={ERROR_NOTE}>{ed.error}</p>}
-      {n.policyChangedBy !== null && <p className={ASIDE}>Last changed {changedBy(n, hydrated)}</p>}
-    </div>
+      <Band>
+        {ed.error !== null && <p className={ERROR_NOTE}>{ed.error}</p>}
+        {n.policyChangedBy !== null && (
+          <p className={cn(ASIDE, 'm-0')}>Last changed {changedBy(n, hydrated)}</p>
+        )}
+      </Band>
+    </>
   )
 }
 
@@ -113,9 +122,9 @@ function policyNames(ed: PolicyEditor, n: NodeRow, lanDomain: string): Row[] {
     {
       k: 'Display name',
       v: (
-        <Stack className="w-full max-w-[22rem]">
+        <Stack className="w-full max-w-[36rem]">
           <Input
-            className={CONTROL_H}
+            className={cn(CONTROL_H, 'w-[15rem] max-w-full')}
             value={ed.name}
             placeholder={n.hostname}
             maxLength={40}
@@ -124,17 +133,17 @@ function policyNames(ed: PolicyEditor, n: NodeRow, lanDomain: string): Row[] {
             onBlur={ed.saveName}
             onKeyDown={blurOnEnter}
           />
-          <span className={ASIDE}>What the pages call it; empty means the hostname.</span>
+          <span className={HINT}>What the pages call it; empty means the hostname.</span>
         </Stack>
       ),
     },
     {
       k: 'Name on the network',
       v: (
-        <Stack className="w-full max-w-[22rem]">
-          <span className="inline-flex items-center gap-2">
+        <Stack className="w-full max-w-[36rem]">
+          <span className="inline-flex max-w-full flex-wrap items-center gap-2">
             <Input
-              className={CONTROL_H}
+              className={cn(CONTROL_H, 'w-[15rem] max-w-full')}
               value={ed.netName}
               placeholder={slugOf(n.hostname)}
               maxLength={32}
@@ -145,11 +154,11 @@ function policyNames(ed: PolicyEditor, n: NodeRow, lanDomain: string): Row[] {
               onBlur={ed.saveNetName}
               onKeyDown={blurOnEnter}
             />
-            <Mono>
+            <Mono className="whitespace-nowrap text-muted-foreground">
               {ed.netName || slugOf(n.hostname)}.{lanDomain}
             </Mono>
           </span>
-          <span className={ASIDE}>
+          <span className={ed.netNameBad || n.namedByHousehold ? ASIDE : HINT}>
             {ed.netNameBad
               ? 'Letters, digits and hyphens, 1 to 32 long, not starting or ending with a hyphen.'
               : n.namedByHousehold
@@ -245,7 +254,7 @@ function ProviderRow({
           />
         </span>
       </span>
-      <span className={ASIDE}>
+      <span className={HINT}>
         A model server on this machine. Offered, it goes to site/nodes.json and the gateway, gatus
         and the log bridge dial{' '}
         <Mono>

@@ -14,8 +14,8 @@ export const manifest = {
   // version. No dot: nothing on the box probes GitHub.
   tabs: [
     { id: 'runs', label: 'Runs', boardSpans: [8, 4, 12, 6, 6], head: false },
-    { id: 'workflows', label: 'Workflows', boardSpans: [4, 4, 4, 12], head: false },
+    { id: 'workflows', label: 'Workflows', boardSpans: [4, 8, 12], head: false },
     { id: 'minutes', label: 'Minutes', boardSpans: [8, 4, 6, 6], head: false },
-    { id: 'runners', label: 'Runners', boardSpans: [8, 4, 6, 6, 12], head: false },
+    { id: 'runners', label: 'Runners', boardSpans: [12, 4, 4, 4], head: false },
   ],
 } as const satisfies ModuleManifest

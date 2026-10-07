@@ -4,12 +4,8 @@ import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../../componen
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { LitellmData } from '../data/litellm'
-import {
-  NeighbourPair,
-  ToolsModelsCalledBoard,
-  TrafficBoard,
-  WhoIsCallingBoard,
-} from './litellm-boards'
+import { WhoIsCallingBoard } from './callers'
+import { NeighbourPair, ToolsModelsCalledBoard, TrafficBoard } from './litellm-boards'
 import { comparePinned, EMPTY, MONO } from './shared'
 
 /**
@@ -79,18 +75,13 @@ export function LitellmView({ data }: { data: LitellmData }) {
 
         <ToolsModelsCalledBoard f={f} />
 
-        {/* The one axis on this page worth a panel of this size (see `Caller`
-            in ../data/litellm.ts): who is calling cannot be known from
-            anywhere else.
-
-            It also opens the second row rather than sharing the first, and that
-            is a layout decision rather than an editorial one: it runs to about
-            twice the height of the traffic panel, so the two are paired with
-            boards of their own size — stretching makes a row share one bottom
-            edge, but it cannot invent content to fill the taller one with. */}
+        {/* The one axis on this page worth a table (see `Caller` in
+            ../data/litellm.ts): who is calling cannot be known from anywhere
+            else. Full width, so the ranking, the cost and the reach of a key
+            read along one row instead of wrapping under its name. */}
         <WhoIsCallingBoard f={f} />
 
-        <Changelog gap={gap} span={6} />
+        <Changelog gap={gap} span={12} />
 
         <Board title="Logs" icon="logs" span={12}>
           <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />

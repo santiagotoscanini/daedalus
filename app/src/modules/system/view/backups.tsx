@@ -1,71 +1,89 @@
 import { LogBoard } from '../../../components/logs'
 import {
-  EMPTY,
-  FOOT,
-  LIST,
-  MONO,
-  MONO_FACE,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_N,
-  ROW_SIDE,
-} from '../../../components/tokens'
-import { Board, BoardGrid } from '../../../components/viz'
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableGroup,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { FOOT, MONO, MONO_FACE } from '../../../components/tokens'
+import { BoardGrid } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, duration, num } from '../../../lib/format'
 import type { SystemData } from '../data'
-import {
-  CELL_MAIN,
-  CELL_N,
-  CELL_SIDE,
-  SYSTEM_SNAPSHOT,
-  TABLE,
-  TABLE_HEAD,
-  TABLE_ROW,
-} from './shared'
+import { SYSTEM_SNAPSHOT } from './shared'
 
 /* ── Backups ──────────────────────────────────────────────────────────── */
 
 type Backups = Extract<SystemData, { tab: 'backups' }>
 
+// Three tables, in the order of the question "what survives this machine":
+// what is copied (and how far behind), what is NOT covered at all — the honest
+// half, kept second so it is never below the fold of the easy half — and which
+// datasets the snapshots enrol. Lag is the reading on the first; it is the one
+// column that takes colour, and only once it is late.
+
+const N = 'text-right tabular-nums'
+
+const PAIR_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_6.5rem_7.5rem]',
+  '@max-[40rem]/table:grid-cols-[minmax(0,1fr)_7.5rem]',
+)
+const PAIR_MID = '@max-[40rem]/table:hidden'
+
+const GAP_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,14rem)_minmax(0,1fr)]',
+  '@max-[30rem]/table:grid-cols-[minmax(0,1fr)]',
+)
+
+const COVER_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1fr)_6.5rem_6rem]',
+  '@max-[30rem]/table:grid-cols-[minmax(0,1fr)_6rem]',
+)
+const COVER_MID = '@max-[30rem]/table:hidden'
+
 export function BackupsView({ d }: { d: Backups }) {
   return (
-    <BoardGrid>
-      <Board
+    <div className="flex flex-col gap-10">
+      <TableSection
         title="Replication"
-        icon="⇉"
-        span={8}
-        aside={<span className={NOTE}>{bytes(d.totalReplicatedBytes)} on the mirror</span>}
+        aside={`${bytes(d.totalReplicatedBytes)} on the mirror · syncoid, hourly`}
       >
-        {d.pairs.length === 0 ? (
-          <p className={EMPTY}>no replication pairs found</p>
-        ) : (
-          <ul className={cn(TABLE, 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]')}>
-            <li className={TABLE_HEAD} aria-hidden="true">
-              <span>Source</span>
-              <span>Replica</span>
-              <span>Snapshots</span>
-              <span className="text-right">Lag</span>
+        <ul className={TABLE}>
+          <li aria-hidden="true" className={cn(PAIR_GRID, TABLE_HEAD)}>
+            <span>Source</span>
+            <span className={PAIR_MID}>Replica</span>
+            <span className={cn(N, PAIR_MID)}>Snapshots</span>
+            <span className={N}>Lag</span>
+          </li>
+          {d.pairs.length === 0 && <li className={TABLE_EMPTY}>no replication pairs found</li>}
+          {d.pairs.map((p) => (
+            <li key={p.target} className={cn(PAIR_GRID, TABLE_ROW)}>
+              <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>{p.source}</span>
+              <span className={cn(CELL_MONO, PAIR_MID)}>
+                <span className="mr-1.5">→</span>
+                {p.target}
+              </span>
+              <span className={cn(CELL_QUIET, N, PAIR_MID)}>{num(p.targetSnapshots)}</span>
+              <span className={cn(N, 'text-[0.8125rem]')}>
+                {p.lagSeconds === null ? (
+                  <span className="text-muted-foreground">{DASH}</span>
+                ) : p.lagSeconds > 7200 ? (
+                  <span className="text-warning">{duration(p.lagSeconds)} behind</span>
+                ) : (
+                  <span className="text-foreground">{duration(p.lagSeconds)} behind</span>
+                )}
+              </span>
             </li>
-            {d.pairs.map((p) => (
-              <li key={p.target} className={TABLE_ROW}>
-                <span className={cn(CELL_MAIN, MONO)}>{p.source}</span>
-                <span className={cn(CELL_SIDE, MONO_FACE)}>→ {p.target}</span>
-                <span className={CELL_SIDE}>{num(p.targetSnapshots)} snapshots</span>
-                <span className={CELL_N}>
-                  {p.lagSeconds === null ? (
-                    DASH
-                  ) : p.lagSeconds > 7200 ? (
-                    <span className="text-warning">{duration(p.lagSeconds)} behind</span>
-                  ) : (
-                    `${duration(p.lagSeconds)} behind`
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+          ))}
+        </ul>
         <p className={FOOT}>
           syncoid runs hourly and rides the existing auto-snapshots rather than cutting its own, so
           a lag under an hour is the schedule rather than a fault. The source takes a snapshot every
@@ -75,23 +93,27 @@ export function BackupsView({ d }: { d: Backups }) {
           also why the lag is the reading and &ldquo;the target has snapshots&rdquo; is not. syncoid
           exits 0 on a run that copied nothing.
         </p>
-      </Board>
+      </TableSection>
 
-      <Board title="What is not covered" icon="warn" span={4}>
-        {/* The honest half, and the reason this is a tab rather than a panel
-            on Pools. Everything above is easy to show and easy to believe. */}
-        <ul className={LIST}>
-          <li className={ROW}>
-            <span className={ROW_MAIN}>Off-site</span>
-            <span className={ROW_SIDE}>nothing</span>
+      {/* The honest half, and the reason this is a tab rather than a panel on
+          Pools. Everything above is easy to show and easy to believe. */}
+      <TableSection title="What is not covered" aside="3 gaps">
+        <ul className={TABLE}>
+          <li aria-hidden="true" className={cn(GAP_GRID, TABLE_HEAD)}>
+            <span>What</span>
+            <span className={COVER_MID}>Why it matters</span>
           </li>
-          <li className={ROW}>
-            <span className={cn(ROW_MAIN, MONO)}>acme.json</span>
-            <span className={ROW_SIDE}>Let&rsquo;s Encrypt cert store</span>
+          <li className={cn(GAP_GRID, TABLE_ROW)}>
+            <span className={CELL_NAME}>Off-site</span>
+            <span className={cn(CELL_QUIET, COVER_MID)}>nothing — both pools are in this box</span>
           </li>
-          <li className={ROW}>
-            <span className={cn(ROW_MAIN, MONO)}>gravity.db</span>
-            <span className={ROW_SIDE}>pi-hole&rsquo;s UI-added lists</span>
+          <li className={cn(GAP_GRID, TABLE_ROW)}>
+            <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>acme.json</span>
+            <span className={cn(CELL_QUIET, COVER_MID)}>Let&rsquo;s Encrypt cert store</span>
+          </li>
+          <li className={cn(GAP_GRID, TABLE_ROW)}>
+            <span className={cn(CELL_NAME, MONO_FACE, 'text-[0.8rem]')}>gravity.db</span>
+            <span className={cn(CELL_QUIET, COVER_MID)}>pi-hole&rsquo;s UI-added lists</span>
           </li>
         </ul>
         <p className={FOOT}>
@@ -100,70 +122,70 @@ export function BackupsView({ d }: { d: Backups }) {
           outside the snapshot tree entirely, and losing the cert store means re-issuing against
           Let&rsquo;s Encrypt&rsquo;s weekly rate limit. This is the biggest gap on the machine.
         </p>
-      </Board>
+      </TableSection>
 
-      <Board
+      <TableSection
         title="Snapshot coverage"
-        icon="clock"
-        span={8}
-        aside={<span className={NOTE}>{num(d.coverage.length)} enrolled</span>}
+        aside={`${num(d.coverage.length)} enrolled · ${num(d.unsnapshotted.length)} opted out`}
       >
-        <ul className={cn(TABLE, 'grid-cols-[minmax(0,1fr)_auto_auto]')}>
-          <li className={TABLE_HEAD} aria-hidden="true">
+        <ul className={TABLE}>
+          <li aria-hidden="true" className={cn(COVER_GRID, TABLE_HEAD)}>
             <span>Dataset</span>
-            <span>Snapshots</span>
-            <span className="text-right">Used</span>
+            <span className={cn(N, COVER_MID)}>Snapshots</span>
+            <span className={N}>Used</span>
           </li>
+          <TableGroup title="Enrolled" note={`${num(d.coverage.length)} datasets`} />
           {d.coverage.map((c) => (
-            <li key={c.name} className={TABLE_ROW}>
-              <span className={cn(CELL_MAIN, MONO)}>{c.name}</span>
-              <span className={CELL_SIDE}>{num(c.snapshots)} snapshots</span>
-              <span className={CELL_N}>{bytes(c.usedBytes)}</span>
+            <li key={c.name} className={cn(COVER_GRID, TABLE_ROW)}>
+              <span className={cn(CELL_MONO, 'text-[0.78rem] text-foreground')}>{c.name}</span>
+              <span className={cn(CELL_QUIET, N, COVER_MID)}>{num(c.snapshots)}</span>
+              <span className={cn(N, 'text-foreground')}>{bytes(c.usedBytes)}</span>
+            </li>
+          ))}
+          <TableGroup
+            title="Deliberately not snapshotted"
+            note={d.unsnapshotted.length === 0 ? 'none' : `${num(d.unsnapshotted.length)} datasets`}
+          />
+          {d.unsnapshotted.length === 0 && (
+            <li className={TABLE_EMPTY}>every dataset is enrolled</li>
+          )}
+          {d.unsnapshotted.map((u) => (
+            <li key={u.name} className={cn(COVER_GRID, TABLE_ROW)}>
+              <span className={cn(CELL_MONO, 'text-[0.78rem]')}>{u.name}</span>
+              <span className={cn(CELL_QUIET, N, COVER_MID)}>{DASH}</span>
+              <span className={cn(N, 'text-subdued')}>{bytes(u.usedBytes)}</span>
             </li>
           ))}
         </ul>
-      </Board>
-
-      <Board title="Deliberately not snapshotted" icon="○" span={4}>
-        {d.unsnapshotted.length === 0 ? (
-          <p className={EMPTY}>every dataset is enrolled</p>
-        ) : (
-          <ul className={LIST}>
-            {d.unsnapshotted.map((u) => (
-              <li key={u.name} className={ROW}>
-                <span className={cn(ROW_MAIN, MONO)}>{u.name}</span>
-                <span className={ROW_N}>{bytes(u.usedBytes)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
         <p className={FOOT}>
           Opted out per dataset with <span className={MONO}>com.sun:auto-snapshot=false</span>. The
           media library is the big one, and it is re-downloadable: snapshotting a terabyte of files
           that can be fetched again buys nothing and costs the deltas.
         </p>
-      </Board>
+      </TableSection>
 
-      <LogBoard
-        source={{ unit: 'syncoid-rpool-selfhost.service' }}
-        title="syncoid — selfhost"
-        neighbours={[
-          {
-            source: { unit: 'syncoid-rpool-home.service' },
-            label: 'syncoid — home',
-            role: 'the other replication pair',
-            note: 'Same schedule and the same flags. Both run --quiet, which drops syncoid’s progress-meter stage: the bundled pv aborts intermittently under headless piping and a crashed pv breaks the pipe and fails the whole replication.',
-          },
-          SYSTEM_SNAPSHOT,
-        ]}
-        foot={
-          <p className={FOOT}>
-            Failures send mail; a run that stops happening at all pages through healthchecks, which
-            is the failure this cannot detect itself. Both are declared in{' '}
-            <span className={MONO}>platform/backup.nix</span>.
-          </p>
-        }
-      />
-    </BoardGrid>
+      <BoardGrid>
+        <LogBoard
+          source={{ unit: 'syncoid-rpool-selfhost.service' }}
+          title="syncoid — selfhost"
+          neighbours={[
+            {
+              source: { unit: 'syncoid-rpool-home.service' },
+              label: 'syncoid — home',
+              role: 'the other replication pair',
+              note: 'Same schedule and the same flags. Both run --quiet, which drops syncoid’s progress-meter stage: the bundled pv aborts intermittently under headless piping and a crashed pv breaks the pipe and fails the whole replication.',
+            },
+            SYSTEM_SNAPSHOT,
+          ]}
+          foot={
+            <p className={FOOT}>
+              Failures send mail; a run that stops happening at all pages through healthchecks,
+              which is the failure this cannot detect itself. Both are declared in{' '}
+              <span className={MONO}>platform/backup.nix</span>.
+            </p>
+          }
+        />
+      </BoardGrid>
+    </div>
   )
 }

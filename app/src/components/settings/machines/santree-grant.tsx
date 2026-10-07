@@ -3,8 +3,7 @@ import type { NodeRow } from '../../../lib/repo/nodes'
 import { grantSantreeFn } from '../../../server/nodes'
 import { Button } from '../../ui/button'
 import { useAction } from '../../use-action'
-import { INSET, NOTE_SHOWN } from '../form'
-import { ERROR_NOTE, Mono, Rows } from '../shared'
+import { ERROR_NOTE, INSET, Mono, NOTE_SHOWN, Rows } from '../shared'
 
 // "Turn on santree": the one way santree is turned on for a machine, from
 // the card's switch or from the machine itself — a Mac's "santree on the box"

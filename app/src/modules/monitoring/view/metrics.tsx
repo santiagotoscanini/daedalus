@@ -109,7 +109,7 @@ export function MetricsView({ data: d }: { data: Metrics }) {
         </Board>
 
         <Board title="Slowest scrapes" icon="⏱" span={4}>
-          <BarList items={d.slowestScrapes} tone="warn" empty="nothing measured" />
+          <BarList items={d.slowestScrapes} tone="muted" empty="nothing measured" />
           <p className={FOOT}>
             A scrape that approaches its interval is a target about to start missing samples.
           </p>

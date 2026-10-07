@@ -1,26 +1,22 @@
-import {
-  AXIS,
-  CAPTION,
-  FOOT,
-  LIST,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-} from '../../../components/tokens'
+import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { AXIS, CAPTION, FOOT, NOTE } from '../../../components/tokens'
 import {
   BarList,
   Board,
   BoardGrid,
-  Chip,
   Columns,
   Progress,
   Stat,
   StatStrip,
 } from '../../../components/viz'
-import { num, pct } from '../../../lib/format'
+import { cn } from '../../../lib/cn'
+import { DASH, num, pct } from '../../../lib/format'
 import type { ActionsData } from '../data'
 import { Ext, osWord, SampleRows, WipBoard } from './shared'
+
+/** What could move · jobs · wall minutes · billed. */
+const TAKE_GRID = 'grid items-center gap-x-4 grid-cols-[minmax(8rem,1fr)_3rem_4.5rem_4.5rem]'
 
 type Minutes = Extract<ActionsData, { tab: 'minutes' }>
 
@@ -50,12 +46,7 @@ export function MinutesView({ d }: { d: Minutes }) {
           sub={t.unread > 0 ? `${num(t.unread)} runs not read` : undefined}
         />
         <Stat label="self-hosted" value={num(t.selfHosted)} unit="min" sub="bills nothing" />
-        <Stat
-          label="a runner here would save"
-          value={num(savingTotal)}
-          unit="min"
-          tone={savingTotal > 0 ? 'ok' : undefined}
-        />
+        <Stat label="a runner here would save" value={num(savingTotal)} unit="min" />
       </StatStrip>
 
       <BoardGrid>
@@ -63,13 +54,13 @@ export function MinutesView({ d }: { d: Minutes }) {
 
         <AgainstThePlanBoard f={f} />
 
-        <ByRepositoryBoard f={f} />
+        <ByRepositoryTable f={f} />
+
+        <CostPerWorkflowTable f={f} />
 
         <WhatARunnerHereWouldTakeBoard f={f} />
 
         <GitHubSOwnMeterBoard />
-
-        <CostPerWorkflowBoard f={f} />
       </BoardGrid>
     </>
   )
@@ -136,37 +127,6 @@ function AgainstThePlanBoard({ f }: { f: MinutesFacts }) {
   )
 }
 
-function ByRepositoryBoard({ f }: { f: MinutesFacts }) {
-  const { d } = f
-  return (
-    <Board title="By repository" icon="rows" span={6}>
-      <ul className={LIST}>
-        {d.byRepo.map((r) => (
-          <li key={r.repo} className={ROW}>
-            <span className={ROW_MAIN}>
-              <Ext href={`${r.url}/actions`}>{r.repo}</Ext>
-            </span>
-            <span className={ROW_SIDE}>
-              {num(r.billed)} billed
-              {r.raw.linux > 0 && ` · L ${num(r.raw.linux)}`}
-              {r.raw.windows > 0 && ` · W ${num(r.raw.windows)}`}
-              {r.raw.macos > 0 && ` · M ${num(r.raw.macos)}`}
-              {r.selfHosted > 0 && ` · self ${num(r.selfHosted)}`}
-              {r.unread > 0 && ` · ${num(r.unread)} runs unread`}
-            </span>
-          </li>
-        ))}
-        {d.byRepo.length === 0 && <li className={CAPTION}>no jobs read</li>}
-      </ul>
-      <p className={FOOT}>
-        L, W, M are wall minutes per image before the multiplier. "Unread" runs are beyond the
-        {` ${String(24)} `}most recent per repository the page reads jobs for, or in a repository
-        the App cannot read.
-      </p>
-    </Board>
-  )
-}
-
 function WhatARunnerHereWouldTakeBoard({ f }: { f: MinutesFacts }) {
   const { d, savingTotal } = f
   return (
@@ -174,15 +134,21 @@ function WhatARunnerHereWouldTakeBoard({ f }: { f: MinutesFacts }) {
       title="What a runner here would take"
       icon="panels"
       span={6}
-      aside={<Chip tone={savingTotal > 0 ? 'ok' : 'muted'}>{num(savingTotal)} min</Chip>}
+      aside={<span className={NOTE}>{num(savingTotal)} min</span>}
     >
       {d.saving.length === 0 ? (
         <p className={CAPTION}>No hosted job in the window.</p>
       ) : (
-        <ul className={LIST}>
+        <ul className="m-0 list-none p-0 text-[0.8rem]">
+          <li className={cn(TAKE_GRID, 'pb-1.5 text-[0.72rem] text-muted-foreground')}>
+            <span>Jobs that could move</span>
+            <span className="text-right">Jobs</span>
+            <span className="text-right">Wall min</span>
+            <span className="text-right">Billed</span>
+          </li>
           {d.saving.map((s) => (
-            <li key={s.os} className={ROW}>
-              <span className={ROW_MAIN}>
+            <li key={s.os} className={cn(TAKE_GRID, 'border-hairline border-t py-2.5')}>
+              <span className="truncate text-foreground">
                 {osWord(s.os)} jobs →{' '}
                 {s.os === 'linux'
                   ? 'this box'
@@ -190,9 +156,9 @@ function WhatARunnerHereWouldTakeBoard({ f }: { f: MinutesFacts }) {
                     ? 'a Windows node'
                     : 'a macOS node'}
               </span>
-              <span className={ROW_SIDE}>
-                {num(s.jobs)} jobs · {num(s.raw)} wall min · {num(s.billed)} billed
-              </span>
+              <span className={cn(CELL_QUIET, 'text-right')}>{num(s.jobs)}</span>
+              <span className={cn(CELL_QUIET, 'text-right')}>{num(s.raw)}</span>
+              <span className="text-right text-foreground tabular-nums">{num(s.billed)}</span>
             </li>
           ))}
         </ul>
@@ -225,27 +191,107 @@ function GitHubSOwnMeterBoard() {
   )
 }
 
-function CostPerWorkflowBoard({ f }: { f: MinutesFacts }) {
+/** Repository · billed · Linux · Windows · macOS · self-hosted · unread. */
+const REPO_GRID =
+  'grid items-center gap-x-5 px-5 grid-cols-[minmax(7rem,1fr)_4.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem] @max-[38rem]/table:grid-cols-[minmax(7rem,1fr)_4.5rem_4rem] @max-[38rem]/table:[&>.os]:hidden'
+
+/** A zero recedes to a dash, so the minutes that exist are what the eye finds. */
+function Minutes({ n, className }: { n: number; className?: string }) {
+  return (
+    <span
+      className={cn(CELL_QUIET, 'text-right', n === 0 && 'text-muted-foreground/50', className)}
+    >
+      {n === 0 ? DASH : num(n)}
+    </span>
+  )
+}
+
+function ByRepositoryTable({ f }: { f: MinutesFacts }) {
   const { d } = f
   return (
-    <Board title="Cost per workflow" icon="rows" span={6}>
-      <ul className={LIST}>
-        {d.byWorkflow.map((w) => (
-          <li key={w.label} className={ROW}>
-            <span className={ROW_MAIN}>
-              {w.label}
-              {w.topJob !== null && (
-                <span className="ml-1.5 text-muted-foreground">
-                  {w.topJob} {num(w.topJobBilled)}
-                </span>
+    <TableSection
+      title="By repository"
+      aside="minutes"
+      className="col-span-7 max-[78rem]:col-span-12"
+    >
+      <ul className={TABLE} aria-label="Minutes by repository">
+        <li className={cn(REPO_GRID, TABLE_HEAD)}>
+          <span>Repository</span>
+          <span className="text-right">Billed</span>
+          <span className="os text-right" title="Linux wall minutes, before the multiplier">
+            Linux
+          </span>
+          <span className="os text-right" title="Windows wall minutes, before the multiplier">
+            Win
+          </span>
+          <span className="os text-right" title="macOS wall minutes, before the multiplier">
+            macOS
+          </span>
+          <span className="os text-right">Self</span>
+          <span className="text-right">Unread</span>
+        </li>
+        {d.byRepo.length === 0 && <li className={TABLE_EMPTY}>no jobs read</li>}
+        {d.byRepo.map((r) => (
+          <li key={r.repo} className={cn(REPO_GRID, TABLE_ROW)}>
+            <Ext href={`${r.url}/actions`} className="truncate text-foreground">
+              {r.repo}
+            </Ext>
+            <span
+              className={cn(
+                'text-right tabular-nums',
+                r.billed > 0 ? 'text-foreground [font-weight:560]' : 'text-muted-foreground/50',
               )}
+            >
+              {r.billed > 0 ? num(r.billed) : DASH}
             </span>
-            <span className={ROW_SIDE}>{num(w.billed)} billed</span>
+            <Minutes n={r.raw.linux} className="os" />
+            <Minutes n={r.raw.windows} className="os" />
+            <Minutes n={r.raw.macos} className="os" />
+            <Minutes n={r.selfHosted} className="os" />
+            <Minutes n={r.unread} />
           </li>
         ))}
-        {d.byWorkflow.length === 0 && <li className={CAPTION}>no hosted jobs read</li>}
+      </ul>
+      <p className={FOOT}>
+        Linux, Win and macOS are wall minutes per image before the multiplier; billed is after it.
+        "Unread" runs are beyond the
+        {` ${String(24)} `}most recent per repository the page reads jobs for, or in a repository
+        the App cannot read.
+      </p>
+    </TableSection>
+  )
+}
+
+/** Workflow · the job that dominates it · billed. */
+const WF_COST_GRID =
+  'grid items-center gap-x-5 px-5 grid-cols-[minmax(7rem,1fr)_minmax(5rem,0.8fr)_4.5rem] @max-[26rem]/table:grid-cols-[minmax(7rem,1fr)_4.5rem] @max-[26rem]/table:[&>.job]:hidden'
+
+function CostPerWorkflowTable({ f }: { f: MinutesFacts }) {
+  const { d } = f
+  return (
+    <TableSection
+      title="Cost per workflow"
+      aside="billed minutes"
+      className="col-span-5 max-[78rem]:col-span-12"
+    >
+      <ul className={TABLE} aria-label="Billed minutes by workflow">
+        <li className={cn(WF_COST_GRID, TABLE_HEAD)}>
+          <span>Workflow</span>
+          <span className="job">Heaviest job</span>
+          <span className="text-right">Billed</span>
+        </li>
+        {d.byWorkflow.length === 0 && <li className={TABLE_EMPTY}>no hosted jobs read</li>}
+        {d.byWorkflow.map((w) => (
+          <li key={w.label} className={cn(WF_COST_GRID, TABLE_ROW)}>
+            <span className="truncate text-foreground">{w.label}</span>
+            <span className={cn(CELL_QUIET, 'job truncate')}>
+              {w.topJob === null ? DASH : `${w.topJob} · ${num(w.topJobBilled)}`}
+            </span>
+            <span className="text-right text-foreground tabular-nums">{num(w.billed)}</span>
+          </li>
+        ))}
       </ul>
       <p className={FOOT}>Ranked by billed minutes, with the job that dominates each one.</p>
-    </Board>
+    </TableSection>
   )
 }

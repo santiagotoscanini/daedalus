@@ -8,6 +8,7 @@ import { errorText } from '../lib/redact'
 import { fetchUpdateNotes } from '../server/updates'
 import { UpdateControl } from './image-update'
 import { Changelog } from './release-notes'
+import { CELL_MONO, CELL_NAME, CELL_QUIET, TABLE_HEAD, TABLE_ROW } from './table'
 import { EMPTY, MONO, MONO_FACE, NOTE } from './tokens'
 import { Chip, type Tone } from './viz'
 
@@ -37,30 +38,89 @@ const VERDICT: Record<UpdateVerdict, { label: string; tone: Tone }> = {
   unknown: { label: 'no verdict', tone: 'muted' },
 }
 
-/* A release entry's disclosure idiom, one level up (release-notes.tsx). */
+/* ── the columns ─────────────────────────────────────────────────────────
+
+   One grid for the closed row and for the head above a table of them, so a
+   container's running version sits under "Running" whichever list it is in:
+   name · running · available · state. The available version steps away on a
+   narrow table (it is in the open row), then the running one. Outside a
+   `TABLE` (no `table` query container) the base grid is the one that applies. */
+export const IMAGE_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.3fr)_7.5rem]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7.5rem]',
+  '@max-[30rem]/table:grid-cols-[minmax(0,1fr)_7.5rem]',
+)
+const NARROW = '@max-[44rem]/table:hidden'
+const NARROWER = '@max-[30rem]/table:hidden'
+
+/** The head over a `TABLE` of image rows. */
+export function ImageTableHead({ className }: { className?: string }) {
+  return (
+    <li aria-hidden="true" className={cn(IMAGE_GRID, TABLE_HEAD, className)}>
+      <span className="pl-5">Container</span>
+      <span className={NARROWER}>Running</span>
+      <span className={NARROW}>Available</span>
+      <span className="text-right">State</span>
+    </li>
+  )
+}
+
+/* The disclosure's summary: the grid, a row's height, the house hover. */
 const SUMMARY = cn(
-  'flex min-w-0 cursor-pointer list-none items-baseline gap-3 px-3 py-2',
-  'hover:bg-foreground/[0.05] [&::-webkit-details-marker]:hidden',
-  "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
-  'group-open:before:rotate-90',
+  IMAGE_GRID,
+  'min-h-[3.25rem] cursor-pointer list-none py-2 text-[0.8125rem] transition-colors duration-100',
+  'hover:bg-foreground/[0.025] [&::-webkit-details-marker]:hidden',
+  'focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--brand-dim)]',
 )
 
+/* The caret, a cell of its own inside the name column — a ::before would be
+   a grid item and push every column one to the right. */
+const CARET =
+  "inline-block w-5 flex-none text-[0.7rem] text-muted-foreground transition-transform duration-[0.12s] group-open:rotate-90 before:content-['▸']"
+
+/**
+ * One pinned image.
+ *
+ * `table` places the row inside a `TABLE` (components/table.tsx) under
+ * `ImageTableHead`: flat, hairline-separated, 52px. Without it the row is the
+ * bordered disclosure a board's own short list draws. `'grouped'` is a table
+ * whose `TableGroup`s already name the verdict, so the row does not repeat it —
+ * only what differs from its group (pinned, queued) keeps a chip.
+ */
 export function ImageRow({
   r,
   status,
   queue,
+  table,
 }: {
   r: UpdateRow
   status: ImageUpdateStatus
   queue?: React.ComponentProps<typeof UpdateControl>['queue']
+  table?: 'row' | 'grouped'
 }) {
   const v = VERDICT[r.verdict]
   const [notes, setNotes] = useState<Notes | null>(null)
+  const available =
+    r.verdict === 'tag-moved'
+      ? (r.freshness?.remoteVersion ?? null)
+      : r.verdict === 'newer-tag'
+        ? (r.freshness?.newerTag ?? null)
+        : null
 
   return (
-    <li>
+    <li
+      className={
+        table === undefined
+          ? undefined
+          : cn(TABLE_ROW, 'min-h-0 py-0 [&:has(details[open])]:bg-foreground/[0.012]')
+      }
+    >
       <details
-        className="group overflow-hidden rounded-xl border border-hairline"
+        className={cn(
+          'group',
+          table === undefined && 'overflow-hidden rounded-xl border border-hairline',
+        )}
         onToggle={(e) => {
           // A failed read is not cached: closing and reopening asks again.
           if (!e.currentTarget.open || (notes !== null && notes.error === null) || !r.hasNotes)
@@ -75,30 +135,39 @@ export function ImageRow({
             })
         }}
       >
-        <summary className={SUMMARY}>
-          <span className="min-w-[11rem] text-[0.84rem] text-foreground [font-weight:500]">
-            {r.container}
+        <summary className={cn(SUMMARY, table === undefined && 'min-h-11 px-3')}>
+          <span className="flex min-w-0 items-center">
+            <span aria-hidden="true" className={CARET} />
+            <span className={CELL_NAME}>{r.container}</span>
           </span>
-          <span className={cn(MONO_FACE, 'text-[0.78rem] text-muted-foreground')}>
+          <span className={cn(CELL_MONO, 'text-[0.75rem]', NARROWER)}>
             {r.running.version ?? (r.kind === 'container' ? r.tag : DASH)}
           </span>
           {/* For a moved CHANNEL pin both tags are the same string, so the
               only honest thing the digests can say is "new digest" — unless
               the image states its own version, in which case that IS the
-              answer. The arrow is a ::before: punctuation, not content. */}
-          <span
-            className={cn(
-              MONO_FACE,
-              'text-[0.78rem] text-foreground',
-              "before:mr-[0.25em] before:text-muted-foreground before:content-['→']",
-            )}
-          >
-            {r.verdict === 'tag-moved'
-              ? (r.freshness?.remoteVersion ?? 'new digest')
-              : (r.freshness?.newerTag ?? DASH)}
+              answer. Nothing to move to is an empty cell, not "→ —" down a
+              column of settled rows. */}
+          <span className={cn('min-w-0 truncate', NARROW)}>
+            {available !== null ? (
+              <span className={cn(MONO_FACE, 'text-[0.75rem] text-foreground')}>
+                <span className="mr-1.5 text-muted-foreground">→</span>
+                {available}
+              </span>
+            ) : r.verdict === 'tag-moved' ? (
+              <span className="text-[0.78rem] text-subdued">
+                <span className="mr-1.5 text-muted-foreground">→</span>new digest
+              </span>
+            ) : null}
           </span>
-          <span className="ml-auto flex items-center gap-1.5">
-            <Chip tone={v.tone}>{v.label}</Chip>
+          <span className="flex items-center justify-end gap-1.5">
+            {/* A grouped table names the verdict once, in the group. */}
+            {table !== 'grouped' &&
+              (r.verdict === 'current' && table === 'row' ? (
+                <span className={CELL_QUIET}>{v.label}</span>
+              ) : (
+                <Chip tone={v.tone}>{v.label}</Chip>
+              ))}
             {r.kind === 'container' && !r.updatable && <Chip tone="muted">pinned</Chip>}
             {/* On the closed row, because the whole point of a queue is to
                 build it while scrolling past rows that are shut. */}
@@ -106,7 +175,14 @@ export function ImageRow({
           </span>
         </summary>
 
-        <div className="flex flex-col gap-3 border-hairline border-t px-3 pt-3 pb-3">
+        <div
+          className={cn(
+            'flex flex-col gap-3',
+            table === undefined
+              ? 'border-hairline border-t px-3 pt-3 pb-3'
+              : 'pt-1 pr-5 pb-5 pl-10',
+          )}
+        >
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />
           {/* A manual row draws the button only when its base is the
               configuration's to move; a container row always does, even to

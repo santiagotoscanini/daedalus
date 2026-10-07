@@ -39,19 +39,19 @@ export function HeadStrip({
 }) {
   return (
     // The bottom margin matches HeadStripSkeleton's, so the tabs do not move on load.
-    <div className="mb-[1.1rem] flex items-center gap-3.5 max-[44rem]:flex-wrap">
+    <div className="mb-[1.1rem] flex min-h-11 items-center gap-3 max-[44rem]:flex-wrap">
       {mark !== undefined && (
         <img
           src={mark.src}
           alt=""
-          width={44}
-          height={44}
-          className={cn('block size-11 flex-none object-contain', mark.invert && 'dark:invert')}
+          width={36}
+          height={36}
+          className={cn('block size-9 flex-none object-contain', mark.invert && 'dark:invert')}
         />
       )}
       <div className="flex min-w-0 flex-auto flex-col gap-1">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <h2 className="m-0 text-[1.15rem] text-foreground leading-tight tracking-[-0.015em] [font-weight:600]">
+          <h2 className="m-0 text-[1.05rem] text-foreground leading-tight tracking-[-0.015em] [font-weight:600]">
             {name}
           </h2>
           {chip !== undefined && <Chip tone={chip.tone}>{chip.label}</Chip>}

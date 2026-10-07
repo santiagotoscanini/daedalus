@@ -112,14 +112,17 @@ function VersionCompare({
   verdict: { label: string; tone: Tone }
   rows: CompareRow[]
 }) {
-  if (rows.length === 0) return <Chip tone={verdict.tone}>{verdict.label}</Chip>
+  // Up to date is the norm on most service pages, so it is a quiet chip; only
+  // a version that differs from it — behind, a moved tag — carries colour.
+  const tone: Tone = verdict.tone === 'ok' ? 'muted' : verdict.tone
+  if (rows.length === 0) return <Chip tone={tone}>{verdict.label}</Chip>
 
   return (
     <InfoHint
       // Position and size only — InfoHint owns the reveal and the card chrome.
       className="inline-flex cursor-default rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       cardClassName="top-[calc(100%+0.5rem)] left-0 flex w-max max-w-[19rem] flex-col gap-2.5 px-3 py-2.5"
-      trigger={<Chip tone={verdict.tone}>{verdict.label}</Chip>}
+      trigger={<Chip tone={tone}>{verdict.label}</Chip>}
     >
       {rows.map((r) => (
         <span key={r.k} className="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-0.5">

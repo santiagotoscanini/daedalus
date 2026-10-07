@@ -1,7 +1,9 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, ServiceHead, verdictOf } from '../../../components/service-head'
-import { FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_N, ROW_SIDE } from '../../../components/tokens'
+import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, duration, num, pct } from '../../../lib/format'
@@ -72,14 +74,7 @@ export function PostgresView({ d }: { d: Postgres }) {
             rows={[
               {
                 k: 'Status',
-                v:
-                  d.up === null ? (
-                    DASH
-                  ) : d.up ? (
-                    <Chip tone="ok">up</Chip>
-                  ) : (
-                    <Chip tone="bad">not answering</Chip>
-                  ),
+                v: d.up === null ? DASH : d.up ? 'up' : <Chip tone="bad">not answering</Chip>,
               },
               { k: 'Temp files written', v: bytes(d.totals.tempBytes) },
               {
@@ -97,31 +92,15 @@ export function PostgresView({ d }: { d: Postgres }) {
           </p>
         </Board>
 
-        <Board title="Tenants" icon="rows" span={12}>
-          <ul className={LIST}>
-            {d.databases.map((db) => (
-              <li key={db.name} className={ROW}>
-                <span className={cn(ROW_MAIN, MONO)}>{db.name}</span>
-                <span className={ROW_SIDE}>{num(db.connections)} conn</span>
-                <span className={ROW_SIDE}>{pct(db.cacheHitPct, 2)} cached</span>
-                <span className={ROW_SIDE}>
-                  {(db.deadlocks ?? 0) > 0 ? (
-                    <span className="text-warning">{num(db.deadlocks)} deadlocks</span>
-                  ) : (
-                    `${num(db.rollbacks)} rollbacks`
-                  )}
-                </span>
-                <span className={ROW_N}>{bytes(db.sizeBytes)}</span>
-              </li>
-            ))}
-          </ul>
+        <TableSection title="Tenants" aside={`${num(d.databases.length)} databases, largest first`}>
+          <TenantsTable rows={d.databases} />
           <p className={FOOT}>
             Rollbacks are shown rather than commits because the ratio is what carries information. A
             tenant rolling back a large share of its transactions is either retrying or erroring,
             and neither shows up in its own logs as clearly as it does here. A database that appears
             with no app is one whose stack was removed without dropping it.
           </p>
-        </Board>
+        </TableSection>
 
         <Changelog
           gap={d.gap}
@@ -156,5 +135,70 @@ export function PostgresView({ d }: { d: Postgres }) {
         />
       </BoardGrid>
     </>
+  )
+}
+
+/** Database · connections · cache hit · rollbacks · size. The middle steps away first. */
+const TENANT_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.4fr)_6rem_6.5rem_minmax(7rem,1fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(8rem,1fr)_6.5rem_6rem] @max-[40rem]/table:[&>.mid]:hidden'
+
+/** Below this the cluster is going to disk for pages it should hold. */
+const CACHE_FLOOR = 99
+/** A rollback share above this is a tenant retrying or erroring. */
+const ROLLBACK_CEILING = 5
+
+/**
+ * One row per tenant database. Every column is quiet until it is not: a cache
+ * hit rate under 99%, a rollback share past 5% or any deadlock is the only ink.
+ */
+function TenantsTable({ rows }: { rows: Postgres['databases'] }) {
+  return (
+    <ul className={TABLE} aria-label="Tenant databases">
+      <li className={cn(TENANT_GRID, TABLE_HEAD)}>
+        <span>Database</span>
+        <span className="mid text-right">Connections</span>
+        <span className="text-right">Cache hit</span>
+        <span className="mid text-right">Rollbacks</span>
+        <span className="text-right">Size</span>
+      </li>
+      {rows.length === 0 && <li className={TABLE_EMPTY}>the exporter reported no database</li>}
+      {rows.map((db) => {
+        const txns = (db.commits ?? 0) + (db.rollbacks ?? 0)
+        const share = db.rollbacks === null || txns === 0 ? null : (db.rollbacks / txns) * 100
+        const cacheLow = db.cacheHitPct !== null && db.cacheHitPct < CACHE_FLOOR
+        const rollbackHigh = share !== null && share > ROLLBACK_CEILING
+        return (
+          <li key={db.name} className={cn(TENANT_GRID, TABLE_ROW)}>
+            <span className="truncate font-mono text-[0.8rem] text-foreground">{db.name}</span>
+            <span
+              className={cn(
+                CELL_QUIET,
+                'mid text-right',
+                (db.connections ?? 0) > 0 && 'text-subdued',
+              )}
+            >
+              {num(db.connections)}
+            </span>
+            <span className={cn(CELL_QUIET, 'text-right', cacheLow && 'text-warning')}>
+              {pct(db.cacheHitPct, 2)}
+            </span>
+            <span className={cn(CELL_QUIET, 'mid text-right')}>
+              {(db.deadlocks ?? 0) > 0 ? (
+                <span className="text-warning">{num(db.deadlocks)} deadlocks</span>
+              ) : (
+                <span
+                  className={cn(rollbackHigh && 'text-warning')}
+                  title={share === null ? undefined : `${pct(share, 1)} of transactions`}
+                >
+                  {num(db.rollbacks)}
+                  {rollbackHigh && ` · ${pct(share, 0)}`}
+                </span>
+              )}
+            </span>
+            <span className="text-right text-foreground tabular-nums">{bytes(db.sizeBytes)}</span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

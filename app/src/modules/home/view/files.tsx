@@ -5,7 +5,6 @@ import { CAPTION, FOOT, NOTE } from '../../../components/tokens'
 import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { bytes, DASH, num, pct } from '../../../lib/format'
 import type { HomeData } from '../data'
-import { FOOT_WARN } from './shared'
 
 // Home › Files: Nextcloud — sharing (and the links with no password), contents,
 // who is using it, and what it runs on.
@@ -44,13 +43,17 @@ export function FilesView({ data: d }: { data: Files }) {
           <Measures
             items={[
               { k: 'Public links', v: num(d.shares.link) },
-              { k: 'Without a password', v: num(d.shares.linkNoPassword) },
+              {
+                k: 'Without a password',
+                v: num(d.shares.linkNoPassword),
+                tone: openLinks > 0 ? 'warn' : undefined,
+              },
               { k: 'To a user', v: num(d.shares.user) },
               { k: 'To a group', v: num(d.shares.group) },
             ]}
           />
           {/* The one fact on this page that is worth acting on. */}
-          <p className={openLinks > 0 ? FOOT_WARN : CAPTION}>
+          <p className={CAPTION}>
             {openLinks > 0 ? (
               <>
                 <b>{num(openLinks)}</b> of {num(d.shares.link)} public links carry no password, so
@@ -63,18 +66,6 @@ export function FilesView({ data: d }: { data: Files }) {
               <>Every public link is password-protected.</>
             )}
           </p>
-        </Board>
-
-        <Board title="Contents" icon="rows" span={4}>
-          <Facts
-            rows={[
-              { k: 'Files', v: num(d.numFiles) },
-              { k: 'Storages', v: num(d.storages) },
-              { k: 'Accounts', v: num(d.users.total) },
-              { k: 'Disabled', v: num(d.users.disabled) },
-              { k: 'Free space', v: bytes(d.freeBytes) },
-            ]}
-          />
         </Board>
 
         <Board title="Who is using it" icon="◑" span={4}>
@@ -92,8 +83,22 @@ export function FilesView({ data: d }: { data: Files }) {
           </p>
         </Board>
 
-        <Board title="Underneath" icon="⚙" span={4}>
+        <Board title="Contents" icon="rows" span={6}>
           <Facts
+            list
+            rows={[
+              { k: 'Files', v: num(d.numFiles) },
+              { k: 'Storages', v: num(d.storages) },
+              { k: 'Accounts', v: num(d.users.total) },
+              { k: 'Disabled', v: num(d.users.disabled) },
+              { k: 'Free space', v: bytes(d.freeBytes) },
+            ]}
+          />
+        </Board>
+
+        <Board title="Underneath" icon="⚙" span={6}>
+          <Facts
+            list
             rows={[
               {
                 k: 'Database',

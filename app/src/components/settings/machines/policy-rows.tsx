@@ -8,8 +8,7 @@ import { NodeCommandButton } from '../../node-command'
 import { Input } from '../../ui/input'
 import { Picker } from '../../ui/picker'
 import { Switch } from '../../ui/switch'
-import { CONTROL_H } from '../form'
-import { ASIDE, Mono, Stack } from '../shared'
+import { CONTROL_H, HINT, Mono, Stack } from '../shared'
 import type { Row } from './policy'
 import { SantreeGrant } from './santree-grant'
 import type { PolicyEditor } from './use-policy-editor'
@@ -30,7 +29,7 @@ export function policyAwake(ed: PolicyEditor): Row[] {
             />
             <span className="text-[0.82rem]">{ed.awake ? 'held awake' : 'may sleep'}</span>
           </span>
-          <span className={ASIDE}>
+          <span className={HINT}>
             On, the agent holds a power request for as long as it runs and turns the plan's sleep
             timers off. Off releases the request; the plan is left as it is.
           </span>
@@ -56,7 +55,7 @@ export function policyAlert(ed: PolicyEditor): Row[] {
             />
             <span className="text-[0.82rem]">{ed.alertLink ? 'alerts' : 'quiet'}</span>
           </span>
-          <span className={ASIDE}>
+          <span className={HINT}>
             On, Grafana's Machine Link Down fires after the link has been down for 5 minutes. Turn
             it off for a laptop that sleeps or leaves the house; the pages still show it offline.
           </span>
@@ -91,7 +90,7 @@ export function policyClaude(ed: PolicyEditor, n: NodeRow): Row[] {
               <NodeCommandButton id={n.id} command="claude_restart" label="Restart now" />
             )}
           </span>
-          <span className={ASIDE}>
+          <span className={HINT}>
             The agent's tray runs <Mono>claude remote-control</Mono> in the user's session, with
             that user's Claude login, the way this box runs its own.
           </span>
@@ -112,7 +111,7 @@ export function policyClaude(ed: PolicyEditor, n: NodeRow): Row[] {
             onBlur={ed.saveWorkdir}
             onKeyDown={blurOnEnter}
           />
-          <span className={ASIDE}>
+          <span className={HINT}>
             Where the server runs, and so where a session opened from claude.ai lands. Claude
             refuses the home directory (home-directory trust is never saved), so this must be a
             project directory <Mono>claude</Mono> has been run in once and trusted. Empty lets the
@@ -149,7 +148,7 @@ export function policySantree(
               {ed.santree ? "opens the box's projects" : ed.askingSantree ? 'confirm below' : 'off'}
             </span>
           </span>
-          <span className={ASIDE}>
+          <span className={HINT}>
             On, santree on this machine can open terminals and run commands in the box's projects,
             through its agent: a shell on the box. Turning it on asks you to confirm, with the
             machine's key shown to compare. Off closes its connections and ends its terminals.
@@ -197,7 +196,7 @@ export function policyHardware(ed: PolicyEditor, n: NodeRow, shape: MachineShape
                 ed.saveHardware('finish', v === NONE ? undefined : v)
               }}
             />
-            <span className={ASIDE}>
+            <span className={HINT}>
               The machine reports its model and everything in it; the colour is the one thing it
               does not say. The pages draw the photo that matches.
             </span>
@@ -226,7 +225,7 @@ export function policyHardware(ed: PolicyEditor, n: NodeRow, shape: MachineShape
           }}
         />
         {kind === 'psu' && (
-          <span className={ASIDE}>
+          <span className={HINT}>
             Nothing in a PC reports its case, cooler or supply, so these are chosen rather than
             read; the Build tab draws what is chosen, with the catalog's photo and specification. A
             part that is not on the list is a line in the catalog.

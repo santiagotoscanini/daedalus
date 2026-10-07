@@ -1,30 +1,10 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/service-head'
-import {
-  Board,
-  BoardGrid,
-  Chip,
-  Facts,
-  Measures,
-  Progress,
-  Pulse,
-} from '../../../../components/viz'
+import { Board, BoardGrid, Chip, Facts, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { bytes, num, rate, since } from '../../../../lib/format'
-import {
-  EMPTY,
-  FOOT,
-  MONO,
-  NOTE,
-  PROV,
-  PROVS,
-  TRANSFER_HEAD,
-  TRANSFER_META,
-  TRANSFER_NAME,
-  TRANSFER_ROW,
-  TRANSFERS,
-} from '../shared'
+import { EMPTY, FOOT, MONO, NOTE, PROV, PROVS, QueueTable, TableSection } from '../shared'
 import type { Downloaders } from './shared'
 import { TunnelBoard } from './shared'
 
@@ -72,28 +52,25 @@ export function NzbPage({ d }: { d: Downloaders }) {
               { k: 'This month', v: bytes(nzb.monthBytes) },
             ]}
           />
-          {nzb.groups.length === 0 ? (
-            <p className={EMPTY}>Nothing in the queue.</p>
-          ) : (
-            <ul className={TRANSFERS}>
-              {nzb.groups.map((g) => (
-                <li key={g.name} className={TRANSFER_ROW}>
-                  <div className={TRANSFER_HEAD}>
-                    <span className={TRANSFER_NAME} title={g.name}>
-                      {g.name}
-                    </span>
-                    <span className={TRANSFER_META}>
-                      {g.pct.toFixed(0)}% · {bytes(g.remainingBytes)} left
-                    </span>
-                  </div>
-                  <Progress pct={g.pct} tone="info" active={!nzb.paused} />
-                </li>
-              ))}
-            </ul>
-          )}
         </Board>
 
         <TunnelBoard vpn={d.vpn} span={4} />
+
+        <TableSection title="Queue">
+          <QueueTable
+            label="NZBGet queue"
+            detail="Left"
+            empty="Nothing in the queue."
+            rows={nzb.groups.map((g) => ({
+              key: g.name,
+              name: g.name,
+              pct: g.pct,
+              tone: 'info',
+              active: !nzb.paused,
+              detail: `${bytes(g.remainingBytes)} left`,
+            }))}
+          />
+        </TableSection>
 
         <Board
           title="News servers"
@@ -113,8 +90,14 @@ export function NzbPage({ d }: { d: Downloaders }) {
             <ul className={PROVS}>
               {nzb.servers.map((s) => (
                 <li key={s.id} className={PROV}>
-                  <Chip tone={s.active ? 'ok' : 'bad'}>{s.active ? 'active' : 'inactive'}</Chip>
+                  {/* Active is the norm and says so quietly; inactive is the
+                      fault this panel exists for. */}
                   <span className={MONO}>server {s.id}</span>
+                  {s.active ? (
+                    <span className="text-[0.75rem] text-muted-foreground">active</span>
+                  ) : (
+                    <Chip tone="bad">inactive</Chip>
+                  )}
                 </li>
               ))}
             </ul>

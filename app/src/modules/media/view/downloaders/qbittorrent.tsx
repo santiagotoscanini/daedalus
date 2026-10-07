@@ -1,18 +1,9 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/service-head'
-import { Board, BoardGrid, Facts, Measures, Progress, Pulse } from '../../../../components/viz'
+import { Board, BoardGrid, Facts, Measures, Pulse } from '../../../../components/viz'
 import { bytes, DASH, num, rate, until } from '../../../../lib/format'
-import {
-  EMPTY,
-  FOOT,
-  NOTE,
-  TRANSFER_HEAD,
-  TRANSFER_META,
-  TRANSFER_NAME,
-  TRANSFER_ROW,
-  TRANSFERS,
-} from '../shared'
+import { FOOT, NOTE, QueueTable, TableSection } from '../shared'
 import type { Downloaders } from './shared'
 import { TunnelBoard } from './shared'
 
@@ -58,35 +49,36 @@ export function QbtPage({ d }: { d: Downloaders }) {
               { k: 'Free', v: bytes(qbt.freeBytes) },
             ]}
           />
-          {qbt.transfers.length === 0 ? (
-            <p className={EMPTY}>
-              {qbt.reachable
-                ? 'Nothing downloading. Completed torrents are removed after import.'
-                : 'qBittorrent did not accept the login.'}
-            </p>
-          ) : (
-            <ul className={TRANSFERS}>
-              {qbt.transfers.map((t) => (
-                <li key={t.name} className={TRANSFER_ROW}>
-                  <div className={TRANSFER_HEAD}>
-                    <span className={TRANSFER_NAME} title={t.name}>
-                      {t.name}
-                    </span>
-                    <span className={TRANSFER_META}>
-                      {t.active && <>{rate(t.down)} · </>}
-                      {t.pct.toFixed(0)}% of {bytes(t.size)}
-                      {t.etaSeconds !== null && <> · {until(t.etaSeconds)} left</>}
-                      {t.pct >= 100 && <> · ratio {t.ratio.toFixed(2)}</>}
-                    </span>
-                  </div>
-                  <Progress pct={t.pct} tone={t.active ? 'accent' : 'muted'} active={t.active} />
-                </li>
-              ))}
-            </ul>
-          )}
         </Board>
 
         <TunnelBoard vpn={d.vpn} span={4} />
+
+        <TableSection title="Torrents">
+          <QueueTable
+            label="Torrents"
+            detail="Rate · size · time left"
+            empty={
+              qbt.reachable
+                ? 'Nothing downloading. Completed torrents are removed after import.'
+                : 'qBittorrent did not accept the login.'
+            }
+            rows={qbt.transfers.map((t) => ({
+              key: t.name,
+              name: t.name,
+              pct: t.pct,
+              tone: t.active ? 'accent' : 'muted',
+              active: t.active,
+              detail: (
+                <>
+                  {t.active && <>{rate(t.down)} · </>}
+                  {bytes(t.size)}
+                  {t.etaSeconds !== null && <> · {until(t.etaSeconds)} left</>}
+                  {t.pct >= 100 && <> · ratio {t.ratio.toFixed(2)}</>}
+                </>
+              ),
+            }))}
+          />
+        </TableSection>
 
         <Board title="The swarm" icon="⁘" span={4}>
           <Facts

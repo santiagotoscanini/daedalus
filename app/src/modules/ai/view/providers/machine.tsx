@@ -2,10 +2,9 @@
 
 import { LogBoard, type LogNeighbour } from '../../../../components/logs'
 import { HeadStrip, OS_MARK, WipBoard } from '../../../../components/machine-head'
-import { CAPTION, FOOT, MONO } from '../../../../components/tokens'
+import { FOOT, MONO } from '../../../../components/tokens'
 import { Button } from '../../../../components/ui/button'
-import { Board, BoardGrid, Measures } from '../../../../components/viz'
-import { num } from '../../../../lib/format'
+import { BoardGrid, Measures } from '../../../../components/viz'
 import type { ProviderMachine, ProvidersData } from '../../data/providers'
 import { LifecycleBoard } from './lifecycle'
 import { ModelsBoard } from './models'
@@ -21,34 +20,41 @@ const KIND_LINKS: Partial<Record<ProviderMachine['kind'], { label: string; href:
   ],
 }
 
-/* Under the head, hanging past the artwork so it lines up with the name. */
-const ACTIONS =
-  'mt-0 mb-5 ml-[3.625rem] flex flex-wrap items-center gap-x-4 gap-y-2 max-[44rem]:ml-0'
+/* Under the head, hanging past the artwork so it lines up with the name —
+   the same row a service page's LinkRow draws. */
+const DOCS =
+  '-mt-2 mb-6 ml-[3.625rem] flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.75rem] max-[44rem]:ml-0'
 const DOC_LINK =
-  'text-[0.75rem] text-muted-foreground no-underline transition-colors hover:text-foreground hover:no-underline'
+  'text-muted-foreground no-underline transition-colors hover:text-foreground hover:no-underline'
 
 /**
- * The provider's own window, and where its kind is documented.
+ * The provider's own window, on the right of the head where every service
+ * page keeps its open button.
  *
- * The open button goes to the provider's published hostname (`m.ui`, behind
- * the sign-in gate), drawn only while it answers. Everything the page does to
- * a model it does through a server function (server/providers.ts says why),
- * so this link is for the things the page deliberately does not do —
- * registering a checkpoint, installing a backend, deleting weights.
+ * It goes to the provider's published hostname (`m.ui`, behind the sign-in
+ * gate), drawn only while it answers. Everything the page does to a model it
+ * does through a server function (server/providers.ts says why), so this link
+ * is for the things the page deliberately does not do — registering a
+ * checkpoint, installing a backend, deleting weights.
  */
-function ProviderActions({ m }: { m: ProviderMachine }) {
-  const docs = KIND_LINKS[m.kind] ?? []
+function OpenProvider({ m }: { m: ProviderMachine }) {
   const open = m.reachable ? m.ui : null
-  if (open === null && docs.length === 0) return null
+  if (open === null) return null
   return (
-    <p className={ACTIONS}>
-      {open !== null && (
-        <Button asChild size="sm" variant="outline">
-          <a href={open} target="_blank" rel="noreferrer">
-            Open {m.kindName} ↗
-          </a>
-        </Button>
-      )}
+    <Button asChild size="sm" className="mt-1.5 flex-none">
+      <a href={open} target="_blank" rel="noreferrer">
+        Open {m.kindName} ↗
+      </a>
+    </Button>
+  )
+}
+
+/** Where the provider's kind is documented. */
+function DocLinks({ m }: { m: ProviderMachine }) {
+  const docs = KIND_LINKS[m.kind] ?? []
+  if (docs.length === 0) return <div className="mb-2" />
+  return (
+    <p className={DOCS}>
       {docs.map((l) => (
         <a key={l.href} className={DOC_LINK} href={l.href} target="_blank" rel="noreferrer">
           {l.label} ↗
@@ -76,17 +82,18 @@ const LOG_NEIGHBOURS: readonly LogNeighbour[] = [
 export function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersData['logs'] }) {
   return (
     <>
-      <MachineHead m={m} />
-      <ProviderActions m={m} />
+      <div className="flex items-start gap-4 max-[44rem]:flex-wrap">
+        <div className="min-w-0 flex-auto">
+          <MachineHead m={m} />
+        </div>
+        <OpenProvider m={m} />
+      </div>
+      <DocLinks m={m} />
 
       <BoardGrid>
         {/* Lemonade on a machine: install, update, power. The box's own subgen
             is a container a rebuild manages. */}
         {m.machine !== 'box' && m.kind === 'lemonade' && <LifecycleBoard m={m} />}
-
-        <ModelsBoard m={m} />
-
-        <OfferedBoard m={m} />
 
         {/* Only for a machine that has an agent to wait on. This box has
             none, and its provider runs on the CPU. */}
@@ -102,6 +109,8 @@ export function MachineView({ m, logs }: { m: ProviderMachine; logs: ProvidersDa
             />
           </WipBoard>
         )}
+
+        <ModelsBoard m={m} />
 
         {/* One bridge, one target — see `logsFor` in ../../data/providers.ts. */}
         {logs?.machine === m.machine && (
@@ -162,37 +171,6 @@ function MachineHead({ m }: { m: ProviderMachine }) {
         </>
       }
     />
-  )
-}
-
-/** What the catalog holds, what is on disk, and what the gateway gets. */
-function OfferedBoard({ m }: { m: ProviderMachine }) {
-  const onDisk = m.models.filter((x) => x.downloaded)
-  const routed = m.models.filter((x) => x.routed !== null).length
-  return (
-    <Board title="Offered" icon="grid" span={4}>
-      <Measures
-        items={[
-          { k: 'In the catalog', v: num(m.models.length) },
-          { k: 'On disk', v: num(onDisk.length) },
-          {
-            k: 'Offered to the gateway',
-            v: num(m.offerableCount),
-            tone: m.offerableCount > 0 ? 'ok' : 'muted',
-          },
-          { k: 'Routed now', v: num(routed) },
-        ]}
-      />
-      {/* Offered: how the sync works, so it folds. Not offered: the state and
-          its fix, which a glance needs. */}
-      <p className={m.offered ? FOOT : CAPTION}>
-        {m.offered
-          ? 'The gateway sync writes a route per offered model and removes it when the model leaves. Which models are offered, and under what name, is Settings › Machines.'
-          : m.machine === 'box'
-            ? 'Speech to text, served by the box itself rather than by a node. Offer it on Settings › Machines to publish it through the gateway.'
-            : 'Switch "offer to the gateway" on Settings › Machines to publish these.'}
-      </p>
-    </Board>
   )
 }
 

@@ -1,10 +1,24 @@
 import { LogBoard, type LogNeighbour } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
-import { Board, BoardGrid, RankRow } from '../../../components/viz'
+import { Board, BoardGrid, Chip } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { MediaData } from '../data'
-import { EMPTY, FOOT, HealthChecks, LIST, MONO, NOTE } from './shared'
+import {
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  FOOT,
+  HealthChecks,
+  HealthLine,
+  healthFailing,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableSection,
+} from './shared'
 
 /* ── Indexer: Prowlarr ────────────────────────────────────────────────── */
 
@@ -45,64 +59,49 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
         actions={<Open name="Prowlarr" host="prowlarr" />}
       />
 
+      <HealthLine checks={d.health} reachable={reachable} />
+
       <BoardGrid>
-        <Board
+        {/* Only when something is failing: a passing set of checks is the
+            line under the head, not a board. */}
+        {healthFailing(d.health, reachable) && (
+          <Board title="What it says is wrong" icon="warn" span={12}>
+            <HealthChecks checks={d.health} reachable={reachable} />
+          </Board>
+        )}
+
+        <TableSection
           title="Indexers"
-          icon="⌕"
-          span={12}
-          aside={
-            <span className={NOTE}>
+          note={
+            <>
               {num(d.counts.enabled)} enabled
               {(d.counts.disabled ?? 0) > 0 && ` · ${num(d.counts.disabled)} off`}
-            </span>
+            </>
+          }
+          foot={
+            <p className={FOOT}>
+              Queries are the bar, because that is what the *arrs spend. Grabs beside it is the
+              yield: an indexer with thousands of queries and no grabs is being searched and never
+              has the answer, which is a reason to turn it off rather than a fault.
+            </p>
           }
         >
-          {d.indexers.length === 0 ? (
-            <p className={EMPTY}>no indexer statistics</p>
-          ) : (
-            <ul className={`${LIST} gap-0.5`}>
-              {d.indexers.map((i) => (
-                <RankRow
-                  key={i.name}
-                  name={i.name}
-                  badges={[
-                    ...(i.enabled ? [] : [{ text: 'disabled', tone: 'muted' as const }]),
-                    ...(i.queries > 0 && i.failedQueries / i.queries > 0.25
-                      ? [
-                          {
-                            text: 'failing',
-                            tone: 'warn' as const,
-                            why: `${String(i.failedQueries)} of ${String(i.queries)} queries failed`,
-                          },
-                        ]
-                      : []),
-                  ]}
-                  value={i.queries}
-                  max={maxQueries}
-                  meta={
-                    <>
-                      <span>{num(i.grabs)} grabs</span>
-                      {i.responseMs !== null && <span>{num(i.responseMs)} ms</span>}
-                      {i.failedQueries > 0 && (
-                        <span className="text-danger">{num(i.failedQueries)} failed</span>
-                      )}
-                      <span className={MONO}>{i.protocol}</span>
-                    </>
-                  }
-                />
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            Queries are the bar, because that is what the *arrs spend. Grabs beside it is the yield:
-            an indexer with thousands of queries and no grabs is being searched and never has the
-            answer, which is a reason to turn it off rather than a fault.
-          </p>
-        </Board>
-
-        <Board title="What it says is wrong" icon="warn" span={12}>
-          <HealthChecks checks={d.health} reachable={reachable} />
-        </Board>
+          <ul className={TABLE} aria-label="Indexers">
+            <li aria-hidden="true" className={cn(IDX_GRID, TABLE_HEAD)}>
+              <span>Indexer</span>
+              <span className={WIDE}>Protocol</span>
+              <span className="text-right">Queries</span>
+              <span className={cn(MID, 'text-right')}>Grabs</span>
+              <span className={cn(WIDE, 'text-right')}>Response, ms</span>
+              <span className={cn(MID, 'text-right')}>Failed</span>
+            </li>
+            {d.indexers.length === 0 ? (
+              <li className={TABLE_EMPTY}>No indexer statistics.</li>
+            ) : (
+              d.indexers.map((i) => <IndexerRow key={i.name} i={i} max={maxQueries} />)
+            )}
+          </ul>
+        </TableSection>
 
         <Changelog gap={d.gap} span={12} />
 
@@ -113,5 +112,65 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
         />
       </BoardGrid>
     </>
+  )
+}
+
+/* Name, protocol, then the counts read across. Protocol repeats down the
+   column (nearly everything is a torrent indexer), so it is quiet and goes
+   first; response time with it. */
+const IDX_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1.4fr)_5rem_minmax(0,1.6fr)_4rem_6rem_4rem]',
+  '@max-[52rem]/table:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_4rem_4rem]',
+  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]',
+)
+const WIDE = '@max-[52rem]/table:hidden'
+const MID = '@max-[34rem]/table:hidden'
+const NUM = cn(CELL_QUIET, 'text-right')
+
+const BAR = 'block h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]'
+const BAR_FILL =
+  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none'
+
+type Indexer = Extract<MediaData, { tab: 'indexer' }>['indexers'][number]
+
+/**
+ * One indexer. Disabled is muted ("deliberately off", which explains the
+ * silence); failing — over a quarter of its queries — is the one warning.
+ */
+function IndexerRow({ i, max }: { i: Indexer; max: number }) {
+  const failing = i.queries > 0 && i.failedQueries / i.queries > 0.25
+  return (
+    <li className={cn(IDX_GRID, TABLE_ROW, !i.enabled && 'opacity-60')}>
+      <span className="flex min-w-0 items-center gap-2">
+        <span className={CELL_NAME}>{i.name}</span>
+        {!i.enabled && <Chip>disabled</Chip>}
+        {failing && (
+          <Chip
+            tone="warn"
+            title={`${String(i.failedQueries)} of ${String(i.queries)} queries failed`}
+          >
+            failing
+          </Chip>
+        )}
+      </span>
+      <span className={cn(CELL_MONO, WIDE)}>{i.protocol}</span>
+      <span className="flex min-w-0 items-center gap-3">
+        <span className={BAR}>
+          <span
+            className={BAR_FILL}
+            style={{ width: `${String(Math.max(1.5, (i.queries / max) * 100))}%` }}
+          />
+        </span>
+        <span className="w-12 flex-none text-right text-foreground tabular-nums">
+          {num(i.queries)}
+        </span>
+      </span>
+      <span className={cn(NUM, MID)}>{num(i.grabs)}</span>
+      <span className={cn(NUM, WIDE)}>{i.responseMs === null ? '' : num(i.responseMs)}</span>
+      <span className={cn(NUM, MID, i.failedQueries > 0 && 'text-danger')}>
+        {i.failedQueries > 0 ? num(i.failedQueries) : ''}
+      </span>
+    </li>
   )
 }

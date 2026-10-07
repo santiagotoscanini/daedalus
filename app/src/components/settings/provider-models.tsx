@@ -19,8 +19,7 @@ import { Picker } from '../ui/picker'
 import { Switch } from '../ui/switch'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
-import { CONTROL_H } from './form'
-import { ASIDE, Mono, Stack } from './shared'
+import { ASIDE, CONTROL_H, Mono, Stack } from './shared'
 
 // The models a provider serves, as the operator curates them for the
 // gateway: an alias, a switch, a mode — each row saved on its own, into the

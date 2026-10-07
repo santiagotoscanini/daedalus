@@ -21,6 +21,11 @@ import { toneStyle } from '../../../../lib/tone'
 import type { ProviderMachine } from '../../data/providers'
 import { LifecycleControls, underWay } from './lifecycle-controls'
 
+/* The facts on the left, read down; what changes them on the right. At a
+   board this wide a six-across fact grid wrapped every value onto two lines. */
+const SPLIT =
+  'grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] items-start gap-x-10 gap-y-5 @max-[46rem]/board:grid-cols-1'
+
 const STARTUP = { enabled: 'yes', disabled: 'no', missing: 'no entry' } as const
 
 const PHASE: Record<LifecyclePhase, { label: string; tone: Tone }> = {
@@ -70,29 +75,34 @@ export function LifecycleBoard({ m }: { m: ProviderMachine }) {
       span={12}
       aside={<Chip tone={chip.tone}>{chip.label}</Chip>}
     >
-      <Facts
-        rows={[
-          {
-            k: 'Install',
-            v:
-              install.tone === null ? (
-                install.text
-              ) : (
-                <span className="text-(--tone)" style={toneStyle(install.tone)}>
-                  {install.text}
-                </span>
-              ),
-          },
-          { k: 'Version', v: m.version ?? DASH },
-          { k: 'Installer', v: g?.install?.installer_version ?? DASH },
-          { k: 'Starts on its own', v: g?.startup == null ? DASH : STARTUP[g.startup] },
-          { k: 'Process', v: processText(facts) },
-          { k: 'Pinned release', v: m.asked?.pin ?? 'none' },
-        ]}
-      />
-      <Notices m={m} />
-      <LifecycleControls m={m} />
-      <LastInstall m={m} />
+      <div className={SPLIT}>
+        <Facts
+          list
+          rows={[
+            {
+              k: 'Install',
+              v:
+                install.tone === null ? (
+                  install.text
+                ) : (
+                  <span className="text-(--tone)" style={toneStyle(install.tone)}>
+                    {install.text}
+                  </span>
+                ),
+            },
+            { k: 'Version', v: m.version ?? DASH },
+            { k: 'Installer', v: g?.install?.installer_version ?? DASH },
+            { k: 'Starts on its own', v: g?.startup == null ? DASH : STARTUP[g.startup] },
+            { k: 'Process', v: processText(facts) },
+            { k: 'Pinned release', v: m.asked?.pin ?? 'none' },
+          ]}
+        />
+        <div className="flex min-w-0 flex-col gap-4">
+          <Notices m={m} />
+          <LifecycleControls m={m} />
+          <LastInstall m={m} />
+        </div>
+      </div>
       <p className={FOOT}>
         The machine’s agent does the work: it downloads the pinned release from Lemonade’s own
         GitHub releases, checks its size and SHA-256, installs it silently, waits for the server to

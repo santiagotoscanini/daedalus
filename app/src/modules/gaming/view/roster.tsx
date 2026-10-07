@@ -1,5 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { DAY, LocalTime } from '../../../components/ago'
+import { BOARD_TABLE, BOARD_TABLE_HEAD, BOARD_TABLE_ROW } from '../../../components/modules/parts'
+import { CELL_NAME, CELL_QUIET, CELL_SUB } from '../../../components/table'
 import { EMPTY, FOOT, INPUT_MONO, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -7,6 +9,7 @@ import { Switch } from '../../../components/ui/switch'
 import { useAction } from '../../../components/use-action'
 import { Board, Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
+import { DASH } from '../../../lib/format'
 import { useShown } from '../../../lib/shown'
 import { addPlayerFn, removePlayerFn, setPlayerOpFn } from '../../../server/players'
 import type { GamingData } from '../data'
@@ -21,18 +24,19 @@ import type { GamingData } from '../data'
 
 type Row = Extract<GamingData, { tab: 'minecraft' }>['roster'][number]
 
-const LIST = 'm-0 flex list-none flex-col p-0'
-const ROW = cn(
-  'grid min-w-0 grid-cols-[2rem_1fr_auto] items-center gap-x-3 gap-y-1',
-  'border-hairline border-t px-0.5 py-2.5 first:border-t-0',
+/* The roster: the player, when they last joined, their skin, op, and the one action.
+   Last joined and the skin step away first; op and the action never do. */
+const GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1.6fr)_8rem_7rem_3rem_5rem]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_3rem_5rem]',
 )
+const HIDE_NARROW = '@max-[44rem]/table:hidden'
 const HEAD = 'size-8 rounded-md [image-rendering:pixelated]'
 const HEAD_BLANK = cn(
   HEAD,
   'grid place-items-center bg-foreground/[0.06] text-[0.8rem] font-semibold text-muted-foreground',
 )
-const META = `${NOTE} flex flex-wrap gap-x-2.5 gap-y-0.5`
-const SIDE = 'flex flex-wrap items-center justify-end gap-2'
 const INPUT = cn(INPUT_MONO, 'w-[13rem] max-w-full')
 
 export function RosterBoard({ rows }: { rows: Row[] }) {
@@ -51,7 +55,14 @@ export function RosterBoard({ rows }: { rows: Row[] }) {
       {rows.length === 0 ? (
         <p className={EMPTY}>nobody is on the list, so the server turns every login away</p>
       ) : (
-        <ul className={LIST}>
+        <ul className={BOARD_TABLE}>
+          <li className={cn(GRID, BOARD_TABLE_HEAD)}>
+            <span>Player</span>
+            <span className={HIDE_NARROW}>Last joined</span>
+            <span className={HIDE_NARROW}>Skin</span>
+            <span>Op</span>
+            <span />
+          </li>
           {rows.map((r) => (
             <PlayerRow key={r.uuid} r={r} />
           ))}
@@ -73,64 +84,55 @@ function PlayerRow({ r }: { r: Row }) {
   const [op, showOp] = useShown(r.op, busy, error !== null)
 
   const removing = r.state === 'removing'
+  const skin = [r.model === 'slim' ? 'slim arms' : r.model === 'classic' ? 'classic arms' : null]
+    .concat(r.cape ? ['cape'] : [])
+    .filter(Boolean)
+    .join(' · ')
   return (
-    <li className={cn(ROW, removing && 'opacity-60')}>
-      {r.head === null ? (
-        <span className={HEAD_BLANK} aria-hidden>
-          {r.name.slice(0, 1).toUpperCase()}
-        </span>
-      ) : (
-        <img className={HEAD} src={r.head} alt="" width={32} height={32} />
-      )}
-
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={cn('text-[0.875rem] font-medium', removing && 'line-through')}>
-            {r.name}
+    <li className={cn(GRID, BOARD_TABLE_ROW, 'py-2.5', removing && 'opacity-60')}>
+      <div className="flex min-w-0 items-center gap-3">
+        {r.head === null ? (
+          <span className={HEAD_BLANK} aria-hidden>
+            {r.name.slice(0, 1).toUpperCase()}
           </span>
-          {r.state === 'adding' && <Chip tone="info">joins on Apply</Chip>}
-          {removing && <Chip tone="warn">leaves on Apply</Chip>}
-          {r.opPending && <Chip tone="info">{r.op ? 'op on Apply' : 'not op on Apply'}</Chip>}
+        ) : (
+          <img className={HEAD} src={r.head} alt="" width={32} height={32} />
+        )}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn(CELL_NAME, removing && 'line-through')}>{r.name}</span>
+            {r.state === 'adding' && <Chip tone="info">joins on Apply</Chip>}
+            {removing && <Chip tone="warn">leaves on Apply</Chip>}
+            {r.opPending && <Chip tone="info">{r.op ? 'op on Apply' : 'not op on Apply'}</Chip>}
+          </div>
+          <p className={cn(CELL_SUB, 'flex flex-wrap gap-x-2.5')}>
+            <span className="truncate font-mono text-[0.7rem]">{r.uuid}</span>
+            {r.renamed !== null && <span>now {r.renamed} on Mojang</span>}
+          </p>
+          {error !== null && <p className={cn(NOTE, 'm-0 text-danger')}>{error}</p>}
         </div>
-        <div className={META}>
-          <span className={MONO}>{r.uuid}</span>
-          {r.renamed !== null && <span>now {r.renamed} on Mojang</span>}
-          <span>
-            {r.lastSeen === null ? (
-              'not seen in 30 days'
-            ) : (
-              <>
-                last joined <LocalTime at={r.lastSeen} opts={DAY} />
-              </>
-            )}
-          </span>
-          {(r.model !== null || r.cape) && (
-            <span>
-              {[r.model === 'slim' ? 'slim arms' : r.model === 'classic' ? 'classic arms' : null]
-                .concat(r.cape ? ['cape'] : [])
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          )}
-        </div>
-        {error !== null && <p className={cn(NOTE, 'm-0 text-danger')}>{error}</p>}
       </div>
 
-      <div className={SIDE}>
+      <span className={cn(CELL_QUIET, HIDE_NARROW)}>
+        {r.lastSeen === null ? 'not seen in 30 days' : <LocalTime at={r.lastSeen} opts={DAY} />}
+      </span>
+      <span className={cn(CELL_QUIET, 'truncate', HIDE_NARROW)}>{skin === '' ? DASH : skin}</span>
+
+      <span className="flex items-center">
         {!removing && (
-          <span className={cn(NOTE, 'flex items-center gap-1.5')}>
-            op
-            <Switch
-              aria-label={`${r.name} may run commands`}
-              checked={op}
-              disabled={busy}
-              onCheckedChange={(v) => {
-                showOp(v)
-                run(() => setPlayerOpFn({ data: { id: 'minecraft', uuid: r.uuid, op: v } }))
-              }}
-            />
-          </span>
+          <Switch
+            aria-label={`${r.name} may run commands`}
+            checked={op}
+            disabled={busy}
+            onCheckedChange={(v) => {
+              showOp(v)
+              run(() => setPlayerOpFn({ data: { id: 'minecraft', uuid: r.uuid, op: v } }))
+            }}
+          />
         )}
+      </span>
+
+      <span className="flex justify-end">
         {removing ? (
           <Button
             type="button"
@@ -156,7 +158,7 @@ function PlayerRow({ r }: { r: Row }) {
             Remove
           </Button>
         )}
-      </div>
+      </span>
     </li>
   )
 }

@@ -14,7 +14,21 @@ import {
 import { cn } from '../../../lib/cn'
 import { bytes, daysAgo, num } from '../../../lib/format'
 import type { MediaData } from '../data'
-import { EMPTY, FOOT, LIST, MONO, NOTE } from './shared'
+import {
+  CELL_NAME,
+  CELL_QUIET,
+  CELL_SUB,
+  EMPTY,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableSection,
+} from './shared'
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
 
@@ -44,7 +58,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
       />
 
       <BoardGrid>
-        <PlayingNowBoard f={f} />
+        <PlayingNow f={f} />
 
         <LibraryBoard f={f} />
 
@@ -81,64 +95,85 @@ function jellyfinFacts({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
 
 type JellyfinFacts = NonNullable<ReturnType<typeof jellyfinFacts>>
 
-function PlayingNowBoard({ f }: { f: JellyfinFacts }) {
+/* Title, who, on what, how, and how far. The method is the column that
+   matters — Transcode vs DirectPlay is the difference between a quiet box and
+   a pegged iGPU — so it alone is coloured, and only when it is a transcode. */
+const PLAY_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,1fr)_6.5rem_minmax(0,1.2fr)]',
+  '@max-[52rem]/table:grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_6.5rem]',
+  '@max-[34rem]/table:grid-cols-[minmax(0,1fr)_6.5rem]',
+)
+const WIDE = '@max-[52rem]/table:hidden'
+const MID = '@max-[34rem]/table:hidden'
+
+/** Who is watching what, right now: a table that is one quiet row most of the day. */
+function PlayingNow({ f }: { f: JellyfinFacts }) {
   const { d, transcoding } = f
   return (
-    <Board
+    <TableSection
       title="Playing now"
-      icon="▶"
-      span={8}
-      aside={
-        transcoding === 0 ? undefined : <span className={NOTE}>{num(transcoding)} transcoding</span>
+      aside={transcoding === 0 ? undefined : `${num(transcoding)} transcoding`}
+      foot={
+        <p className={FOOT}>
+          Only sessions actually playing something. Every poller that has ever asked Jellyfin a
+          question holds an idle session for a while afterwards, so the raw list reports an audience
+          that is not in the room.
+        </p>
       }
     >
-      {d.playing.length === 0 ? (
-        <p className={EMPTY}>Nobody is watching anything.</p>
-      ) : (
-        <ul className={`${LIST} gap-3`}>
-          {d.playing.map((s, i) => (
-            <li key={`${s.user}-${String(i)}`} className="flex flex-col gap-1.5">
-              <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2 truncate font-[550] [&_em]:font-normal [&_em]:text-subdued [&_em]:not-italic">
-                  <Pulse on={!s.paused} tone="ok" />
-                  {s.title}
-                  {s.sub !== null && <em> — {s.sub}</em>}
+      <ul className={TABLE} aria-label="Playing now">
+        <li aria-hidden="true" className={cn(PLAY_GRID, TABLE_HEAD)}>
+          <span>Title</span>
+          <span className={MID}>Who</span>
+          <span className={WIDE}>Device</span>
+          <span>Method</span>
+          <span className={WIDE}>Progress</span>
+        </li>
+        {d.playing.length === 0 ? (
+          <li className={TABLE_EMPTY}>Nobody is watching anything.</li>
+        ) : (
+          d.playing.map((s, i) => (
+            <li key={`${s.user}-${String(i)}`} className={cn(PLAY_GRID, TABLE_ROW)}>
+              <span className="flex min-w-0 items-center gap-2">
+                <Pulse on={!s.paused} tone="ok" />
+                <span className="min-w-0">
+                  <span className={cn(CELL_NAME, 'block')}>{s.title}</span>
+                  {s.sub !== null && <span className={cn(CELL_SUB, 'block')}>{s.sub}</span>}
                 </span>
-                <span className="flex flex-wrap gap-1.5">
-                  <Chip tone="info">{s.user}</Chip>
-                  {s.device !== null && <Chip>{s.device}</Chip>}
-                  {/* Transcode vs DirectPlay is the difference between a
-                      quiet box and a pegged iGPU. */}
-                  {s.method !== null && (
-                    <Chip tone={s.method === 'Transcode' ? 'warn' : 'ok'}>{s.method}</Chip>
-                  )}
-                  {s.paused && <Chip tone="muted">paused</Chip>}
-                </span>
-              </div>
-              <Progress
-                pct={s.pct}
-                tone={s.paused ? 'muted' : 'ok'}
-                active={!s.paused}
-                height={8}
-              />
+              </span>
+              <span className={cn(CELL_QUIET, MID, 'truncate text-foreground')}>{s.user}</span>
+              <span className={cn(CELL_QUIET, WIDE, 'truncate')}>{s.device ?? ''}</span>
+              <span className="flex items-center gap-1.5">
+                {s.method !== null &&
+                  (s.method === 'Transcode' ? (
+                    <Chip tone="warn">{s.method}</Chip>
+                  ) : (
+                    <span className={CELL_QUIET}>{s.method}</span>
+                  ))}
+                {s.paused && <Chip>paused</Chip>}
+              </span>
+              <span className={WIDE}>
+                <Progress pct={s.pct} tone={s.paused ? 'muted' : 'ok'} active={!s.paused} />
+              </span>
             </li>
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        Only sessions actually playing something. Every poller that has ever asked Jellyfin a
-        question holds an idle session for a while afterwards, so the raw list reports an audience
-        that is not in the room.
-      </p>
-    </Board>
+          ))
+        )}
+      </ul>
+    </TableSection>
   )
 }
 
+/**
+ * The library: how much of the pool it fills, what it holds, how it grows.
+ * The one figure the page leads with, so it takes the row's width and lays
+ * its three readings side by side rather than stacking them in a column.
+ */
 function LibraryBoard({ f }: { f: JellyfinFacts }) {
   const { library, counts, total } = f
   return (
-    <Board title="Library" icon="grid" span={4}>
-      <div className="flex items-center gap-[1.1rem] max-[30rem]:flex-col max-[30rem]:items-start">
+    <Board title="Library" icon="grid" span={12}>
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] items-center gap-x-10 gap-y-5 @max-[56rem]/board:grid-cols-[auto_minmax(0,1fr)]">
         <Ring
           pct={
             total === null || library.usedBytes === null ? null : (library.usedBytes / total) * 100
@@ -147,23 +182,19 @@ function LibraryBoard({ f }: { f: JellyfinFacts }) {
           label="/s2/tv"
           tone="info"
         />
-        {/* The wrapper is what takes the slack beside the ring — `Facts`
-            draws its own grid and has no class of its own to stretch. */}
-        <div className="min-w-0 flex-auto">
-          <Facts
-            rows={[
-              { k: 'Movies', v: num(counts.movies) },
-              { k: 'Series', v: num(counts.series) },
-              { k: 'Episodes', v: num(counts.episodes) },
-              { k: 'Free on pool', v: bytes(library.freeBytes) },
-            ]}
-          />
+        <Facts
+          rows={[
+            { k: 'Movies', v: num(counts.movies) },
+            { k: 'Series', v: num(counts.series) },
+            { k: 'Episodes', v: num(counts.episodes) },
+            { k: 'Free on pool', v: bytes(library.freeBytes) },
+          ]}
+        />
+        <div className="min-w-0 @max-[56rem]/board:col-span-2">
+          <p className="m-0 mb-1.5 text-[0.75rem] text-muted-foreground">Growth, 30 days</p>
+          <Trend values={library.growth} tone="info" height={70} />
         </div>
       </div>
-      <h4 className="m-0 mt-2 -mb-0.5 text-[0.75rem] font-[550] text-muted-foreground">
-        Growth, 30 days
-      </h4>
-      <Trend values={library.growth} tone="info" height={70} />
     </Board>
   )
 }
@@ -180,9 +211,12 @@ function WhoWatchesBoard({ f }: { f: JellyfinFacts }) {
       {d.people.length === 0 ? (
         <p className={EMPTY}>could not read the user list</p>
       ) : (
-        <ul className={`${LIST} gap-1`}>
+        <ul className={LIST}>
           {d.people.map((p) => (
-            <li key={p.name} className="flex items-baseline justify-between gap-3 text-[0.8rem]">
+            <li
+              key={p.name}
+              className="flex items-baseline justify-between gap-3 border-hairline border-t py-2 text-[0.8125rem] first:border-t-0 first:pt-0"
+            >
               <span>{p.name}</span>
               <span
                 className={cn(

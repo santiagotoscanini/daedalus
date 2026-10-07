@@ -36,13 +36,13 @@ export function NutritionView({ data: d }: { data: Nutrition }) {
             both. */}
         <Changelog
           gap={d.gap}
-          span={6}
+          span={12}
           title={gapTitle('yazio-mcp', d.gap)}
           aside={<VersionAside version={d.version} />}
         />
         <Changelog
           gap={d.supergateway.gap}
-          span={6}
+          span={12}
           title={gapTitle('supergateway', d.supergateway.gap)}
           aside={<VersionAside version={d.supergateway.version} />}
         />

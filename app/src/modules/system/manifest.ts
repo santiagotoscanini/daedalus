@@ -8,7 +8,7 @@ export const manifest = {
   lede: 'This box, or another machine on the network: what it runs on, what it stores, how it is doing.',
   order: 60,
   // Shaped to Host, the tab that opens by default.
-  boardSpans: [8, 4, 4, 4],
+  boardSpans: [8, 4, 4, 4, 4, 8, 4],
   // No dots anywhere on this row. Every other category's tabs are services,
   // and gatus probes services; these are layers of one machine, and the page
   // you are reading is running on it. A row of permanently grey circles
@@ -35,21 +35,21 @@ export const manifest = {
   // Pools, Backups and Shotter are the box's alone.
   machinePicker: true,
   tabs: [
-    { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], head: false },
-    { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8], head: false },
+    { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4, 4, 8, 4], head: false },
+    { id: 'memory', label: 'Memory', boardSpans: [8, 4, 8, 4], head: false },
     // Physical, then logical. SMART and throughput belong to a device;
     // capacity and snapshots belong to a pool, and one page holding both
     // was the same paragraph answering two questions.
-    // Three thirds and a footer: one board per drive in this box, which is
-    // the count the skeleton has to guess at because the disks are data.
-    { id: 'disks', label: 'Disks', boardSpans: [4, 4, 4, 12], head: false },
+    // The drives as one table, then a third per drive for its detail — the
+    // count the skeleton has to guess at, because the disks are data.
+    { id: 'disks', label: 'Disks', boardSpans: [12, 4, 4, 4], head: false },
     { id: 'pools', label: 'Pools', boardSpans: [6, 6, 12], head: false },
     // The parts, as opposed to the layers. Every other tab in this row
     // answers "how is it behaving"; this one answers "what is it", which is
     // the question you cannot look up when you are in front of the open
-    // case with a screwdriver. Three thirds and a wide row — the components
-    // are peers, so none of them gets to be the big panel.
-    { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 12], head: false },
+    // case with a screwdriver. Rows of peers with related heights — three
+    // compact parts, the two with lists, the power supply beside the case.
+    { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 6, 6, 4, 8], head: false },
     // The one part of the build with a version and a maker who moves it.
     // Build says what the board IS; this says what firmware it runs, what
     // the maker has published since, and what each release changed — read
@@ -64,9 +64,10 @@ export const manifest = {
     // No head, like its neighbours: dozens of containers have no one version
     // and no one thing to open.
     //
-    // Five full-width boards: the engine's own pin, the NixOS release, the
-    // two image lists (behind, and on the newest tag), then the pins moved by
-    // hand — plus the update queue while anything is queued or running.
+    // Full width throughout: the engine's own pin, the NixOS release, then
+    // every container as ONE table grouped by verdict, and the table of pins
+    // built on the box — plus the update queue while anything is queued or
+    // running.
     {
       id: 'updates',
       label: 'Updates',
@@ -76,7 +77,7 @@ export const manifest = {
     {
       id: 'backups',
       label: 'Backups',
-      boardSpans: [8, 4, 8, 4],
+      boardSpans: [12, 12, 12, 12],
       head: false,
       dividerBefore: true,
     },

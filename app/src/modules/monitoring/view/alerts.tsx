@@ -1,8 +1,11 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
+import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW } from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
 import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
 import { DASH, num, since } from '../../../lib/format'
 import type { MonitoringData } from '../data'
 import { LIST, MAIN, SEVERITY, SIDE } from './shared'
@@ -120,7 +123,7 @@ function WhereAnAlertGoesBoard({ f }: { f: AlertsFacts }) {
       <Facts
         rows={[
           { k: 'Contact points', v: num(d.delivery.contactPoints) },
-          { k: 'Email', v: <Chip tone="ok">msmtp relay</Chip> },
+          { k: 'Email', v: 'msmtp relay' },
           { k: 'Grafana', v: d.grafana.version ?? DASH },
           { k: 'Dashboards', v: num(d.grafana.dashboards) },
         ]}
@@ -158,76 +161,68 @@ function DeliberatelySilentBoard() {
 function Panel2({ f }: { f: AlertsFacts }) {
   const { d, mailFailing } = f
   return (
-    <Board
-      title={mailFailing ? 'Mail relay failing' : 'The mail relay'}
-      icon="✉"
-      span={12}
-      aside={
-        d.mail.failures.length === 0 ? (
-          <span className={NOTE}>
-            {d.mail.sent30d === null ? DASH : num(d.mail.sent30d)} sent in 30 days
-          </span>
-        ) : (
-          <Chip tone={mailFailing ? 'bad' : 'warn'}>
-            {num(d.mail.failed30d)} failed send{d.mail.failed30d === 1 ? '' : 's'} in 30 days
-          </Chip>
-        )
-      }
-    >
-      <Facts
-        rows={[
-          {
-            k: 'Identity',
-            v:
-              d.mail.identity === null
-                ? DASH
-                : `${d.mail.identity.sender} → ${d.mail.identity.alertTo}`,
-          },
-          {
-            // Neutral on purpose: alerts are rare on a healthy box, so
-            // "nothing sent in N days" is a normal state, not a warning.
-            k: 'Last successful send',
-            v:
-              d.mail.lastSend === null
-                ? 'nothing in the last 30 days'
-                : `${since(d.mail.lastSend.agoSeconds)} — from ${d.mail.lastSend.unit}`,
-          },
-          {
-            k: 'Failures, 30d',
-            v:
-              d.mail.failed30d === null ? (
-                DASH
-              ) : d.mail.failed30d > 0 ? (
-                <span className="text-warning">{num(d.mail.failed30d)}</span>
-              ) : (
-                <Chip tone="ok">none</Chip>
-              ),
-          },
-        ]}
-      />
-      {d.mail.failures.length > 0 && (
-        <ul className={LIST}>
-          {d.mail.failures.map((f) => (
-            <li key={`${f.unit}-${String(f.agoSeconds)}`}>
-              <Chip tone="bad">failed</Chip>
-              <span className={`${MAIN} ${MONO}`}>{f.unit}</span>
-              <span className={SIDE}>{f.error}</span>
-              <span className={SIDE}>{since(f.agoSeconds)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        Read back from what the relay logged: msmtp writes one journal line per delivery attempt,
-        filed under the unit that was sending, so this is every mail the box tried to send (smartd,
-        ZED, each <span className={MONO}>OnFailure</span> hook), not just Grafana&rsquo;s. This path
-        has no watcher of its own: a dead Gmail app password makes the box <b>quieter</b>, not
-        louder, because the failure notice would have to travel the path that just broke. A long gap
-        since the last send is normal, since alerts are rare, but a red row here means something
-        tried to reach you and could not. Known hole either way: the box resolves DNS through its
-        own pi-hole, so a pi-hole-down alert can never email out.
-      </p>
-    </Board>
+    <>
+      <Board
+        title={mailFailing ? 'Mail relay failing' : 'The mail relay'}
+        icon="✉"
+        span={12}
+        aside={
+          d.mail.failures.length === 0 ? (
+            <span className={NOTE}>
+              {d.mail.sent30d === null ? DASH : num(d.mail.sent30d)} sent in 30 days
+            </span>
+          ) : (
+            <Chip tone={mailFailing ? 'bad' : 'warn'}>
+              {num(d.mail.failed30d)} failed send{d.mail.failed30d === 1 ? '' : 's'} in 30 days
+            </Chip>
+          )
+        }
+      >
+        <Facts
+          rows={[
+            {
+              k: 'Identity',
+              v:
+                d.mail.identity === null
+                  ? DASH
+                  : `${d.mail.identity.sender} → ${d.mail.identity.alertTo}`,
+            },
+            {
+              // Neutral on purpose: alerts are rare on a healthy box, so
+              // "nothing sent in N days" is a normal state, not a warning.
+              k: 'Last successful send',
+              v:
+                d.mail.lastSend === null
+                  ? 'nothing in the last 30 days'
+                  : `${since(d.mail.lastSend.agoSeconds)} — from ${d.mail.lastSend.unit}`,
+            },
+            {
+              k: 'Failures, 30d',
+              v:
+                d.mail.failed30d === null ? (
+                  DASH
+                ) : d.mail.failed30d > 0 ? (
+                  <span className="text-warning">{num(d.mail.failed30d)}</span>
+                ) : (
+                  'none'
+                ),
+            },
+          ]}
+        />
+        <p className={FOOT}>
+          Read back from what the relay logged: msmtp writes one journal line per delivery attempt,
+          filed under the unit that was sending, so this is every mail the box tried to send
+          (smartd, ZED, each <span className={MONO}>OnFailure</span> hook), not just
+          Grafana&rsquo;s. This path has no watcher of its own: a dead Gmail app password makes the
+          box <b>quieter</b>, not louder, because the failure notice would have to travel the path
+          that just broke. A long gap since the last send is normal, since alerts are rare, but a
+          red row here means something tried to reach you and could not. Known hole either way: the
+          box resolves DNS through its own pi-hole, so a pi-hole-down alert can never email out.
+        </p>
+      </Board>
+
+      <FailedSendsTable f={f} />
+    </>
   )
 }
 
@@ -244,5 +239,43 @@ function GrafanaLogsBoard() {
         </p>
       }
     />
+  )
+}
+
+/** Unit · error · when. The error steps away first. */
+const SEND_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(12rem,1fr)_minmax(10rem,1.2fr)_6rem] @max-[40rem]/table:grid-cols-[minmax(10rem,1fr)_6rem] @max-[40rem]/table:[&>.err]:hidden'
+
+/**
+ * Every send the relay logged as failed, newest first. Every row here is a
+ * fault, so the table needs no per-row badge: its title says it once.
+ */
+function FailedSendsTable({ f }: { f: AlertsFacts }) {
+  const { d, mailFailing } = f
+  if (d.mail.failures.length === 0) return null
+  return (
+    <TableSection
+      title="Failed sends"
+      aside={mailFailing ? 'newer than the last success' : 'since recovered'}
+    >
+      <ul className={TABLE} aria-label="Failed mail sends">
+        <li className={cn(SEND_GRID, TABLE_HEAD)}>
+          <span>Sending unit</span>
+          <span className="err">Error</span>
+          <span className="text-right">When</span>
+        </li>
+        {d.mail.failures.map((x) => (
+          <li key={`${x.unit}-${String(x.agoSeconds)}`} className={cn(SEND_GRID, TABLE_ROW)}>
+            <span className="truncate font-mono text-[0.8rem] text-foreground" title={x.unit}>
+              {x.unit}
+            </span>
+            <span className={cn(CELL_QUIET, 'err truncate text-danger/90')} title={x.error}>
+              {x.error}
+            </span>
+            <span className={cn(CELL_QUIET, 'text-right')}>{since(x.agoSeconds)}</span>
+          </li>
+        ))}
+      </ul>
+    </TableSection>
   )
 }

@@ -7,7 +7,7 @@ export const manifest = {
   order: 20,
   section: 'Services',
   // Shaped to Jellyfin, the tab that opens by default.
-  boardSpans: [8, 4, 4, 8],
+  boardSpans: [12, 12, 4, 8],
   // No tile directory: every service has a tab page with room for the version
   // verdict, the health checks and the log a tile had none for.
   //
@@ -38,7 +38,7 @@ export const manifest = {
       id: 'jellyfin',
       label: 'Jellyfin',
       probe: 'jellyfin',
-      boardSpans: [8, 4, 4, 8],
+      boardSpans: [12, 12, 4, 8],
       nix: 'tv',
     },
     {
@@ -53,7 +53,7 @@ export const manifest = {
       id: 'wanted',
       label: 'Wanted',
       probes: ['seerr', 'sonarr', 'radarr', 'bazarr'],
-      boardSpans: [8, 4, 4, 8],
+      boardSpans: [12, 6, 6, 12],
       dividerBefore: true,
       nix: ['tv', 'seerr', 'recyclarr', 'scraparr'],
     },
@@ -68,7 +68,7 @@ export const manifest = {
       id: 'downloaders',
       label: 'Downloaders',
       probes: ['qbittorrent', 'nzbget', 'metube', 'shelfmark'],
-      boardSpans: [8, 4, 4, 8],
+      boardSpans: [8, 4, 12, 4, 8],
       nix: ['tv', 'metube', 'shelfmark', 'downloads'],
     },
     // Only Cleanuparr answers HTTP; Janitorr is a timer with nothing to
@@ -77,7 +77,7 @@ export const manifest = {
       id: 'cleanup',
       label: 'Cleanup',
       probe: 'cleanuparr',
-      boardSpans: [8, 4, 12],
+      boardSpans: [12, 12],
       nix: ['cleanuparr', 'janitorr'],
     },
   ],

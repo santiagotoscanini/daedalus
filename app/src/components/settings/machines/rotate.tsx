@@ -11,8 +11,7 @@ import { Button } from '../../ui/button'
 import { Picker } from '../../ui/picker'
 import { useAction } from '../../use-action'
 import { useArmed } from '../../use-armed'
-import { CONTROL_H, INSET, NOTE_SHOWN } from '../form'
-import { ASIDE, ERROR_NOTE, Line, Mono } from '../shared'
+import { ASIDE, CONTROL_H, ERROR_NOTE, INSET, Line, Mono, NOTE_SHOWN } from '../shared'
 
 // The controller's key, handed on: `controller.rotate` through
 // server/nodes.ts. Armed first, because a machine too old to follow the

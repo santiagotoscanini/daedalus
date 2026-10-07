@@ -2,7 +2,6 @@
 // verbs that act on it.
 import type { ClaudeData } from '../../lib/dashboard/claude'
 import { bytes, DASH, duration, num, text } from '../../lib/format'
-import { Until } from '../ago'
 import { FOOT, MONO, NOTE, ROW_SIDE } from '../tokens'
 import { Board, Chip, Facts, type Tone } from '../viz'
 import { RestartServerControl } from './controls/restart-server'
@@ -37,22 +36,8 @@ export function RemoteControlBoard({
             k: 'Environment',
             v: <span className={MONO}>{text(envId)}</span>,
           },
-          {
-            k: 'Capacity',
-            v: `${num(live)} / ${facts.remote.max_sessions === null ? DASH : num(facts.remote.max_sessions)}`,
-          },
           { k: 'Default model', v: <span className={MONO}>{text(facts.settings.model)}</span> },
           { k: 'Effort', v: text(facts.settings.effort_level) },
-          { k: 'Plan', v: text(facts.credentials.subscription_type) },
-          {
-            k: 'Re-login due',
-            v:
-              facts.credentials.refresh_expires_at === null ? (
-                DASH
-              ) : (
-                <Until at={facts.credentials.refresh_expires_at} />
-              ),
-          },
           {
             k: 'Memory',
             v: bytes(facts.server.memoryBytes),
@@ -99,7 +84,8 @@ function ServerState({ data }: { data: ClaudeData }) {
   const { state, detail, restarts } = data.facts.server
   return (
     <>
-      <Chip tone={STATE_TONE[state] ?? 'bad'}>{state}</Chip>
+      {/* Running is the norm and reads as a word; any other state is a chip. */}
+      {state === 'running' ? state : <Chip tone={STATE_TONE[state] ?? 'bad'}>{state}</Chip>}
       {/* With no report the notice at the top already says why. */}
       {data.reporting && detail !== null && <span className={ROW_SIDE}>{detail}</span>}
       {restarts !== null && restarts > 0 && (

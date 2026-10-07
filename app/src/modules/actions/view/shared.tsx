@@ -14,6 +14,15 @@ export { WipBoard } from '../../../components/machine-head'
 /** A run's state as a chip: running, queued, or its conclusion. */
 export function RunChip({ status, conclusion }: { status: string; conclusion: string | null }) {
   const tone: Tone = conclusionTone(status, conclusion)
+  // Success is the norm down every list of runs, so it is a quiet word;
+  // only a run that differs — running, failed, cancelled — gets a chip.
+  if (tone === 'ok') {
+    return (
+      <span className="text-[0.75rem] text-muted-foreground">
+        {conclusionWord(status, conclusion)}
+      </span>
+    )
+  }
   return (
     <Chip tone={tone}>
       {status === 'in_progress' && (

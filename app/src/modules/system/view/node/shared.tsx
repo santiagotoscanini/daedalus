@@ -63,15 +63,13 @@ export function BoxHead({ h }: { h: BoxHeadData }) {
     <HeadStrip
       mark={{ src: '/icon-nixos.webp', invert: false }}
       name={h.hostname}
-      chip={{ label: 'this box', tone: 'ok' }}
+      chip={{ label: 'this box', tone: 'muted' }}
       line={
         <>
           {h.os}
           {h.kernel !== null && ` · ${h.kernel}`}
           {` · ${h.arch}`}
           {h.model !== null && ` · ${h.model}`}
-          {' · '}
-          <span className={MONO}>{h.hostname}</span>
         </>
       }
     />
@@ -95,7 +93,7 @@ export function MachineHead({
         : status === null
           ? { label: 'no status yet', tone: 'muted' as Tone }
           : status.awake_hold
-            ? { label: 'held awake', tone: 'ok' as Tone }
+            ? { label: 'held awake', tone: 'muted' as Tone }
             : status.policy.awake_hold
               ? { label: 'hold OFF', tone: 'bad' as Tone }
               : { label: 'may sleep', tone: 'muted' as Tone }

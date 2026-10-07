@@ -1,5 +1,5 @@
-// How each roster population reads: its chip's tone and word, and whether it
-// earns the coloured stripe down the row's left edge.
+// How each roster population reads: its chip's tone and word, and the name of
+// its group on the board (rows are grouped by state, so the group says it once).
 import type { SessionState } from '../../../lib/claude-roster'
 import type { Tone } from '../../../lib/tone'
 
@@ -22,23 +22,11 @@ export const STATE_LABEL: Record<SessionState, string> = {
   resumable: 'resumable',
 }
 
-/* The five states have to stay apart, and three lines per row is exactly the
-   pressure that would blur them — a page of equally tall blocks reads as one
-   population. The chip still carries the verdict; this is a second, quieter
-   index down the left edge, so a running session can be found by colour from
-   the top of a list of twenty-four.
-
-   Every row carries the border and the padding, so the text edge never moves;
-   the two quiet populations simply make theirs transparent. That is the whole
-   reason this is not a conditional wrapper. */
-export const ROW_ACCENT = 'border-l-2 pl-2'
-export const STATE_ACCENT: Record<SessionState, string> = {
-  alive: 'border-l-(--tone)',
-  background: 'border-l-(--tone)',
-  orphan: 'border-l-(--tone)',
-  // A leftover and a dead conversation on disk are not states worth a stripe.
-  // They are the resting mass of this board, and the three above have to be
-  // findable against them.
-  dormant: 'border-l-transparent',
-  resumable: 'border-l-transparent',
+/** The board's group band for each population: its name, and what it means. */
+export const STATE_GROUP: Record<SessionState, { title: string; note: string }> = {
+  alive: { title: 'Connected', note: 'a process is running it' },
+  background: { title: 'Background', note: 'background agents with a process behind them' },
+  orphan: { title: 'No transcript', note: 'running, with no transcript in the scanned tree' },
+  dormant: { title: 'Dormant', note: 'a background record with no process; the CLI still owns it' },
+  resumable: { title: 'Resumable', note: 'on disk, nothing running it' },
 }

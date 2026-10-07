@@ -1,12 +1,20 @@
 import { DAY_TIME, LocalTime } from '../../../components/ago'
 import { LogBoard } from '../../../components/logs'
+import {
+  BOARD_TABLE,
+  BOARD_TABLE_HEAD,
+  BOARD_TABLE_ROW,
+  NUM_CELL,
+} from '../../../components/modules/parts'
 import { ReleaseNotes, UpgradeChain } from '../../../components/release-notes'
 import { ServiceHead } from '../../../components/service-head'
+import { CELL_QUIET, TABLE_LINK, TABLE_ROW_LINK } from '../../../components/table'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
 import type { GamingData } from '../data'
-import { NEWS, NEWS_DATE, NEWS_ROW, NEWS_TITLE } from './shared'
+import { EventsTable } from './shared'
 
 /**
  * Live only at second hand — see `FactorioData['live']` in data/factorio.ts.
@@ -96,9 +104,9 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
       <BoardGrid>
         <Panel f={f} />
 
-        <FromTheDevsBoard f={f} />
-
         <ComingsAndGoingsBoard f={f} />
+
+        <FromTheDevsBoard f={f} />
 
         {/* Grafana itself rather than a log viewer of our own — see the note
             in components/logs.tsx; nix/modules/monitoring allows this
@@ -118,6 +126,9 @@ function factorioFacts({ data }: { data: Extract<GamingData, { tab: 'factorio' }
 }
 
 type FactorioFacts = NonNullable<ReturnType<typeof factorioFacts>>
+
+/* The feed: the post, what kind it is, when. */
+const NEWS_GRID = 'grid grid-cols-[minmax(0,1fr)_5rem_7rem] items-center gap-x-6 px-5'
 
 function Panel({ f }: { f: FactorioFacts }) {
   const { data, factorio, behind, current } = f
@@ -152,31 +163,46 @@ function FromTheDevsBoard({ f }: { f: FactorioFacts }) {
     <Board
       title="From the devs"
       icon="panels"
-      span={6}
+      span={12}
       aside={<span className={NOTE}>factorio.com/blog</span>}
     >
       {news.length === 0 ? (
         <p className={EMPTY}>could not read the feed</p>
       ) : (
-        <ul className={NEWS}>
+        <ul className={BOARD_TABLE}>
+          <li className={cn(NEWS_GRID, BOARD_TABLE_HEAD)}>
+            <span>Post</span>
+            <span>Kind</span>
+            <span className={NUM_CELL}>Published</span>
+          </li>
           {news.map((n) => (
-            <li key={n.url} className={NEWS_ROW}>
-              <Chip tone={n.kind === 'release' ? 'ok' : n.kind === 'fff' ? 'info' : 'muted'}>
-                {n.kind === 'release' ? 'release' : n.kind === 'fff' ? 'FFF' : 'post'}
-              </Chip>
-              <a href={n.url} target="_blank" rel="noreferrer" className={NEWS_TITLE}>
+            <li key={n.url} className={cn(NEWS_GRID, BOARD_TABLE_ROW, TABLE_ROW_LINK)}>
+              <a
+                href={n.url}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(TABLE_LINK, 'truncate text-[0.84rem] text-foreground')}
+              >
                 {n.title}
               </a>
-              <span className={NEWS_DATE}>{n.date}</span>
+              {/* A release post is the exception; the Friday Facts are the norm. */}
+              <span>
+                {n.kind === 'release' ? (
+                  <Chip tone="ok">release</Chip>
+                ) : (
+                  <span className={CELL_QUIET}>{n.kind === 'fff' ? 'FFF' : 'post'}</span>
+                )}
+              </span>
+              <span className={cn(CELL_QUIET, 'text-right whitespace-nowrap')}>{n.date}</span>
             </li>
           ))}
         </ul>
       )}
       {/* Not "release posts are the changelog": the structured changelog
-          is the panel beside this one. */}
+          is the release-notes panel above. */}
       <p className={FOOT}>
         The studio’s own feed, which points forward: Friday Facts are about what is being built.
-        What has landed is the panel beside this one.
+        What has landed is the release-notes panel above.
       </p>
     </Board>
   )
@@ -188,26 +214,10 @@ function ComingsAndGoingsBoard({ f }: { f: FactorioFacts }) {
     <Board
       title="Comings and goings"
       icon="panels"
-      span={12}
+      span={6}
       aside={<span className={NOTE}>last 30 days</span>}
     >
-      {events.length === 0 ? (
-        <p className={EMPTY}>nobody has joined this month</p>
-      ) : (
-        <ul className={NEWS}>
-          {events.map((e) => (
-            <li key={`${String(e.at)}-${e.who}-${e.kind}`} className={NEWS_ROW}>
-              <Chip tone={e.kind === 'join' ? 'ok' : 'muted'}>
-                {e.kind === 'join' ? 'joined' : 'left'}
-              </Chip>
-              <span className={NEWS_TITLE}>{e.who}</span>
-              <span className={NEWS_DATE}>
-                <LocalTime at={e.at} opts={DAY_TIME} />
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <EventsTable events={events} empty="nobody has joined this month" />
       {/* Read from the log, as on Minecraft — see gameLines in data/factorio.ts. */}
       <p className={FOOT}>
         Parsed from the server’s log in Loki, newest first: the game announces every arrival and

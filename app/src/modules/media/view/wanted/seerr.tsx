@@ -4,19 +4,51 @@ import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/service-head'
 import { Board, BoardGrid, Chip, Measures, RankRow } from '../../../../components/viz'
+import { cn } from '../../../../lib/cn'
 import { daysAgo, num } from '../../../../lib/format'
-import { EMPTY, FOOT, LIST, NOTE } from '../shared'
+import {
+  CELL_NAME,
+  CELL_QUIET,
+  EMPTY,
+  FOOT,
+  LIST,
+  NOTE,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableSection,
+} from '../shared'
 import type { Wanted } from './shared'
 import { WANTED_NEIGHBOURS } from './shared'
 
-/* Status first, because it is the column that decides whether the row needs
-   you. The title takes the slack; requester and age are fixed so the eye can
-   run down them. Below 34rem the five stack. */
-const REQS = `${LIST} gap-1`
-const REQ =
-  'grid grid-cols-[5.6rem_minmax(0,1fr)_3.6rem_6rem_5rem] items-center gap-2.5 py-1 text-[0.8rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-0.5'
-const REQ_SIDE = 'text-[0.75rem] text-muted-foreground'
-const REQ_WHEN = `${REQ_SIDE} text-right max-[34rem]:text-left`
+/* Title takes the slack; status beside it is the column that decides whether
+   the row needs you, so only the statuses that do (pending, declined, failed)
+   are coloured. Kind and requester repeat down the table: quiet, and the first
+   to go. */
+const REQ_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,2fr)_6.5rem_4.5rem_minmax(0,1fr)_5.5rem]',
+  '@max-[40rem]/table:grid-cols-[minmax(0,1fr)_6.5rem_5.5rem]',
+)
+const WIDE = '@max-[40rem]/table:hidden'
+
+/** Available is where every request ends up: quiet. In progress is plain ink; a request that needs somebody is a chip. */
+function RequestStatus({
+  status,
+  tone,
+}: {
+  status: string
+  tone: Wanted['seerr']['requests'][number]['tone']
+}) {
+  if (tone === 'ok' || tone === 'muted') return <span className={CELL_QUIET}>{status}</span>
+  if (tone === 'info') return <span className="text-[0.78rem] text-foreground">{status}</span>
+  return (
+    <span>
+      <Chip tone={tone}>{status}</Chip>
+    </span>
+  )
+}
 
 export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
   const { counts } = d
@@ -41,34 +73,43 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
       />
 
       <BoardGrid>
-        <Board
+        <TableSection
           title="Recent requests"
-          icon="✧"
-          span={8}
-          aside={<span className={NOTE}>{num(counts.total)} all time</span>}
+          note={`${num(counts.total)} all time`}
+          foot={
+            <p className={FOOT}>
+              Titles are looked up per request: a request record carries a TMDB id and nothing else,
+              so Seerr resolves the name the same way its own interface does.
+            </p>
+          }
         >
-          {d.requests.length === 0 ? (
-            <p className={EMPTY}>Nothing has been requested.</p>
-          ) : (
-            <ul className={REQS}>
-              {d.requests.map((r, i) => (
-                <li key={`${r.title}-${String(i)}`} className={REQ}>
-                  <Chip tone={r.tone}>{r.status}</Chip>
-                  <span className="truncate">{r.title}</span>
-                  <span className={REQ_SIDE}>{r.kind === 'tv' ? 'series' : 'film'}</span>
-                  <span className={REQ_SIDE}>{r.by}</span>
-                  <span className={REQ_WHEN}>{daysAgo(r.ageDays)}</span>
+          <ul className={TABLE} aria-label="Recent requests">
+            <li aria-hidden="true" className={cn(REQ_GRID, TABLE_HEAD)}>
+              <span>Title</span>
+              <span>Status</span>
+              <span className={WIDE}>Kind</span>
+              <span className={WIDE}>Asked by</span>
+              <span className="text-right">Asked</span>
+            </li>
+            {d.requests.length === 0 ? (
+              <li className={TABLE_EMPTY}>Nothing has been requested.</li>
+            ) : (
+              d.requests.map((r, i) => (
+                <li key={`${r.title}-${String(i)}`} className={cn(REQ_GRID, TABLE_ROW)}>
+                  <span className={cn(CELL_NAME, '[font-weight:500]')}>{r.title}</span>
+                  <RequestStatus status={r.status} tone={r.tone} />
+                  <span className={cn(CELL_QUIET, WIDE)}>
+                    {r.kind === 'tv' ? 'series' : 'film'}
+                  </span>
+                  <span className={cn(CELL_QUIET, WIDE, 'truncate')}>{r.by}</span>
+                  <span className={cn(CELL_QUIET, 'text-right')}>{daysAgo(r.ageDays)}</span>
                 </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            Titles are looked up per request: a request record carries a TMDB id and nothing else,
-            so Seerr resolves the name the same way its own interface does.
-          </p>
-        </Board>
+              ))
+            )}
+          </ul>
+        </TableSection>
 
-        <Board title="Where they are" icon="clock" span={4}>
+        <Board title="Where they are" icon="clock" span={6}>
           <Measures
             items={[
               {
@@ -88,7 +129,7 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           </p>
         </Board>
 
-        <Board title="Who asks" icon="◍" span={4}>
+        <Board title="Who asks" icon="◍" span={6}>
           {d.people.length === 0 ? (
             <p className={EMPTY}>no requests yet</p>
           ) : (
@@ -108,7 +149,7 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
 
         <Changelog
           gap={d.gap}
-          span={8}
+          span={12}
           aside={
             d.selfBehind !== null && d.selfBehind > 0 ? (
               <span className={NOTE}>{num(d.selfBehind)} commits behind, it says</span>

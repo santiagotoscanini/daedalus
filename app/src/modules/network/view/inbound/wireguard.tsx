@@ -1,11 +1,21 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../../../components/service-head'
+import {
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from '../../../../components/table'
+import { TableSection } from '../../../../components/table-section'
 import { Button } from '../../../../components/ui/button'
-import { Board, BoardGrid, Columns, Measures, Pulse } from '../../../../components/viz'
+import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
-import { bytes, num } from '../../../../lib/format'
-import { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../shared'
+import { bytes, DASH, num } from '../../../../lib/format'
+import { AXIS, FOOT, LIVE, NOTE } from '../shared'
 import type { Inbound } from './index'
 
 /**
@@ -67,9 +77,11 @@ export function WireguardView({ data }: { data: Inbound['wireguard'] }) {
       />
 
       <BoardGrid>
-        <PeersBoard f={f} />
-
         <AnyoneHomeBoard f={f} />
+
+        <PeersNowBoard f={f} />
+
+        <PeersTable f={f} />
 
         <Changelog gap={gap} />
 
@@ -85,19 +97,23 @@ export function WireguardView({ data }: { data: Inbound['wireguard'] }) {
 function wireguardFacts({ data }: { data: Inbound['wireguard'] }) {
   const { gap, counts, peers, daily } = data
   const live = counts.connected !== null && counts.connected > 0
-  const max = Math.max(...peers.map((p) => p.rx + p.tx), 1)
-  return { data, gap, counts, peers, daily, live, max }
+  return { data, gap, counts, peers, daily, live }
 }
 
 type WireguardFacts = NonNullable<ReturnType<typeof wireguardFacts>>
 
-function PeersBoard({ f }: { f: WireguardFacts }) {
-  const { counts, peers, live, max } = f
+/** Peer · address · from it · to it · last handshake · total. Directions go first. */
+const PEER_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.2fr)_minmax(6rem,0.8fr)_5rem_5rem_minmax(6rem,0.8fr)_5rem] @max-[44rem]/table:grid-cols-[minmax(8rem,1fr)_minmax(6rem,0.8fr)_minmax(5rem,0.7fr)_5rem] @max-[44rem]/table:[&>.dir]:hidden'
+
+/** Configured, enabled, connected now: three counts and the live dot. */
+function PeersNowBoard({ f }: { f: WireguardFacts }) {
+  const { counts, live } = f
   return (
     <Board
       title="Peers"
       icon="key"
-      span={8}
+      span={4}
       aside={
         <span className={LIVE}>
           <Pulse on={live} tone="ok" />
@@ -112,74 +128,61 @@ function PeersBoard({ f }: { f: WireguardFacts }) {
           { k: 'connected now', v: num(counts.connected) },
         ]}
       />
-
-      {peers.length === 0 ? (
-        <p className={EMPTY}>no peers configured</p>
-      ) : (
-        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-          {peers.map((p) => (
-            // Fixed name and count tracks, not `auto`. Each row is its own
-            // grid container, so a content-sized column is measured per
-            // row — the bars would start at a different x on every line and
-            // stop at a different one, which is the entire comparison this
-            // list exists to make.
-            <li
-              className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-2.5 gap-y-0.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-foreground/[0.04]"
-              key={p.name}
-            >
-              <span className="flex min-w-0 items-baseline gap-1.5 text-[0.8rem]">
-                <span className="min-w-0 truncate" title={p.name}>
-                  {p.name}
-                </span>
-                {/* Deliberately switched off is not a warning at all — it
-                    explains the silence rather than reporting it. */}
-                {!p.enabled && (
-                  <em className="flex-none rounded-full px-1.5 text-[0.68rem] leading-4 text-muted-foreground not-italic ring-1 ring-hairline ring-inset [font-weight:550]">
-                    disabled
-                  </em>
-                )}
-                {p.handshakeAgo === null && (
-                  <em className="flex-none rounded-full bg-warning/10 px-1.5 text-[0.68rem] leading-4 text-warning not-italic ring-1 ring-warning/25 ring-inset [font-weight:550]">
-                    never used
-                  </em>
-                )}
-              </span>
-              <span className="block h-1 overflow-hidden rounded-full bg-foreground/[0.08]">
-                <span
-                  className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-full bg-info opacity-85 motion-reduce:animate-none"
-                  style={{ width: `${String(Math.max(1.5, ((p.rx + p.tx) / max) * 100))}%` }}
-                />
-              </span>
-              <span className="text-right text-[0.8rem] whitespace-nowrap tabular-nums">
-                {bytes(p.rx + p.tx)}
-              </span>
-              {/* Interpuncts are generated between the items rather than
-                  typed, so a peer with no address does not trail a
-                  separator into empty space. */}
-              <span className="col-span-full flex min-w-0 flex-wrap gap-x-1.5 gap-y-0 text-[0.72rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-1.5 [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
-                {p.ipv4 !== null && <span className={cn(MONO, 'truncate')}>{p.ipv4}</span>}
-                {/* Named rather than arrowed. An arrow on a VPN row is
-                    ambiguous by construction — the same byte is the
-                    peer's upload and the server's download — so these say
-                    which end they are counted at. */}
-                <span>{bytes(p.rx)} from it</span>
-                <span>{bytes(p.tx)} to it</span>
-                <span>{p.ago}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
       <p className={FOOT}>
         {/* The distinction that trips people up: WireGuard is
             connectionless, so there is no session to be in or out of. */}
-        Ranked by total traffic. WireGuard has no connections to count. A peer is
-        &ldquo;connected&rdquo; only in the sense that it exchanged a handshake recently, so a phone
-        that is asleep reads as absent and is not. The byte counters are cumulative and reset when
-        wg-easy restarts, which is why they are a ranking here rather than a rate.
+        WireGuard has no connections to count. A peer is &ldquo;connected&rdquo; only in the sense
+        that it exchanged a handshake recently, so a phone that is asleep reads as absent and is
+        not.
       </p>
     </Board>
+  )
+}
+
+function PeersTable({ f }: { f: WireguardFacts }) {
+  const { peers } = f
+  return (
+    <TableSection title="Every peer" aside="ranked by total traffic">
+      <ul className={TABLE} aria-label="WireGuard peers">
+        <li className={cn(PEER_GRID, TABLE_HEAD)}>
+          <span>Peer</span>
+          <span>Address</span>
+          {/* Named rather than arrowed. An arrow on a VPN row is ambiguous by
+              construction — the same byte is the peer's upload and the
+              server's download — so these say which end they are counted at. */}
+          <span className="dir text-right">From it</span>
+          <span className="dir text-right">To it</span>
+          <span>Last handshake</span>
+          <span className="text-right">Total</span>
+        </li>
+        {peers.length === 0 && <li className={TABLE_EMPTY}>no peers configured</li>}
+        {peers.map((p) => (
+          <li key={p.name} className={cn(PEER_GRID, TABLE_ROW)}>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={CELL_NAME} title={p.name}>
+                {p.name}
+              </span>
+              {/* Deliberately switched off is not a warning at all — it
+                  explains the silence rather than reporting it. */}
+              {!p.enabled && <Chip tone="muted">disabled</Chip>}
+              {p.handshakeAgo === null && <Chip tone="warn">never used</Chip>}
+            </span>
+            <span className={CELL_MONO}>{p.ipv4 ?? DASH}</span>
+            <span className={cn(CELL_QUIET, 'dir text-right')}>{bytes(p.rx)}</span>
+            <span className={cn(CELL_QUIET, 'dir text-right')}>{bytes(p.tx)}</span>
+            <span className={cn(CELL_QUIET, p.handshakeAgo === null && 'text-warning')}>
+              {p.ago}
+            </span>
+            <span className="text-right text-foreground tabular-nums">{bytes(p.rx + p.tx)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className={FOOT}>
+        Ranked by total traffic. The byte counters are cumulative and reset when wg-easy restarts,
+        which is why they are a ranking here rather than a rate. A peer that exists and has never
+        handshaken is a credential somebody was issued and never used.
+      </p>
+    </TableSection>
   )
 }
 
@@ -189,7 +192,7 @@ function AnyoneHomeBoard({ f }: { f: WireguardFacts }) {
     <Board
       title="Anyone home"
       icon="clock"
-      span={4}
+      span={8}
       aside={<span className={NOTE}>peak per day, 14d</span>}
     >
       <Columns

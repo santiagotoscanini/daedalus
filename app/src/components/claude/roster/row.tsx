@@ -10,7 +10,6 @@ import { type FactIcon, factGroups, promptLine } from '../../../lib/claude-meta'
 import { type RosterEntry, type RowControl, rowControl } from '../../../lib/claude-roster'
 import { cn } from '../../../lib/cn'
 import { DASH } from '../../../lib/format'
-import { toneStyle } from '../../../lib/tone'
 import { GHOST_BTN } from '../../apps/shared'
 import { ArmedConfirm } from '../../armed-confirm'
 import { MONO, MONO_FACE, ROW, ROW_MAIN, ROW_SIDE } from '../../tokens'
@@ -18,7 +17,7 @@ import { Button } from '../../ui/button'
 import { Chip } from '../../viz'
 import { NARROW_HIDE } from '../shared'
 import { working } from '../verdicts'
-import { ROW_ACCENT, STATE_ACCENT, STATE_LABEL, STATE_TONE } from './tones'
+import { STATE_LABEL, STATE_TONE } from './tones'
 
 /* The verb at the right edge OF the row, not under it: a button on a line of
    its own makes every row taller and a long list a ragged column. The rest of
@@ -107,12 +106,15 @@ export function RosterRow({
 
   return (
     <li
-      className={cn(ROW, 'flex-col items-stretch', ROW_ACCENT, STATE_ACCENT[row.state])}
+      className={cn(ROW, 'flex-col items-stretch py-3 [[data-group]+&]:border-t-0')}
       title={row.id ?? undefined}
-      style={toneStyle(STATE_TONE[row.state])}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
+        {/* The board groups rows by state and names each group once, so a row
+            carries a chip only for the population that is a fault. */}
+        {row.state === 'orphan' && (
+          <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
+        )}
         <span className={ROW_MAIN}>{row.label}</span>
         <RowSideFacts row={row} control={control} />
 

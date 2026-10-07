@@ -36,9 +36,9 @@ export function GeneralView({ data }: { data: General }) {
 
         <TheRouterBoard f={f} />
 
-        <WhichServicesMoveTheBytesBoard f={f} />
-
         <TheLineItselfBoard f={f} />
+
+        <WhichServicesMoveTheBytesBoard f={f} />
 
         <WhatThisHouseAsksForBoard f={f} />
 

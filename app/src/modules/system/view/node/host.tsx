@@ -3,6 +3,7 @@ import { BarList, Board, BoardGrid, Chip, Measures, Trend } from '../../../../co
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { DASH, num, pct, temp } from '../../../../lib/format'
 import { partMatching } from '../../../../lib/hardware/catalog'
+import type { Tone } from '../../../../lib/tone'
 import {
   AgentBoard,
   MachineBoard,
@@ -32,13 +33,14 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
 
   return (
     <BoardGrid>
+      {/* A service down opens the page; healthy, Running says "none" once. */}
+      {f.t.services.length > 0 && <ServicesBoard f={f} />}
+
       <LoadBoard f={f} />
 
       <BusiestBoard f={f} />
 
       <TemperatureBoard f={f} />
-
-      <BatteryBoard f={f} />
 
       {/* The machine itself, on the tab about the machine itself — as the
           box's own page pictures its case. A machine the catalog knows (a
@@ -49,7 +51,7 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
 
       <RunningBoard f={f} />
 
-      <ServicesBoard f={f} />
+      <BatteryBoard f={f} />
 
       <NetworkBoard f={f} />
 
@@ -84,6 +86,14 @@ function hostFacts(d: NodeSystemData) {
 
 export type HostFacts = NonNullable<ReturnType<typeof hostFacts>>
 
+const HEADLINE =
+  'm-0 text-[2.25rem] leading-none tracking-[-0.035em] text-foreground tabular-nums [font-weight:560]'
+
+/** A temperature only takes colour when it is one to worry about. */
+function heat(c: number): Tone {
+  return c >= 85 ? 'bad' : c >= 75 ? 'warn' : 'muted'
+}
+
 function LoadBoard({ f }: { f: HostFacts }) {
   const { d, t, threads } = f
   return (
@@ -93,30 +103,35 @@ function LoadBoard({ f }: { f: HostFacts }) {
       span={8}
       aside={
         <span className={NOTE}>
-          {threads === null ? 'threads unread' : `${num(threads)} threads`}
+          {threads === null ? 'threads unread' : `${num(threads)} threads`} · last 6h
         </span>
       }
     >
-      <Trend values={d.cpuSpark} tone="accent" height={90} empty="no history yet" />
-      <Measures
-        items={[
-          { k: 'cpu now', v: pct(t.cpu.usage_pct, 1) },
-          ...(t.cpu.load !== null
-            ? [
-                { k: 'load 1m', v: num(t.cpu.load[0], 2) },
-                { k: 'load 5m', v: num(t.cpu.load[1], 2) },
-                { k: 'load 15m', v: num(t.cpu.load[2], 2) },
-              ]
-            : [
-                { k: 'processes', v: num(t.process_count) },
-                {
-                  k: 'clock',
-                  v: t.cpu.frequency_mhz === null ? DASH : `${num(t.cpu.frequency_mhz)} MHz`,
-                },
-                { k: 'package', v: temp(t.cpu.temperature_c) },
-              ]),
-        ]}
-      />
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[0.75rem] text-muted-foreground">cpu now</span>
+          <p className={HEADLINE}>{pct(t.cpu.usage_pct, 1)}</p>
+        </div>
+        <Measures
+          items={[
+            ...(t.cpu.load !== null
+              ? [
+                  { k: 'load 1m', v: num(t.cpu.load[0], 2) },
+                  { k: 'load 5m', v: num(t.cpu.load[1], 2) },
+                  { k: 'load 15m', v: num(t.cpu.load[2], 2) },
+                ]
+              : [
+                  { k: 'processes', v: num(t.process_count) },
+                  {
+                    k: 'clock',
+                    v: t.cpu.frequency_mhz === null ? DASH : `${num(t.cpu.frequency_mhz)} MHz`,
+                  },
+                  { k: 'package', v: temp(t.cpu.temperature_c) },
+                ]),
+          ]}
+        />
+      </div>
+      <Trend values={d.cpuSpark} tone="accent" height={96} empty="no history yet" />
       <p className={FOOT}>
         Six hours of processor, from this box&rsquo;s prometheus, which reads every machine&rsquo;s
         telemetry from the controller&rsquo;s <span className={MONO}>/nodes/metrics</span> every
@@ -143,7 +158,7 @@ function BusiestBoard({ f }: { f: HostFacts }) {
             value: p.cpu_pct ?? 0,
             display: pct(p.cpu_pct, 0),
           }))}
-          tone="accent"
+          tone="muted"
           empty="everything idle"
         />
       )}
@@ -164,8 +179,9 @@ function TemperatureBoard({ f }: { f: HostFacts }) {
           label: x.label,
           value: x.celsius,
           display: `${x.celsius.toFixed(0)}°`,
+          tone: heat(x.celsius),
         }))}
-        tone="info"
+        tone="muted"
         empty="no sensors reporting"
       />
     </Board>

@@ -1,181 +1,168 @@
-import { MonitorSmartphoneIcon } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { ChevronRightIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 
-import type { LinkStatus, TunnelStatus } from '../../../host/controller/generated'
 import { cn } from '../../../lib/cn'
 import type { Machine } from '../../../lib/dashboard/machines'
-import { bytes, duration, since } from '../../../lib/format'
-import type { Tone } from '../../../lib/tone'
+import { bytes, duration } from '../../../lib/format'
 import { Ago } from '../../ago'
+import {
+  CELL_MONO,
+  CELL_NAME,
+  CELL_SUB,
+  TABLE_HEAD,
+  TABLE_LINK,
+  TABLE_ROW,
+  TABLE_ROW_LINK,
+} from '../../table'
 import { Chip } from '../../viz'
-import { NOTE_SHOWN } from '../form'
-import { ASIDE, ERROR_NOTE, Line, Mono, Section } from '../shared'
+import { ASIDE, Band, ERROR_NOTE, Mono, NOTE_SHOWN } from '../shared'
 import { Decision } from './decision'
+import { ClaudeCell, OsMark, StatusCell, TrustNote, TunnelCell } from './machine-cells'
 import { Policy } from './policy'
 
-/** The OS's mark, by the family the agent reports. */
-function osMark(os: string): { src: string; invert: boolean } | null {
-  switch (os) {
-    case 'windows':
-      return { src: '/icon-windows.svg', invert: false }
-    case 'macos':
-      return { src: '/icon-apple.svg', invert: true }
-    case 'linux':
-      return { src: '/icon-linux.svg', invert: true }
-    default:
-      return null
-  }
-}
+// One machine, as a row of the Machines table — what it is, how it stands,
+// where it is, which agent — that opens in place into the whole story: the
+// facts its agent reports, the box's decision about it, and once approved
+// the policy the box sends it. One machine is open at a time and the open
+// one is in the URL (`?node=`), so a refresh or a link lands on it; a key
+// waiting to join is always open, since it is waiting on you.
 
-/**
- * What a decision saved while the controller cannot take it waits for: the app
- * hands over the whole set again whenever it reconnects.
- */
-export const BACK = 'Changes made here apply when the controller is back.'
+/** Machine, status, address, agent, the chevron — one grid for the head and every row. */
+export const MACHINE_GRID =
+  'grid grid-cols-[minmax(0,1fr)_minmax(0,11rem)_9rem_6rem_1rem] items-center gap-x-6 px-5 @max-[46rem]/table:grid-cols-[minmax(0,1fr)_minmax(0,9rem)_1rem]'
+/** The columns that step away on a narrow table. */
+const STEP = '@max-[46rem]/table:hidden'
 
-type Verdict = { chip: string; tone: Tone }
-
-/**
- * What the machine's updater is doing beyond the verdict: a version on
- * probation (its `.old` binaries kept until it proves itself), or the last
- * one it rolled back from, which it never installs again.
- */
-function updateBadges(s: Machine['status']): { chip: string; tone: Tone; title: string }[] {
-  if (s === null) return []
-  const out: { chip: string; tone: Tone; title: string }[] = []
-  if (s.probation !== null) {
-    out.push({
-      chip: 'updating (on probation)',
-      tone: 'warn',
-      title: `${s.probation.version} replaced ${s.probation.from}; started ${String(s.probation.starts)} time${s.probation.starts === 1 ? '' : 's'} since, and kept on probation until it proves itself`,
-    })
-  }
-  if (s.rolled_back !== null) {
-    out.push({
-      chip: `rolled back from ${s.rolled_back.version}`,
-      tone: 'bad',
-      title: `${s.rolled_back.version} started ${String(s.rolled_back.starts)} times without lasting; ${s.rolled_back.to} was put back at ${s.rolled_back.at}`,
-    })
-  }
-  return out
-}
-
-function verdict(m: Machine): Verdict {
-  const n = m.node
-  if (n === null) return { chip: 'wants to join', tone: 'warn' }
-  if (n.state === 'revoked') return { chip: 'revoked', tone: 'bad' }
-  const s = m.status
-  // The controller could not be asked: say so, not that the machine is away.
-  if (n.connected === null) return { chip: 'link unknown', tone: 'muted' }
-  if (!n.connected) return { chip: 'not connected', tone: 'muted' }
-  if (s === null) return { chip: 'connected', tone: 'muted' }
-  // Off because the box said so is a state, not a fault.
-  if (!s.awake_hold && !s.policy.awake_hold) return { chip: 'may sleep', tone: 'muted' }
-  if (!s.awake_hold) return { chip: 'hold OFF', tone: 'bad' }
-  if (s.update_available !== null || s.restart_pending) return { chip: 'updating', tone: 'warn' }
-  return { chip: 'held awake', tone: 'ok' }
-}
-
-/**
- * Claude Code on the machine, in one line: the status document's summary
- * while connected, the controller's last summary otherwise. The Claude
- * page's picker is where the rest is.
- */
-function ClaudeCell({ m }: { m: Machine }) {
-  const s = m.status
-  const c = s?.claude ?? m.node?.claude ?? null
-  if (c !== null) {
-    const version = c.server_version ?? c.cli_version
-    return c.state === 'running' || c.state === 'starting' ? (
-      <Line>
-        <Chip tone="ok">remote control {c.state}</Chip>
-        {version !== null && <Mono>{version}</Mono>}
-        <span className={ASIDE}>
-          {String(c.sessions)} session{c.sessions === 1 ? '' : 's'}
-        </span>
-      </Line>
-    ) : (
-      <Line>
-        <Chip tone={c.state === 'off' ? 'muted' : 'warn'}>{c.state}</Chip>
-        {c.detail !== null && <span className={ASIDE}>{c.detail}</span>}
-      </Line>
-    )
-  }
-  if (s !== null && !s.tray.reporting) {
-    return (
-      <span className={ASIDE}>
-        {s.policy.claude_remote_control ? 'nobody logged on — the session is not reporting' : '—'}
-      </span>
-    )
-  }
-  return <span className={ASIDE}>—</span>
-}
-
-/** How long a tunnel goes without a handshake before it reads as down (WireGuard rekeys every 2 min). */
-const TUNNEL_STALE_SECS = 180
-
-/**
- * A logged-in machine's own tunnel, as the machine reports it: up while its
- * handshakes are fresh, and why not when they are not.
- */
-function TunnelCell({ t }: { t: TunnelStatus }) {
-  const up =
-    t.error === null && t.last_handshake_secs !== null && t.last_handshake_secs < TUNNEL_STALE_SECS
+export function MachinesHead() {
   return (
-    <span className="inline-flex flex-col items-start gap-1">
-      <Line>
-        <Chip tone={up ? 'ok' : 'warn'}>{up ? 'up' : 'down'}</Chip>
-        {t.address !== '' && <Mono>{t.address}</Mono>}
-        <span className={ASIDE}>
-          {t.last_handshake_secs === null
-            ? 'no handshake yet'
-            : `handshake ${since(t.last_handshake_secs)}`}
-          {` · ${bytes(t.rx_bytes)} in · ${bytes(t.tx_bytes)} out`}
-        </span>
-      </Line>
-      {t.endpoint !== '' && <span className={ASIDE}>through {t.endpoint}</span>}
-      {t.error !== null && <span className="text-[0.78rem] text-destructive">{t.error}</span>}
-    </span>
+    <li className={cn(MACHINE_GRID, TABLE_HEAD)}>
+      <span>Machine</span>
+      <span>Status</span>
+      <span className={STEP}>Address</span>
+      <span className={STEP}>Agent</span>
+      <span />
+    </li>
   )
 }
 
-/**
- * The machine's side of the link, when it refuses the controller: the key it
- * met is not the one its install line pinned.
- */
-function TrustNote({ link }: { link: LinkStatus | null }) {
-  if (link === null || link.error === null || link.state !== 'key-changed') return null
-  return <p className={ERROR_NOTE}>{link.error}</p>
+type Fact = { k: string; v: ReactNode; wide?: boolean }
+
+/** A machine's facts, label over value, as many to a line as the width takes. */
+function Facts({ facts }: { facts: Fact[] }) {
+  return (
+    <dl className="m-0 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-x-8 gap-y-4 border-hairline border-t px-5 py-5">
+      {facts.map((f) => (
+        <div
+          key={f.k}
+          className={cn('flex min-w-0 flex-col gap-1', f.wide === true && 'col-span-full')}
+        >
+          <dt className="text-[0.72rem] text-muted-foreground">{f.k}</dt>
+          <dd className="m-0 min-w-0 text-[0.8125rem]">{f.v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
-/** One decided machine: the head, the facts, the decision, and — once approved — the policy. */
-export function MachineSection({
+/** The summary line of a row: a link that opens or closes it, stretched over the line. */
+function Summary({
+  id,
+  open,
+  toggles,
+  name,
+  sub,
+  os,
+  status,
+  address,
+  agent,
+}: {
+  id: string
+  open: boolean
+  /** False for a row that is always open. */
+  toggles: boolean
+  name: string
+  sub: ReactNode
+  os: string
+  status: ReactNode
+  address: string | null
+  agent: string | null
+}) {
+  const title = (
+    <span className="flex min-w-0 items-center gap-2.5">
+      <OsMark os={os} />
+      <span className="flex min-w-0 flex-col">
+        <span className={CELL_NAME}>{name}</span>
+        <span className={CELL_SUB}>{sub}</span>
+      </span>
+    </span>
+  )
+  return (
+    <div
+      className={cn(
+        MACHINE_GRID,
+        'relative min-h-[3.75rem] py-2.5 text-[0.8125rem]',
+        toggles && TABLE_ROW_LINK,
+      )}
+    >
+      {toggles ? (
+        <Link
+          to="/settings"
+          search={open ? { tab: 'machines' } : { tab: 'machines', node: id }}
+          replace
+          resetScroll={false}
+          aria-expanded={open}
+          className={cn(TABLE_LINK, 'min-w-0')}
+        >
+          {title}
+        </Link>
+      ) : (
+        title
+      )}
+      <span className="min-w-0">{status}</span>
+      <span className={cn(CELL_MONO, STEP)}>{address ?? '—'}</span>
+      <span className={cn(CELL_MONO, STEP)}>{agent ?? '—'}</span>
+      <span className="flex justify-end text-muted-foreground">
+        {toggles && (
+          <ChevronRightIcon
+            aria-hidden="true"
+            className={cn('size-4 transition-transform duration-150', open && 'rotate-90')}
+          />
+        )}
+      </span>
+    </div>
+  )
+}
+
+/** One decided machine: the row, and — open — its facts, the decision and the policy. */
+export function MachineRow({
   m,
   lanDomain,
+  open,
   askSantree,
 }: {
   m: Machine
   lanDomain: string
+  open: boolean
   /** The page was opened to turn santree on for this machine. */
   askSantree: boolean
 }) {
   const n = m.node
   if (n === null) return null
   const s = m.status
-  const mark = osMark(n.os)
   const edition = s?.os_name || (n.os ? n.os.charAt(0).toUpperCase() + n.os.slice(1) : 'unknown OS')
   const version = s?.os_version ?? ''
   const arch = s?.arch || n.arch
-  const v = verdict(m)
+  const agent = s?.version ?? n.agentVersion
 
-  const facts = [
-    { k: 'Agent', v: <Mono>{s?.version ?? n.agentVersion}</Mono> },
+  const facts: Fact[] = [
     ...(s?.cpu ? [{ k: 'Processor', v: <Mono>{s.cpu}</Mono> }] : []),
     ...(s?.memory_bytes != null ? [{ k: 'Memory', v: <Mono>{bytes(s.memory_bytes)}</Mono> }] : []),
     {
       k: 'Machine up',
       v: <Mono>{s?.os_uptime_secs == null ? '—' : duration(s.os_uptime_secs)}</Mono>,
     },
-    { k: 'Claude', v: <ClaudeCell m={m} /> },
+    { k: 'Agent', v: <Mono>{agent}</Mono> },
     {
       k: 'Updates',
       v:
@@ -202,69 +189,69 @@ export function MachineSection({
       v: n.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{n.lanIp}</Mono>,
     },
     ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
+    { k: 'Claude', v: <ClaudeCell m={m} />, wide: true },
     ...(s?.controller?.tunnel != null
-      ? [{ k: 'Tunnel', v: <TunnelCell t={s.controller.tunnel} /> }]
+      ? [{ k: 'Tunnel', v: <TunnelCell t={s.controller.tunnel} />, wide: true }]
       : []),
     ...(s?.controller != null
-      ? [{ k: 'Its key', v: <Mono>{s.controller.fingerprint}</Mono> }]
+      ? [{ k: 'Its key', v: <Mono>{s.controller.fingerprint}</Mono>, wide: true }]
       : []),
     ...(s?.controller?.rotated != null
-      ? [{ k: 'Controller key', v: <span className={ASIDE}>{s.controller.rotated}</span> }]
+      ? [
+          {
+            k: 'Controller key',
+            v: <span className={ASIDE}>{s.controller.rotated}</span>,
+            wide: true,
+          },
+        ]
       : []),
   ]
 
   return (
-    <Section
-      title={n.name}
-      icon={
-        mark === null ? (
-          <MonitorSmartphoneIcon />
-        ) : (
-          <img
-            src={mark.src}
-            alt=""
-            width={20}
-            height={20}
-            className={cn('size-5 flex-none object-contain', mark.invert && 'dark:invert')}
-          />
-        )
-      }
-      description={
-        <span className="inline-flex flex-wrap items-center gap-2">
-          <Chip tone={v.tone}>{v.chip}</Chip>
-          {updateBadges(s).map((b) => (
-            <span key={b.chip} title={b.title}>
-              <Chip tone={b.tone}>{b.chip}</Chip>
-            </span>
-          ))}
-          <span>
+    <li className={cn(TABLE_ROW, 'block min-h-0 py-0')}>
+      <Summary
+        id={n.id}
+        open={open}
+        toggles
+        name={n.name}
+        sub={
+          <>
             {edition}
             {version !== '' && ` · ${version}`}
             {arch !== '' && ` · ${arch}`}
-          </span>
-        </span>
-      }
-      rows={facts}
-    >
-      {s?.hold_error != null && <p className={ERROR_NOTE}>The hold failed: {s.hold_error}</p>}
-      <TrustNote link={s?.controller ?? null} />
-      <Decision m={m} />
-      {n.state === 'approved' && (
-        <Policy
-          n={n}
-          shape={m.shape}
-          lanDomain={lanDomain}
-          os={edition}
-          agentVersion={s?.version ?? n.agentVersion}
-          askSantree={askSantree}
-        />
+          </>
+        }
+        os={n.os}
+        status={<StatusCell m={m} />}
+        address={n.lanIp}
+        agent={agent}
+      />
+      {open && (
+        <div className="cursor-auto">
+          <Facts facts={facts} />
+          <Band>
+            {s?.hold_error != null && <p className={ERROR_NOTE}>The hold failed: {s.hold_error}</p>}
+            <TrustNote link={s?.controller ?? null} />
+            <Decision m={m} />
+          </Band>
+          {n.state === 'approved' && (
+            <Policy
+              n={n}
+              shape={m.shape}
+              lanDomain={lanDomain}
+              os={edition}
+              agentVersion={agent}
+              askSantree={askSantree}
+            />
+          )}
+        </div>
       )}
-    </Section>
+    </li>
   )
 }
 
 /** A key waiting at the controller: what it says it is, and the two fingerprints to compare. */
-export function PendingSection({
+export function PendingRow({
   m,
   controllerFingerprint,
 }: {
@@ -273,55 +260,51 @@ export function PendingSection({
 }) {
   const p = m.pending
   if (p === null) return null
-  const mark = osMark(p.os ?? '')
   return (
-    <Section
-      title={p.hostname ?? p.id}
-      icon={
-        mark === null ? (
-          <MonitorSmartphoneIcon />
-        ) : (
-          <img
-            src={mark.src}
-            alt=""
-            width={20}
-            height={20}
-            className={cn('size-5 flex-none object-contain', mark.invert && 'dark:invert')}
-          />
-        )
-      }
-      description={
-        <span className="inline-flex flex-wrap items-center gap-2">
-          <Chip tone="warn">wants to join</Chip>
-          <span>
+    <li className={cn(TABLE_ROW, 'block min-h-0 py-0')}>
+      <Summary
+        id={p.id}
+        open
+        toggles={false}
+        name={p.hostname ?? p.id}
+        sub={
+          <>
             {p.os ?? 'unknown OS'}
             {p.arch !== null && ` · ${p.arch}`}
-            {p.agent_version !== null && ` · agent ${p.agent_version}`}
-          </span>
-        </span>
-      }
-      rows={[
-        { k: 'Its key', v: <Mono>{p.fingerprint}</Mono> },
-        {
-          k: 'Controller key',
-          v:
-            controllerFingerprint === null ? (
-              <span className={ASIDE}>the controller did not say</span>
-            ) : (
-              <Mono>{controllerFingerprint}</Mono>
-            ),
-        },
-        {
-          k: 'Address',
-          v: p.lan_ip === null ? <span className={ASIDE}>—</span> : <Mono>{p.lan_ip}</Mono>,
-        },
-      ]}
-    >
-      <p className={NOTE_SHOWN}>
-        The machine's tray and status page show both keys. Approve only if they match what it shows:
-        its own, and the controller's it trusts.
-      </p>
-      <Decision m={m} />
-    </Section>
+          </>
+        }
+        os={p.os ?? ''}
+        status={<Chip tone="warn">wants to join</Chip>}
+        address={p.lan_ip}
+        agent={p.agent_version}
+      />
+      <Facts
+        facts={[
+          { k: 'Its key', v: <Mono>{p.fingerprint}</Mono>, wide: true },
+          {
+            k: 'Controller key',
+            v:
+              controllerFingerprint === null ? (
+                <span className={ASIDE}>the controller did not say</span>
+              ) : (
+                <Mono>{controllerFingerprint}</Mono>
+              ),
+            wide: true,
+          },
+          {
+            k: 'Address',
+            v: p.lan_ip === null ? <span className={ASIDE}>—</span> : <Mono>{p.lan_ip}</Mono>,
+          },
+          ...(p.agent_version !== null ? [{ k: 'Agent', v: <Mono>{p.agent_version}</Mono> }] : []),
+        ]}
+      />
+      <Band>
+        <p className={NOTE_SHOWN}>
+          The machine's tray and status page show both keys. Approve only if they match what it
+          shows: its own, and the controller's it trusts.
+        </p>
+        <Decision m={m} />
+      </Band>
+    </li>
   )
 }

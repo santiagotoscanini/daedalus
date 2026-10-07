@@ -103,8 +103,17 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
             key={`${drive.name}-${String(i)}`}
             title={drive.bus === null ? `Drive ${String(i + 1)}` : drive.bus.toUpperCase()}
             icon={drive.bus === 'nvme' ? '⚡' : '▦'}
-            span={4}
-            aside={<Chip tone={h.tone}>{h.label}</Chip>}
+            // One drive takes two thirds and sits beside how it is checked; two
+            // share the row; three or more are thirds.
+            span={t.drives.length === 1 ? 8 : t.drives.length === 2 ? 6 : 4}
+            // Healthy is a quiet word; only a verdict that differs is a chip.
+            aside={
+              h.tone === 'ok' ? (
+                <span className={NOTE}>{h.label}</span>
+              ) : (
+                <Chip tone={h.tone}>{h.label}</Chip>
+              )
+            }
           >
             <div className="flex min-w-0 flex-col items-start gap-1 pb-1">
               <strong className={DISK_MODEL}>{drive.name || '?'}</strong>
@@ -165,28 +174,9 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
         )
       })}
 
-      {(loose.length > 0 || t.drives.length === 0) && (
-        <Board
-          title={t.drives.length === 0 ? 'Volumes' : 'Other volumes'}
-          icon="▦"
-          span={12}
-          aside={<span className={NOTE}>{num(loose.length)} mounted</span>}
-        >
-          {loose.length === 0 ? (
-            <p className={EMPTY}>No volumes reported.</p>
-          ) : (
-            <VolumeRows volumes={loose} />
-          )}
-          <p className={t.drives.length === 0 ? CAPTION : FOOT}>
-            {t.drives.length === 0
-              ? 'What the OS mounts, without the drives behind them: the agent reads the physical drives every ten minutes and has reported none.'
-              : 'Mounted volumes the agent could not place on a drive above — network shares, disk images, and anything the OS mounts without a physical device.'}
-          </p>
-        </Board>
-      )}
-
-      <Board title="How these are checked" icon="✓" span={12}>
+      <Board title="How these are checked" icon="✓" span={t.drives.length === 1 ? 4 : 12}>
         <Facts
+          list={t.drives.length === 1}
           rows={
             node.os === 'windows'
               ? [
@@ -213,6 +203,26 @@ export function NodeDisksView({ d }: { d: NodeSystemData }) {
             : 'Apple exposes whether SMART is verified and nothing behind it. Temperature, hours and wear would need smartmontools installed on the machine, which the agent does not do; if that is ever wanted, it is a policy switch on Settings › Machines, not a change here.'}
         </p>
       </Board>
+
+      {(loose.length > 0 || t.drives.length === 0) && (
+        <Board
+          title={t.drives.length === 0 ? 'Volumes' : 'Other volumes'}
+          icon="▦"
+          span={12}
+          aside={<span className={NOTE}>{num(loose.length)} mounted</span>}
+        >
+          {loose.length === 0 ? (
+            <p className={EMPTY}>No volumes reported.</p>
+          ) : (
+            <VolumeRows volumes={loose} />
+          )}
+          <p className={t.drives.length === 0 ? CAPTION : FOOT}>
+            {t.drives.length === 0
+              ? 'What the OS mounts, without the drives behind them: the agent reads the physical drives every ten minutes and has reported none.'
+              : 'Mounted volumes the agent could not place on a drive above — network shares, disk images, and anything the OS mounts without a physical device.'}
+          </p>
+        </Board>
+      )}
 
       <NotReadable t={t} />
     </BoardGrid>

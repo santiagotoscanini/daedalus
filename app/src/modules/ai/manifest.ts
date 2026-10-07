@@ -7,19 +7,19 @@ export const manifest = {
   order: 10,
   section: 'Services',
   // Shaped to Providers, the tab that opens by default: the chain across
-  // the top, then the picked machine's Lemonade, its loaded models and catalog.
-  boardSpans: [12, 12, 8, 4, 12],
+  // the top, then the picked machine's Lemonade, its GPU and its model table.
+  boardSpans: [12, 12, 12, 12],
   // Three tabs in the order a prompt travels backwards: where the weights
   // are, the gateway in front of them, the callers. Providers has no
   // ServiceHead and no dot — its subject is several machines, drawn from
   // its own picker; the other two are services on this box.
   tabs: [
-    { id: 'providers', label: 'Providers', boardSpans: [12, 12, 8, 4, 12], head: false },
+    { id: 'providers', label: 'Providers', boardSpans: [12, 12, 12, 12], head: false },
     {
       id: 'gateway',
       label: 'Gateway',
       probe: 'litellm',
-      boardSpans: [8, 4, 4, 8],
+      boardSpans: [8, 4, 12, 12],
       nix: 'litellm',
     },
     // Shown while either caller on this box is; the apps that hold a key
@@ -27,7 +27,7 @@ export const manifest = {
     {
       id: 'consumers',
       label: 'Consumers',
-      boardSpans: [6, 6, 12],
+      boardSpans: [12, 12, 12],
       head: false,
       nix: ['open-webui', 'n8n'],
     },

@@ -4,7 +4,7 @@ import type { ComponentType } from 'react'
 import { cn } from '../../lib/cn'
 import { PRESETS, type Scheme, type ThemeChoice, type ThemePreset } from '../../lib/theme'
 import { SEGMENT_ITEM, SEGMENT_ITEM_ON, SEGMENT_TRACK } from '../tokens'
-import { NOTE, Section } from './shared'
+import { NOTE, SECTIONS, Section } from './shared'
 
 const SCHEME_OPTIONS: readonly {
   id: Scheme
@@ -31,7 +31,7 @@ export function Appearance({
     // `aria-busy` rather than disabling the controls while a save is in
     // flight: the change has already been applied to the page, so a
     // second click is a new choice, not a duplicate submission.
-    <div className="flex flex-col gap-5" aria-busy={saving}>
+    <div className={SECTIONS} aria-busy={saving}>
       <Section title="Colour scheme">
         {/* One of three: the segmented control every "one of these" uses. */}
         <div className={cn(SEGMENT_TRACK, 'self-start')}>
@@ -124,7 +124,7 @@ function PresetCard({
         'flex cursor-pointer flex-col items-start gap-3 rounded-xl border border-hairline bg-foreground/[0.025] p-4 text-left',
         'shadow-[inset_0_1px_0_var(--hairline-hi)] transition-[background-color,box-shadow] duration-150',
         FOCUS,
-        selected ? 'bg-foreground/[0.06] ring-2 ring-primary/60' : 'hover:bg-foreground/[0.05]',
+        selected ? 'bg-foreground/[0.06] ring-1 ring-foreground/30' : 'hover:bg-foreground/[0.05]',
       )}
     >
       <span className="flex w-full items-center gap-2">

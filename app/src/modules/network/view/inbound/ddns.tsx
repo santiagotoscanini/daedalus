@@ -2,7 +2,9 @@ import { LogBoard } from '../../../../components/logs'
 import { useNow } from '../../../../components/poll'
 import { Changelog } from '../../../../components/release-notes'
 import { LinkRow, ServiceHead } from '../../../../components/service-head'
-import { Board, BoardGrid, Chip, Measures, Pulse } from '../../../../components/viz'
+import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../../../../components/table'
+import { TableSection } from '../../../../components/table-section'
+import { Board, BoardGrid, Measures, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { DASH, localDay, num, until } from '../../../../lib/format'
 import { useSite } from '../../../../lib/site-context'
@@ -66,7 +68,7 @@ export function DdnsView({ d }: { d: Inbound['ddns'] }) {
 
         <TheAddressOverTimeBoard f={f} />
 
-        <Changelog gap={d.gap} span={6} />
+        <Changelog gap={d.gap} />
 
         <DdclientLogsBoard f={f} />
       </BoardGrid>
@@ -169,7 +171,9 @@ function WhatNeedsItBoard({ f }: { f: DdnsFacts }) {
         <ul className={ROWS}>
           {d.needs.map((n) => (
             <li key={n.name} className={ROW} title={n.note}>
-              <Chip tone="info">{n.proto}</Chip>
+              <span className="w-8 flex-none font-mono text-[0.72rem] text-muted-foreground">
+                {n.proto}
+              </span>
               <span className={MAIN}>{n.name}</span>
               <span className={cn(MONO, SIDE)}>{n.port}</span>
             </li>
@@ -187,29 +191,46 @@ function WhatNeedsItBoard({ f }: { f: DdnsFacts }) {
   )
 }
 
+/** Address · held for · since. */
+const ADDR_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1fr)_minmax(6rem,0.6fr)_7rem]'
+
 function TheAddressOverTimeBoard({ f }: { f: DdnsFacts }) {
   const { d } = f
   return (
-    <Board
-      title="The address, over time"
-      icon="clock"
-      span={6}
-      aside={<Countdown at={d.nextRunAt} />}
-    >
-      {d.history.length === 0 ? (
-        <p className={EMPTY}>no change recorded in the log window</p>
-      ) : (
-        <ul className={ROWS}>
-          {d.history.map((h) => (
-            <li key={h.at} className={ROW}>
-              <span className={cn(MAIN, MONO)}>{h.ip}</span>
-              <span className={SIDE}>
-                {h.heldDays === null ? 'current' : `held ${String(h.heldDays)}d`} · {localDay(h.at)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <TableSection title="The address, over time" aside={<Countdown at={d.nextRunAt} />}>
+      <ul className={TABLE} aria-label="Address history">
+        <li className={cn(ADDR_GRID, TABLE_HEAD)}>
+          <span>Address</span>
+          <span>Held for</span>
+          <span className="text-right">Since</span>
+        </li>
+        {d.history.length === 0 && (
+          <li className={TABLE_EMPTY}>no change recorded in the log window</li>
+        )}
+        {/* The current address carries the ink; the ones it replaced are
+            history and recede. */}
+        {d.history.map((h) => (
+          <li key={h.at} className={cn(ADDR_GRID, TABLE_ROW)}>
+            <span
+              className={cn(
+                'truncate font-mono text-[0.8rem]',
+                h.heldDays === null ? 'text-foreground [font-weight:560]' : 'text-subdued',
+              )}
+            >
+              {h.ip}
+            </span>
+            <span className={CELL_QUIET}>
+              {h.heldDays === null ? (
+                <span className="text-foreground">current</span>
+              ) : (
+                `${String(h.heldDays)}d`
+              )}
+            </span>
+            <span className={cn(CELL_QUIET, 'text-right')}>{localDay(h.at)}</span>
+          </li>
+        ))}
+      </ul>
       <p className={FOOT}>
         {/* The pattern is the useful part: the changes and the failures
             are the same event seen twice, which is worth saying because
@@ -220,7 +241,7 @@ function TheAddressOverTimeBoard({ f }: { f: DdnsFacts }) {
         the same hour, because the connection is down for the seconds it takes. Thirty days is the
         whole window. That is how long Loki keeps a line, not a choice made here.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 

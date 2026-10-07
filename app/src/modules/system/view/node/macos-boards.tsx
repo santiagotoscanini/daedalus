@@ -113,7 +113,7 @@ export function AppleShipsBoard({ f }: { f: NodeMacosFacts }) {
             .
           </>
         ) : m.error !== null ? (
-          <>{m.error}</>
+          m.error
         ) : (
           <>
             From Apple&rsquo;s own release table, which lists every macOS by name and date, its

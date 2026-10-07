@@ -9,20 +9,10 @@ import { Ago } from '../ago'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { ServiceHead } from '../service-head'
-import {
-  CAPTION,
-  EMPTY,
-  FOOT,
-  LIST,
-  MONO,
-  MONO_FACE,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-} from '../tokens'
+import { CELL_NAME, CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../table'
+import { TableSection } from '../table-section'
+import { CAPTION, EMPTY, FOOT, MONO, MONO_FACE, NOTE } from '../tokens'
 import { Board, BoardGrid, Chip, Stat, StatStrip } from '../viz'
-import { NARROW_HIDE } from './shared'
 import { issueSummary, shotterVerdict } from './verdicts'
 
 /* The strip holds one run's viewport slices — consecutive crops of a single
@@ -130,32 +120,38 @@ export function ShotterView({ data }: { data: ClaudeData }) {
         />
       </StatStrip>
 
-      <BoardGrid>
-        <LatestRunBoard f={f} />
+      {/* The newest run beside the version story — two short boards of one
+          height — then the ledger as a table, full width. */}
+      <div className="flex flex-col gap-10">
+        <BoardGrid>
+          <LatestRunBoard f={f} />
+
+          <Changelog
+            gap={data.shotterGap}
+            span={8}
+            aside={<span className={NOTE}>microsoft/playwright</span>}
+            foot={
+              <>
+                <p className={FOOT}>
+                  The one dependency under <span className={MONO}>shot</span> — Chromium arrives
+                  inside Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a
+                  paired edit in <span className={MONO}>stacks/shotter/shotter.nix</span>:{' '}
+                  <span className={MONO}>playwrightVersion</span> and{' '}
+                  <span className={MONO}>playwrightDigest</span> together (Playwright refuses
+                  browsers from a different revision), then a rebuild rebuilds the image.
+                </p>
+                {verdict.note !== '' && <p className={CAPTION}>{verdict.note}</p>}
+              </>
+            }
+          />
+        </BoardGrid>
 
         <RunsBoard f={f} />
 
-        <Changelog
-          gap={data.shotterGap}
-          span={12}
-          aside={<span className={NOTE}>microsoft/playwright</span>}
-          foot={
-            <>
-              <p className={FOOT}>
-                The one dependency under <span className={MONO}>shot</span> — Chromium arrives
-                inside Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a
-                paired edit in <span className={MONO}>stacks/shotter/shotter.nix</span>:{' '}
-                <span className={MONO}>playwrightVersion</span> and{' '}
-                <span className={MONO}>playwrightDigest</span> together (Playwright refuses browsers
-                from a different revision), then a rebuild rebuilds the image.
-              </p>
-              {verdict.note !== '' && <p className={CAPTION}>{verdict.note}</p>}
-            </>
-          }
-        />
-
-        <ImageBuildLogsBoard />
-      </BoardGrid>
+        <BoardGrid>
+          <ImageBuildLogsBoard />
+        </BoardGrid>
+      </div>
     </>
   )
 }
@@ -213,39 +209,51 @@ function LatestRunBoard({ f }: { f: ShotterFacts }) {
   )
 }
 
+/* One column grid for the ledger: run · events · shots · took · when · verdict.
+   A clean run is the norm and its verdict a quiet word; only a run that
+   differs — issues underneath, or the runner dying — takes a chip. */
+const RUN_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_4rem_4.5rem_6rem_4.5rem]',
+  '@max-[48rem]/table:grid-cols-[minmax(0,1fr)_4rem_6rem_4.5rem]',
+)
+const RUN_WIDE = '@max-[48rem]/table:hidden'
+const N = 'text-right tabular-nums'
+
 function RunsBoard({ f }: { f: ShotterFacts }) {
   const { sh } = f
   return (
-    <Board
+    <TableSection
       title="Runs"
-      icon="logs"
-      span={8}
-      aside={
-        <span className={NOTE}>
-          {sh.runs.length === 0 ? 'none yet' : `last ${num(sh.runs.length)}, newest first`}
-        </span>
-      }
+      aside={sh.runs.length === 0 ? 'none yet' : `last ${num(sh.runs.length)}, newest first`}
     >
-      {sh.runs.length === 0 ? (
-        <p className={EMPTY}>
-          Nothing in the ledger. <span className={MONO}>shot quick &lt;url&gt;</span> writes the
-          first line.
-        </p>
-      ) : (
-        <ul className={LIST}>
-          {sh.runs.map((r) => (
-            <ShotRunRow key={r.id} run={r} />
-          ))}
-        </ul>
-      )}
+      <ul className={TABLE}>
+        <li aria-hidden="true" className={cn(RUN_GRID, TABLE_HEAD)}>
+          <span>Run</span>
+          <span className={RUN_WIDE}>Underneath</span>
+          <span className={N}>Shots</span>
+          <span className={cn(N, RUN_WIDE)}>Took</span>
+          <span className={N}>When</span>
+          <span className="text-right">Verdict</span>
+        </li>
+        {sh.runs.length === 0 && (
+          <li className={TABLE_EMPTY}>
+            Nothing in the ledger. <span className={MONO}>shot quick &lt;url&gt;</span> writes the
+            first line.
+          </li>
+        )}
+        {sh.runs.map((r) => (
+          <ShotRunRow key={r.id} run={r} />
+        ))}
+      </ul>
       <p className={FOOT}>
         The append-only ledger, one line per <span className={MONO}>shot</span> invocation. The
-        verdict chip reads the run&rsquo;s event counters, not its screenshots — events outrank
-        pixels, because a page can render beautifully over a broken deploy. <b>fail</b> is the
-        runner itself dying; <b>issues</b> is a page that answered with console errors, failed
-        requests or 4xx/5xx underneath.
+        verdict reads the run&rsquo;s event counters, not its screenshots — events outrank pixels,
+        because a page can render beautifully over a broken deploy. <b>fail</b> is the runner itself
+        dying; <b>issues</b> is a page that answered with console errors, failed requests or 4xx/5xx
+        underneath.
       </p>
-    </Board>
+    </TableSection>
   )
 }
 
@@ -276,19 +284,25 @@ function ImageBuildLogsBoard() {
 function ShotRunRow({ run }: { run: ShotRun }) {
   const bad = issueSummary(run.counts)
   return (
-    <li className={ROW} title={run.id}>
-      <Chip tone={!run.ok ? 'bad' : bad === null ? 'ok' : 'warn'}>
-        {!run.ok ? 'fail' : bad === null ? 'clean' : 'issues'}
-      </Chip>
-      <span className={ROW_MAIN}>{run.label === '' ? run.id : run.label}</span>
-      {bad !== null && <span className={ROW_SIDE}>{bad}</span>}
-      <span className={ROW_SIDE}>
-        {num(run.shots)} shot{run.shots === 1 ? '' : 's'}
+    <li className={cn(RUN_GRID, TABLE_ROW)} title={run.id}>
+      <span className={CELL_NAME}>{run.label === '' ? run.id : run.label}</span>
+      <span className={cn(CELL_QUIET, RUN_WIDE, 'truncate', bad !== null && 'text-subdued')}>
+        {bad ?? DASH}
       </span>
-      <span className={cn(ROW_SIDE, NARROW_HIDE)}>
+      <span className={cn(CELL_QUIET, N)}>{num(run.shots)}</span>
+      <span className={cn(CELL_QUIET, N, RUN_WIDE)}>
         {run.durationMs === null ? DASH : ms(run.durationMs)}
       </span>
-      <span className={ROW_SIDE}>{run.at === null ? DASH : <Ago at={run.at} />}</span>
+      <span className={cn(CELL_QUIET, N)}>{run.at === null ? DASH : <Ago at={run.at} />}</span>
+      <span className="flex justify-end">
+        {!run.ok ? (
+          <Chip tone="bad">fail</Chip>
+        ) : bad === null ? (
+          <span className={CELL_QUIET}>clean</span>
+        ) : (
+          <Chip tone="warn">issues</Chip>
+        )}
+      </span>
     </li>
   )
 }

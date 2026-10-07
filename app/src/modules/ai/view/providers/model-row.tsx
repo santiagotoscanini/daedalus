@@ -1,19 +1,19 @@
-// One model inside a kind: the one in the slot, the alternatives, and the
-// residency verbs that move between them.
+// One model of a kind, as a row of the model table: the one in the slot or an
+// alternative, and the residency verb that moves between them.
 
 import { useRouter } from '@tanstack/react-router'
-import { MONO } from '../../../../components/tokens'
 import { Button } from '../../../../components/ui/button'
 import { useVerbRequest } from '../../../../components/verb-request'
-import { Chip, Measures, Pulse } from '../../../../components/viz'
+import { Chip, Pulse } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
-import { num } from '../../../../lib/format'
+import { compact, num } from '../../../../lib/format'
 import {
   fetchProviderActionFn,
   loadProviderModelFn,
   unloadProviderModelFn,
 } from '../../../../server/providers'
 import type { CatalogEntry, ProviderMachine } from '../../data/providers'
+import { CELL_MONO, CELL_NAME, CELL_QUIET, CELL_SUB, TABLE_ROW } from '../shared'
 
 /** How long a verb may take on the machine: a cold 12B model is read off a disk and pushed across PCIe. */
 const OUTCOME_WITHIN_MS = 150_000
@@ -30,97 +30,158 @@ function useResidency(m: ProviderMachine) {
   })
 }
 
-/* The model in the slot. Given real weight — it is the answer to the kind's
-   question, and everything below it is an alternative. */
-const HERO = 'group/hero rounded-xl border border-hairline bg-foreground/[0.03] px-3 py-2.5'
-const HERO_NAME = 'min-w-0 truncate text-[0.85rem] font-semibold text-foreground'
+/* One grid for the head and every row. The figures step away first (what a
+   model managed), then the gateway name and size, leaving name and verb. */
+export const MODEL_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,2.4fr)_minmax(0,1.5fr)_4rem_3.5rem_6.5rem_4.5rem_4rem_5.5rem]',
+  '@max-[62rem]/table:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_4rem_3.5rem_5.5rem]',
+  '@max-[40rem]/table:grid-cols-[minmax(0,1fr)_5.5rem]',
+)
+/** A column that steps away under 62rem. */
+export const NARROW = '@max-[62rem]/table:hidden'
+/** A column that steps away under 40rem. */
+export const NARROWEST = '@max-[40rem]/table:hidden'
 
-/* One of the other models of this kind — one click from the slot. */
-const ALT =
-  'group/alt flex min-w-0 items-center gap-2.5 rounded-lg px-3 py-1 transition-colors hover:bg-foreground/[0.05] max-[46rem]:flex-wrap'
-const ALT_NAME = 'min-w-0 truncate text-[0.8rem] text-subdued'
-const ALT_META =
-  'ml-auto flex items-baseline gap-x-3.5 gap-y-0 whitespace-nowrap text-[0.72rem] text-muted-foreground tabular-nums max-[46rem]:ml-0'
+const NUM = cn(CELL_QUIET, 'text-right')
 
-/* The row's button: quiet until wanted. The row is information first and an
-   action second, and a column of always-lit buttons would compete with the
-   model that is actually running. */
+/* The row's verb: quiet until the row is wanted. The row is information first
+   and an action second, and a column of always-lit buttons would compete with
+   the model that is actually running. */
 const QUIET_BTN =
-  'h-auto flex-none px-2 py-0.5 text-[0.72rem] text-subdued opacity-45 transition-opacity duration-[0.12s] focus-visible:opacity-100'
+  'ml-auto h-7 flex-none px-2.5 text-[0.75rem] text-subdued opacity-50 transition-opacity duration-[0.12s] group-hover/row:opacity-100 focus-visible:opacity-100'
 
-/** What the gateway calls this model, if it carries it at all. */
+/**
+ * What the gateway calls this model, if it carries it at all.
+ *
+ * The column is headed "Gateway name", so a routed model is just its name in
+ * quiet mono — routed is the norm. Only the ways a model is NOT routed get words.
+ */
 export function GatewayName({ model }: { model: CatalogEntry }) {
   if (model.routed !== null) {
-    return <span className={`${MONO} text-success`}>routed as {model.routed}</span>
+    return (
+      <span className={CELL_MONO} title={`routed as ${model.routed}`}>
+        {model.routed}
+      </span>
+    )
   }
-  if (!model.downloaded) return <span>not on disk</span>
-  if (model.offerable) return <span className={MONO}>{model.alias} · awaiting the sync</span>
-  return <span>not offered</span>
+  if (!model.downloaded) return <span className={CELL_QUIET}>not on disk</span>
+  if (model.offerable) {
+    return (
+      <span className={cn(CELL_MONO, 'text-info')} title="offered, not yet written by the sync">
+        {model.alias} · awaiting the sync
+      </span>
+    )
+  }
+  return <span className={CELL_QUIET}>not offered</span>
 }
 
-/** The model in the slot: what it is, and what it has done. */
-export function ModelHero({ model, m }: { model: CatalogEntry; m: ProviderMachine }) {
-  const f = model.figures
-  const some = (n: number | null | undefined) => n != null && n > 0
-  // Only the figures that say something. Every one of these is emitted for
-  // every loaded model, so an embedding model that has never been asked for
-  // a token still reports 0.0 tok/s and 0 ms to first token — and a TTS
-  // model would report those forever, because they do not mean anything for
-  // it. Rendered, that is a row of noughts under every kind, which reads as
-  // broken instrumentation rather than as an idle model. Zero is dropped
-  // rather than shown because each of these is cumulative-or-latest:
-  // nothing has happened yet, which is what an absent figure already says.
-  const stats =
-    f === null
-      ? []
-      : [
-          { k: 'Throughput', v: `${(f.tps ?? 0).toFixed(1)} tok/s`, on: some(f.tps) },
-          { k: 'First token', v: `${num(f.ttftMs)} ms`, on: some(f.ttftMs) },
-          { k: 'Requests', v: num(f.requests), on: some(f.requests) },
-          { k: 'Tokens out', v: num(f.outputTokens), on: some(f.outputTokens) },
-          { k: 'Tokens in', v: num(f.inputTokens), on: some(f.inputTokens) },
-        ].filter((x) => x.on)
-
+/**
+ * The runtime and what the slot holds it with, under the name.
+ *
+ * Muted text rather than a pill per fact: the recipe repeats down the table.
+ * Pinned is the exception — it changes what Switch has to do — so it alone is
+ * a chip.
+ */
+function Attributes({ model }: { model: CatalogEntry }) {
+  const parts = [
+    model.recipe,
+    model.loaded?.device ?? null,
+    model.loaded?.maxContext != null ? `${num(model.loaded.maxContext / 1024)}k ctx` : null,
+    model.supportsTools ? 'tools' : null,
+    model.supportsVision ? 'vision' : null,
+  ].filter((x): x is string => x !== null)
+  if (parts.length === 0 && model.loaded?.pinned !== true) return null
   return (
-    <div className={HERO}>
-      {/* Name and action on one line, attributes on the next: at this width
-          they cannot share a line without the name being truncated to
-          nothing, and the name is the part being identified. */}
-      <div className="flex min-w-0 items-center gap-2">
-        <Pulse on tone="accent" />
-        <span className={HERO_NAME}>{model.id}</span>
-        {m.manageable && <EvictButton model={model} m={m} />}
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-1">
-        {model.recipe !== null && <Chip tone="info">{model.recipe}</Chip>}
-        {model.loaded?.device != null && <Chip tone="ok">{model.loaded.device}</Chip>}
-        {model.loaded?.maxContext != null && (
-          <Chip>{num(model.loaded.maxContext / 1024)}k ctx</Chip>
-        )}
-        {model.sizeGb !== null && <Chip>{num(model.sizeGb, 1)} GB</Chip>}
-        {model.supportsTools && <Chip>tools</Chip>}
-        {model.supportsVision && <Chip>vision</Chip>}
-        {model.loaded?.pinned === true && <Chip tone="warn">pinned</Chip>}
-        <span className="ml-1 text-[0.72rem] text-muted-foreground">
-          <GatewayName model={model} />
-        </span>
-      </div>
-      {stats.length > 0 && (
-        <div className="mt-3">
-          <Measures items={stats} />
-        </div>
-      )}
-    </div>
+    <p className={cn(CELL_SUB, 'flex items-center gap-2')}>
+      <span className="truncate">{parts.join(' · ')}</span>
+      {model.loaded?.pinned === true && <Chip tone="warn">pinned</Chip>}
+    </p>
   )
 }
 
 /**
- * A model that is not in the slot, and the button that puts it there.
+ * One model.
  *
- * Shows what it managed last time it ran, which is the whole basis for
- * choosing between two models you already have on disk.
+ * The one in the slot carries the pulse and the primary ink; the others are a
+ * step quieter, one click from the slot. Every figure is the model's last
+ * reading — they survive an eviction — so the alternatives show what they
+ * managed last time, which is the whole basis for choosing between two models
+ * already on disk. A figure that is zero is blank: every one of these is
+ * emitted for every loaded model, so an embedding model never asked for a
+ * token reports 0.0 tok/s forever, and a row of noughts reads as broken
+ * instrumentation rather than an idle model.
  */
-export function ModelAlt({
+export function ModelRow({
+  model,
+  m,
+  replacing,
+}: {
+  model: CatalogEntry
+  m: ProviderMachine
+  /** The resident model this row would replace, or null for the resident row itself and an empty slot. */
+  replacing: CatalogEntry | null
+}) {
+  const resident = model.loaded !== null
+  const f = model.figures
+  const some = (n: number | null | undefined): n is number => n != null && n > 0
+  const tokens = (f?.inputTokens ?? 0) + (f?.outputTokens ?? 0)
+
+  return (
+    <li className={cn(MODEL_GRID, TABLE_ROW)}>
+      <div className="min-w-0">
+        <p className="m-0 flex min-w-0 items-center gap-2">
+          {resident ? (
+            <Pulse on tone="accent" />
+          ) : (
+            <span aria-hidden="true" className="size-[7px] flex-none" />
+          )}
+          <span
+            className={cn(CELL_NAME, !resident && 'text-subdued [font-weight:450]')}
+            title={model.id}
+          >
+            {model.id}
+          </span>
+        </p>
+        <div className="pl-[15px]">
+          <Attributes model={model} />
+        </div>
+      </div>
+      <span className="flex min-w-0 @max-[40rem]/table:hidden">
+        <GatewayName model={model} />
+      </span>
+      <span className={cn(NUM, '@max-[40rem]/table:hidden')}>
+        {model.sizeGb === null ? '' : num(model.sizeGb, 1)}
+      </span>
+      <span className={cn(NUM, '@max-[40rem]/table:hidden', resident && 'text-foreground')}>
+        {some(f?.tps) ? f.tps.toFixed(1) : ''}
+      </span>
+      <span className={cn(NUM, NARROW)}>{some(f?.ttftMs) ? num(f.ttftMs) : ''}</span>
+      <span className={cn(NUM, NARROW)}>{some(f?.requests) ? num(f.requests) : ''}</span>
+      <span
+        className={cn(NUM, NARROW)}
+        title={
+          tokens > 0
+            ? `${num(f?.inputTokens ?? 0)} in · ${num(f?.outputTokens ?? 0)} out`
+            : undefined
+        }
+      >
+        {tokens > 0 ? compact(tokens) : ''}
+      </span>
+      <span className="flex min-w-0 items-center justify-end gap-2">
+        {m.manageable &&
+          (resident ? (
+            <EvictButton model={model} m={m} />
+          ) : (
+            model.downloaded && <LoadButton model={model} m={m} replacing={replacing} />
+          ))}
+      </span>
+    </li>
+  )
+}
+
+/** Puts `model` in the slot, putting the incumbent down first. */
+function LoadButton({
   model,
   m,
   replacing,
@@ -135,61 +196,41 @@ export function ModelAlt({
       ? outcome.detail
       : null
   const verb = replacing === null ? 'Load' : 'Switch'
-
   return (
-    <li className={ALT}>
-      <span className={ALT_NAME} title={model.id}>
-        {model.id}
-      </span>
-      <span className={ALT_META}>
-        <GatewayName model={model} />
-        {model.sizeGb !== null && <span>{num(model.sizeGb, 1)} GB</span>}
-        {/* Its throughput last time it ran — the one number that actually
-            decides between two models you already have. Requests are
-            dropped here: they say how much you have used it, not how well
-            it works, and the row has no space for both. */}
-        {model.figures?.tps != null && model.figures.tps > 0 && (
-          <span>{model.figures.tps.toFixed(0)} tok/s</span>
-        )}
-      </span>
+    <>
       {error !== null && (
         <span className="text-[0.72rem] text-danger" title={error}>
           failed
         </span>
       )}
-      {m.manageable && model.downloaded && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn(QUIET_BTN, 'group-hover/alt:opacity-100')}
-          disabled={busy}
-          title={
-            replacing === null
-              ? `Load ${model.id}`
-              : `Put ${replacing.id} down and load ${model.id}`
-          }
-          onClick={() => {
-            start(() =>
-              loadProviderModelFn({
-                data: {
-                  machine: m.machine,
-                  kind: m.kind,
-                  model: model.id,
-                  replacing: replacing?.id ?? null,
-                  // Carry the incumbent's pinning forward rather than
-                  // silently changing whether the slot survives the next
-                  // squeeze.
-                  pinned: replacing?.loaded?.pinned ?? false,
-                },
-              }),
-            )
-          }}
-        >
-          {busy ? `${verb}ing…` : verb}
-        </Button>
-      )}
-    </li>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn(QUIET_BTN, (busy || error !== null) && 'opacity-100')}
+        disabled={busy}
+        title={
+          replacing === null ? `Load ${model.id}` : `Put ${replacing.id} down and load ${model.id}`
+        }
+        onClick={() => {
+          start(() =>
+            loadProviderModelFn({
+              data: {
+                machine: m.machine,
+                kind: m.kind,
+                model: model.id,
+                replacing: replacing?.id ?? null,
+                // Carry the incumbent's pinning forward rather than silently
+                // changing whether the slot survives the next squeeze.
+                pinned: replacing?.loaded?.pinned ?? false,
+              },
+            }),
+          )
+        }}
+      >
+        {busy ? `${verb}ing…` : verb}
+      </Button>
+    </>
   )
 }
 
@@ -202,14 +243,11 @@ export function ModelAlt({
 function EvictButton({ model, m }: { model: CatalogEntry; m: ProviderMachine }) {
   const { busy, start } = useResidency(m)
   return (
-    // Quieter still than Switch: a lit Evict button beside every resident
-    // model competed with the models themselves, and evicting is a thing
-    // you do occasionally rather than a thing you read.
     <Button
       type="button"
       variant="outline"
       size="sm"
-      className={cn(QUIET_BTN, 'ml-auto opacity-40 group-hover/hero:opacity-100')}
+      className={cn(QUIET_BTN, busy && 'opacity-100')}
       disabled={busy}
       title={`Unload ${model.id}, leaving this slot empty`}
       onClick={() => {

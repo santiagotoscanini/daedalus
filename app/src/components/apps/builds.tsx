@@ -8,14 +8,25 @@ import {
   sha7,
 } from '../../lib/build-display'
 import type { BuildState } from '../../lib/builds'
+import { cn } from '../../lib/cn'
 import { DASH, ms, since } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
 import { buildNowFn, fetchBuilds } from '../../server/builds'
 import { useLiveValue, useNow } from '../poll'
-import { EMPTY, FOOT } from '../tokens'
+import {
+  CELL_QUIET,
+  SECTION_NOTE,
+  SECTION_TITLE,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_LINK,
+  TABLE_ROW,
+  TABLE_ROW_LINK,
+} from '../table'
 import { Button } from '../ui/button'
 import { useAction } from '../use-action'
-import { Board, Chip } from '../viz'
+import { Chip } from '../viz'
 import { GHOST_BTN } from './shared'
 
 // Builds on this box, as the app pages show them: the board on Deployments,
@@ -46,9 +57,27 @@ export function requesterLabel(b: Pick<BuildSummary, 'requestedBy' | 'actor'>): 
   return b.actor ?? 'operator'
 }
 
-const ROW =
-  'grid grid-cols-[6.2rem_4.6rem_minmax(0,1fr)_5.2rem_6.5rem] items-baseline gap-x-3 border-hairline border-t px-1 py-2 text-[0.8rem] no-underline first:border-t-0 hover:bg-foreground/[0.05] hover:no-underline max-[40rem]:grid-cols-[6.2rem_4.6rem_minmax(0,1fr)]'
+/** State · commit · who asked · took · when. Two columns step away on a phone. */
+const BUILD_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[7rem_5rem_minmax(0,1fr)_5.5rem_5.5rem]',
+  '@max-[36rem]/table:grid-cols-[7rem_5rem_minmax(0,1fr)]',
+)
+const NARROW_HIDE = '@max-[36rem]/table:hidden'
 
+/** A build's state in a table cell: the norm (succeeded) is a quiet dot and
+    word; anything else keeps its tinted chip, so the exception carries the ink. */
+function BuildStateCell({ state }: { state: BuildState }) {
+  if (state !== 'succeeded') return <BuildStateChip state={state} />
+  return (
+    <span className="inline-flex items-center gap-2 text-[0.78rem] text-muted-foreground">
+      <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+      succeeded
+    </span>
+  )
+}
+
+/** The app's last ten box builds, as a table; a row opens its build page. */
 export function BuildsBoard({
   app,
   initial,
@@ -75,13 +104,19 @@ export function BuildsBoard({
   const refusal = !buildOnBox ? 'Box builds are off for this app.' : undefined
 
   return (
-    <Board
-      title="Builds"
-      span={12}
-      aside={<BuildNowButton app={app} disabled={refusal !== undefined} reason={refusal} />}
-    >
+    <>
+      <h2 className={cn(SECTION_TITLE, 'mt-0')}>
+        Builds
+        <span className="ml-auto">
+          <BuildNowButton app={app} disabled={refusal !== undefined} reason={refusal} />
+        </span>
+      </h2>
+      <p className={SECTION_NOTE}>
+        {buildOnBox ? 'Built on this box. ' : ''}One build runs at a time. A newer push replaces a
+        build still waiting in the queue rather than lining up behind it.
+      </p>
       {!buildOnBox && (
-        <p className="m-0 text-[0.82rem] text-subdued">
+        <p className="mt-0 mb-3 text-[0.82rem] text-subdued">
           Box builds are off for this app, so pushes build wherever the repo builds them today.{' '}
           <Link to="/apps/$name" params={{ name: app }} search={{ tab: 'settings' }}>
             Turn on Build on this box
@@ -90,55 +125,59 @@ export function BuildsBoard({
         </p>
       )}
       {buildOnBox && !linked && (
-        <p className="m-0 text-[0.82rem] text-subdued">
+        <p className="mt-0 mb-3 text-[0.82rem] text-subdued">
           Not linked to its GitHub repository yet. Build now or the next push links it through the
           installed App.
         </p>
       )}
 
-      {builds.length === 0 ? (
-        buildOnBox && <p className={EMPTY}>No builds yet.</p>
-      ) : (
-        <ol className="m-0 list-none p-0">
+      {(builds.length > 0 || buildOnBox) && (
+        <ul className={TABLE} aria-label="Builds">
+          <li className={cn(BUILD_GRID, TABLE_HEAD)}>
+            <span>State</span>
+            <span>Commit</span>
+            <span>Requested by</span>
+            <span className={cn('text-right', NARROW_HIDE)}>Took</span>
+            <span className={cn('text-right', NARROW_HIDE)}>Started</span>
+          </li>
+          {builds.length === 0 && <li className={TABLE_EMPTY}>No builds yet.</li>}
           {builds.map((b) => {
             // An open build's running time waits for the browser's clock.
             const took = isOpenBuild(b.state) && now === null ? null : buildDurationMs(b, now ?? 0)
             return (
-              <li key={b.id}>
+              <li
+                key={b.id}
+                className={cn(BUILD_GRID, TABLE_ROW, TABLE_ROW_LINK)}
+                title={b.error ?? b.phase}
+              >
+                <span>
+                  <BuildStateCell state={b.state} />
+                </span>
                 <Link
                   to="/apps/$name/builds/$id"
                   params={{ name: app, id: b.id }}
-                  className={ROW}
-                  title={b.error ?? b.phase}
+                  className={cn(TABLE_LINK, 'font-mono text-[0.78rem] text-foreground')}
                 >
-                  <span>
-                    <BuildStateChip state={b.state} />
-                  </span>
-                  <code className="text-foreground">{sha7(b.sha)}</code>
-                  <span className="min-w-0 truncate text-subdued">
-                    {requesterLabel(b)}
-                    {b.publish === 'candidate' && (
-                      <span className="text-muted-foreground"> · candidate</span>
-                    )}
-                  </span>
-                  <span className="text-right font-mono text-[0.75rem] text-muted-foreground max-[40rem]:hidden">
-                    {took === null || (isOpenBuild(b.state) && now === null) ? DASH : ms(took)}
-                  </span>
-                  <span className="text-right text-[0.75rem] text-muted-foreground max-[40rem]:hidden">
-                    {now === null ? DASH : since((now - Date.parse(b.createdAt)) / 1000)}
-                  </span>
+                  {sha7(b.sha)}
                 </Link>
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {requesterLabel(b)}
+                  {b.publish === 'candidate' && (
+                    <span className="text-foreground"> · candidate</span>
+                  )}
+                </span>
+                <span className={cn(CELL_QUIET, 'text-right', NARROW_HIDE)}>
+                  {took === null ? DASH : ms(took)}
+                </span>
+                <span className={cn(CELL_QUIET, 'text-right', NARROW_HIDE)}>
+                  {now === null ? DASH : since((now - Date.parse(b.createdAt)) / 1000)}
+                </span>
               </li>
             )
           })}
-        </ol>
+        </ul>
       )}
-
-      <p className={FOOT}>
-        One build runs at a time. A newer push replaces a build still waiting in the queue rather
-        than lining up behind it.
-      </p>
-    </Board>
+    </>
   )
 }
 

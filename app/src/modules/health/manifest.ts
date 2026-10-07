@@ -7,7 +7,7 @@ export const manifest = {
   order: 35,
   section: 'Services',
   // Shaped to Record, which opens by default.
-  boardSpans: [8, 4, 6, 6],
+  boardSpans: [12, 4, 4, 4],
   // A tab per subject, in the order a body is read: the record that holds
   // everything measured, then the three inputs to it — food in the house,
   // food eaten, training done.
@@ -24,7 +24,7 @@ export const manifest = {
       // and its library manager (the context gateway and the MCP server have
       // no webApp of their own).
       probes: ['getbased', 'getbased-relay', 'getbased-rag', 'getbased-library'],
-      boardSpans: [8, 4, 6, 6],
+      boardSpans: [12, 4, 4, 4],
       nix: 'getbased',
     },
     // Grocy and the MCP server that puts it on the gateway: one subject, so
@@ -33,16 +33,16 @@ export const manifest = {
       id: 'pantry',
       label: 'Pantry',
       probe: 'grocy',
-      boardSpans: [8, 4, 12],
+      boardSpans: [8, 4, 12, 12],
       nix: ['grocy', 'grocy-mcp'],
     },
     {
       id: 'nutrition',
       label: 'Nutrition',
-      boardSpans: [4, 4, 4],
+      boardSpans: [12, 12],
       dividerBefore: true,
       nix: 'yazio-mcp',
     },
-    { id: 'training', label: 'Training', boardSpans: [6, 6], nix: 'hevy-mcp' },
+    { id: 'training', label: 'Training', boardSpans: [12, 12], nix: 'hevy-mcp' },
   ],
 } as const satisfies ModuleManifest

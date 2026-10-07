@@ -1,14 +1,21 @@
 import { createFileRoute, Link, notFound } from '@tanstack/react-router'
+import {
+  ArrowUpRightIcon,
+  CircleOffIcon,
+  FolderIcon,
+  GitBranchIcon,
+  GlobeIcon,
+  LoaderIcon,
+} from 'lucide-react'
 import { ApplyBar } from '../components/apply-bar'
 import { SetupLine } from '../components/apps/setup-line'
-import { type AppRecord, CHIP, LEDE, SegmentPicker } from '../components/apps/shared'
+import { type AppRecord, CHIP, SegmentPicker } from '../components/apps/shared'
 import { TabBody } from '../components/apps/tab-views'
 import { AppIcon, type AppState, StatePill } from '../components/controls'
 import { Crumbs, PageHead } from '../components/page'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { useAction } from '../components/use-action'
 import { Chip } from '../components/viz'
-import { GLASS } from '../components/viz/board'
 // lib/access-window, NOT host/access. The window table is a value the picker
 // and validateSearch both need in the browser; host/access talks to Loki and
 // must never follow it there.
@@ -46,28 +53,33 @@ export const APP_TABS = [
 ] as const
 const TABS = APP_TABS
 
-/* The hero: identity on the left, exposure on the right. Below the rail
-   breakpoint exposure becomes a full-width row under the title instead of a
-   third column — at that width it was overflowing the card's right edge. */
-const HERO = cn(
-  GLASS,
-  'mb-6 grid grid-cols-[auto_1fr_auto] items-start gap-5 px-6 py-5 max-rail:grid-cols-[auto_minmax(0,1fr)] max-rail:gap-x-4 max-rail:gap-y-4 max-rail:p-4',
-)
+/* The head: the page's title row, not a card. The app is the page, so its
+   identity is set like every other page title — on the panel, with the
+   exposure switch where a page keeps its one control. Below the rail
+   breakpoint exposure drops to a full-width row under the title. */
+const HERO =
+  'mb-8 grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-4 gap-y-4 max-rail:grid-cols-[auto_minmax(0,1fr)]'
 const HERO_ICON =
-  'grid size-[54px] place-items-center rounded-xl border border-hairline bg-foreground/[0.04] text-[1.4rem] text-muted-foreground max-rail:size-[42px] max-rail:text-[1.15rem]'
+  'grid size-12 place-items-center rounded-xl border border-hairline bg-foreground/[0.04] shadow-[inset_0_1px_0_var(--hairline-hi)] max-rail:size-10'
+/** Only the fault tints the frame: a running app is the norm and says so with
+    its pill, so a green frame beside a green pill was the same fact twice. */
 const HERO_ICON_TONED =
-  'border-[color-mix(in_oklch,var(--tone)_30%,transparent)] bg-[color-mix(in_oklch,var(--tone)_8%,transparent)] text-(--tone)'
-/** The two states that are verdicts. The rest get the frame's resting grey. */
-const ICON_TONE: Partial<Record<AppState, Tone>> = { running: 'ok', attention: 'bad' }
+  'border-[color-mix(in_oklch,var(--tone)_35%,transparent)] bg-[color-mix(in_oklch,var(--tone)_8%,transparent)]'
+const ICON_TONE: Partial<Record<AppState, Tone>> = { attention: 'bad' }
+const HERO_TITLE =
+  'm-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[1.75rem] leading-tight tracking-[-0.028em] [font-weight:640] max-[34rem]:text-[1.35rem]'
+const HERO_DESC = 'mt-1 mb-0 max-w-[72ch] text-[0.9rem] text-muted-foreground'
+/** Where it answers and where its code lives: quiet links, an icon each. */
 const HERO_LINKS =
-  'mt-3 mb-0 flex flex-wrap gap-x-4 gap-y-1.5 font-mono text-[0.8rem] max-[34rem]:flex-col max-[34rem]:gap-1.5 max-[34rem]:[&>*]:wrap-anywhere'
-/* The exposure switch goes full-width below the rail
-   breakpoint when it sits here — it sits alone in its own hero column — and
-   the descendant rules are what tell it so, since it cannot know on its own. */
+  'mt-2.5 mb-0 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.8rem] max-[34rem]:flex-col max-[34rem]:items-start'
+const HERO_LINK =
+  'inline-flex min-w-0 items-center gap-1.5 font-mono text-[0.78rem] text-subdued no-underline hover:text-foreground hover:no-underline [&>svg]:size-3.5 [&>svg]:flex-none [&>svg]:text-muted-foreground'
+/* The exposure switch goes full-width below the rail breakpoint, where it sits
+   alone in its own row — the descendant rules tell it so. */
 const HERO_EXPOSURE =
-  'text-right max-rail:col-span-full max-rail:text-left max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center'
+  'flex flex-col items-end gap-2 pt-1 max-rail:col-span-full max-rail:items-stretch max-rail:pt-0 max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center'
 const EXPOSURE_NOTE =
-  'mt-2 mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.75rem] text-muted-foreground max-rail:ml-0 max-rail:text-left'
+  'm-0 max-w-[16rem] text-right text-[0.75rem] text-muted-foreground max-rail:max-w-none max-rail:text-left'
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
   // it is linkable ("look at argus's settings"), and it renders on the
@@ -228,84 +240,105 @@ function AppHero({
   const readOnly = app.managedInNix
   const iconTone = ICON_TONE[state]
   return (
-    <section className={HERO}>
-      {/* The app's own icon, in a frame that keeps carrying state. Identity
-          and health are different questions and the frame answers the second
-          without spending the slot that answers the first. */}
+    <header className={HERO}>
+      {/* The app's own icon, in a frame that turns red only when the app
+          needs attention. Identity and health are different questions; the
+          frame answers the second only when the answer is news. */}
       <div
         className={cn(HERO_ICON, iconTone !== undefined && HERO_ICON_TONED)}
         style={iconTone === undefined ? undefined : toneStyle(iconTone)}
       >
-        <AppIcon name={app.name} hasIcon={app.hasIcon} size={34} />
+        <AppIcon name={app.name} hasIcon={app.hasIcon} size={30} />
       </div>
 
-      <div>
-        <h1 className="m-0 flex flex-wrap items-center gap-2.5 text-[1.5rem] font-[640] tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
+      <div className="min-w-0">
+        <h1 className={HERO_TITLE}>
           {app.name}
           <StatePill state={state} />
           {readOnly && <Chip className={cn(CHIP, 'text-subdued')}>nix-managed</Chip>}
         </h1>
-        <p className={LEDE}>{app.description || 'No description.'}</p>
+        <p className={HERO_DESC}>{app.description || 'No description.'}</p>
         <p className={HERO_LINKS}>
           {app.awaitingImage ? (
-            <span className="text-subdued">◌ not running yet</span>
+            <span className={HERO_LINK}>
+              <LoaderIcon aria-hidden="true" />
+              not running yet
+            </span>
           ) : app.stage === 'off' ? (
-            <span className="text-subdued">⏻ not exposed</span>
+            <span className={HERO_LINK}>
+              <CircleOffIcon aria-hidden="true" />
+              not exposed
+            </span>
           ) : (
-            <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
-              ↗ {app.effectiveHostname}
+            <a
+              className={HERO_LINK}
+              href={`https://${app.effectiveHostname}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <GlobeIcon aria-hidden="true" />
+              {app.effectiveHostname}
+              <ArrowUpRightIcon aria-hidden="true" className="-ml-0.5 size-3! opacity-60" />
             </a>
           )}
           {app.sourceMode === 'local' ? (
-            <span className="text-subdued">⎇ stacks/{app.name}/app</span>
+            <span className={HERO_LINK}>
+              <FolderIcon aria-hidden="true" />
+              stacks/{app.name}/app
+            </span>
           ) : (
             <a
+              className={HERO_LINK}
               href={`https://github.com/${appRepo(site, app.name)}`}
               target="_blank"
               rel="noreferrer"
             >
-              ⎇ {appRepo(site, app.name)}
+              <GitBranchIcon aria-hidden="true" />
+              {appRepo(site, app.name)}
+              <ArrowUpRightIcon aria-hidden="true" className="-ml-0.5 size-3! opacity-60" />
             </a>
           )}
         </p>
       </div>
 
       <div className={HERO_EXPOSURE}>
-        <span className="mb-2 block text-[0.75rem] text-muted-foreground">Exposure</span>
-        <SegmentPicker
-          value={app.stage}
-          disabled={readOnly}
-          // The "exposure" text beside this is a bare span, not a <label>,
-          // so the group still needs naming for assistive tech.
-          label="Exposure"
-          onChange={(v) => {
-            patch({ stage: v })
-          }}
-          // Three rungs, each adding to the last. "Off" runs the container
-          // and withholds only the ingress: no traefik router, no DNS, no
-          // probe, but it runs and it deploys. A new app picks its rung
-          // before it has an image: nothing of it exists until then
-          // (lib/apps/setup.ts), so the choice is free.
-          options={[
-            {
-              value: 'off',
-              label: STAGE_LABEL.off,
-              icon: '⏻',
-              // The forward-auth middleware is generated FROM the ingress,
-              // so an app gated that way has nothing left to gate once the
-              // ingress is gone. The platform asserts this
-              // (nix/modules/apps/apps.nix); catching it here turns a failed
-              // Apply into an explanation.
-              disabled: app.authMode === 'proxy',
-              reason:
-                app.authMode === 'proxy'
-                  ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
-                  : undefined,
-            },
-            { value: 'lab', label: STAGE_LABEL.lab, icon: '⛨' },
-            { value: 'live', label: STAGE_LABEL.live, icon: '↗' },
-          ]}
-        />
+        <div className="flex items-center gap-2.5 max-rail:flex-col max-rail:items-stretch max-rail:gap-1.5">
+          <span className="text-[0.75rem] text-muted-foreground">Exposure</span>
+          <SegmentPicker
+            value={app.stage}
+            disabled={readOnly}
+            // The "exposure" text beside this is a bare span, not a <label>,
+            // so the group still needs naming for assistive tech.
+            label="Exposure"
+            onChange={(v) => {
+              patch({ stage: v })
+            }}
+            // Three rungs, each adding to the last. "Off" runs the container
+            // and withholds only the ingress: no traefik router, no DNS, no
+            // probe, but it runs and it deploys. A new app picks its rung
+            // before it has an image: nothing of it exists until then
+            // (lib/apps/setup.ts), so the choice is free.
+            options={[
+              {
+                value: 'off',
+                label: STAGE_LABEL.off,
+                icon: '⏻',
+                // The forward-auth middleware is generated FROM the ingress,
+                // so an app gated that way has nothing left to gate once the
+                // ingress is gone. The platform asserts this
+                // (nix/modules/apps/apps.nix); catching it here turns a failed
+                // Apply into an explanation.
+                disabled: app.authMode === 'proxy',
+                reason:
+                  app.authMode === 'proxy'
+                    ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
+                    : undefined,
+              },
+              { value: 'lab', label: STAGE_LABEL.lab, icon: '⛨' },
+              { value: 'live', label: STAGE_LABEL.live, icon: '↗' },
+            ]}
+          />
+        </div>
         {app.awaitingImage ? (
           <p className={EXPOSURE_NOTE}>Where it runs once its first image is in.</p>
         ) : (
@@ -314,6 +347,6 @@ function AppHero({
           )
         )}
       </div>
-    </section>
+    </header>
   )
 }

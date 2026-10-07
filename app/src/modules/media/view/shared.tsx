@@ -1,11 +1,33 @@
+import type { ReactNode } from 'react'
 import { Segmented } from '../../../components/controls'
+import { ExplainToggle, useExplain } from '../../../components/explain'
 import type { LogNeighbour } from '../../../components/logs'
+import {
+  CELL_QUIET,
+  SECTION_NOTE,
+  SECTION_TITLE,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from '../../../components/table'
 import { EMPTY } from '../../../components/tokens'
-import type { Tone } from '../../../components/viz'
+import { Progress, type Tone } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
+export {
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  CELL_SUB,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableGroup,
+} from '../../../components/table'
 /* The class strings more than one Media tab writes, named once so two tabs
    rendering the same object cannot drift into two slightly different rows.
 
@@ -15,25 +37,6 @@ export { CAPTION, EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/token
 
 /** A bare vertical list — no marker, no padding, no default margins. */
 export const LIST = 'm-0 flex list-none flex-col p-0'
-
-/* A download in flight, shared by qBittorrent, NZBGet and Shelfmark — the same
-   object every time: a name, a line of figures, a bar. */
-export const TRANSFERS = `${LIST} gap-3`
-export const TRANSFER_ROW = 'flex flex-col gap-1'
-export const TRANSFER_HEAD = 'flex min-w-0 items-baseline justify-between gap-3'
-export const TRANSFER_NAME = 'min-w-0 truncate text-[0.8rem]'
-export const TRANSFER_META =
-  'flex items-center gap-1.5 whitespace-nowrap text-[0.75rem] text-muted-foreground tabular-nums'
-
-/* An activity feed. Event, then subject, then when — the event is a fixed
-   column because the vocabulary is small and repeated, so a reader scanning for
-   one of them is scanning a single column. Below 34rem the three stack. */
-export const FEED = `${LIST} text-[0.8rem]`
-export const FEED_ROW =
-  'grid grid-cols-[8rem_minmax(0,1fr)_5.5rem] items-baseline gap-3 border-hairline border-t py-2 first:border-t-0 max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-0.5'
-export const FEED_EVENT = 'text-[0.75rem] text-muted-foreground first-letter:uppercase'
-export const FEED_TITLE = 'truncate'
-export const FEED_WHEN = 'text-right text-[0.75rem] text-muted-foreground max-[34rem]:text-left'
 
 /* A wrapping row of two-word verdicts rather than a list: there are a handful,
    and the only thing being compared is whether any of them is not "Good". */
@@ -141,4 +144,152 @@ export const VERSION_SNAPSHOT: LogNeighbour = {
   label: 'Version snapshot',
   role: 'where this version comes from',
   note: 'Reads the OCI labels off every running image and publishes them for this dashboard, since the pin on these three names a channel rather than a release. One line per run with the counts; if the version above says “unknown”, this says whether the snapshot ran at all. Its failures also send mail — see fleet.monitoredJobs in stacks/daedalus.',
+}
+
+/**
+ * The quiet half of a service's health checks: one line under its head when
+ * every check passes, nothing louder. Healthy is the norm and gets no board;
+ * a failing check is the exception and gets `HealthChecks` in a board of its
+ * own. Unreachable is neither, and says so.
+ */
+export function HealthLine({
+  checks,
+  reachable,
+}: {
+  checks: readonly unknown[]
+  reachable: boolean
+}) {
+  if (reachable && checks.length > 0) return null
+  return (
+    <p className={HEALTH_LINE}>
+      {reachable
+        ? 'Health checks: no warnings. Every check this service runs is passing.'
+        : 'Health checks: could not ask.'}
+    </p>
+  )
+}
+
+/** Whether a service's checks deserve a board: only when one is failing. */
+export const healthFailing = (checks: readonly unknown[], reachable: boolean) =>
+  reachable && checks.length > 0
+
+/* Hangs under the head's link row, indented to its text column like the links. */
+const HEALTH_LINE = '-mt-3 mb-6 ml-15 text-[0.75rem] text-muted-foreground max-[44rem]:ml-0'
+
+/* ── a table with a heading ───────────────────────────────────────────────
+   The section a list of things is drawn in: SECTION_TITLE over a TABLE, on the
+   board grid beside the boards. Its explanation folds behind an ⓘ in the
+   title, the way a Board's does. */
+
+export function TableSection({
+  title,
+  note,
+  aside,
+  foot,
+  children,
+}: {
+  title: string
+  /** A visible line under the title: counts, a state. */
+  note?: ReactNode
+  /** Right of the title: a live reading. */
+  aside?: ReactNode
+  /** Under the table: FOOT folds behind the ⓘ, CAPTION stays. */
+  foot?: ReactNode
+  children: ReactNode
+}) {
+  const explain = useExplain()
+  return (
+    <section className={cn(TABLE_SECTION, explain.body)}>
+      <h3 className={cn(SECTION_TITLE, 'mt-0 min-h-6')}>
+        {title}
+        <ExplainToggle
+          open={explain.open}
+          onToggle={explain.toggle}
+          className="-my-1 hidden group-has-[.explain]/section:inline-flex"
+        />
+        {aside !== undefined && (
+          <span className="ml-auto text-[0.78rem] font-normal text-muted-foreground">{aside}</span>
+        )}
+      </h3>
+      {note !== undefined && <p className={SECTION_NOTE}>{note}</p>}
+      {children}
+      {foot !== undefined && <div className="mt-3 flex flex-col gap-2 px-1">{foot}</div>}
+    </section>
+  )
+}
+
+/** Full width on the board grid, with a section's air above and below. */
+const TABLE_SECTION = 'group/section col-span-12 my-6 min-w-0 first:mt-0 last:mb-0'
+
+/* ── a queue ──────────────────────────────────────────────────────────────
+   Something on its way — a torrent, an NZB, a book, an import — is the same
+   object on every downloader: a name, how far, and the figures that say how
+   it is going. One table for all of them, so four downloaders read alike. */
+
+const QUEUE_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_3.5rem_minmax(0,1.4fr)]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_3.5rem]',
+)
+const QUEUE_WIDE = '@max-[44rem]/table:hidden'
+
+export type QueueRow = {
+  key: string
+  name: string
+  pct: number | null
+  tone: Tone
+  active: boolean
+  /** The figures on the right: a rate, a size, a time left, a state. */
+  detail: ReactNode
+}
+
+export function QueueTable({
+  rows,
+  empty,
+  label,
+  detail = 'Progress',
+}: {
+  rows: QueueRow[]
+  /** What an empty queue means, said in the one row. */
+  empty: string
+  label: string
+  /** The right-hand column's label. */
+  detail?: string
+}) {
+  return (
+    <ul className={TABLE} aria-label={label}>
+      <li aria-hidden="true" className={cn(QUEUE_GRID, TABLE_HEAD)}>
+        <span>Name</span>
+        <span className={QUEUE_WIDE} />
+        <span className="text-right">Done</span>
+        <span className={cn(QUEUE_WIDE, 'text-right')}>{detail}</span>
+      </li>
+      {rows.length === 0 ? (
+        <li className={TABLE_EMPTY}>{empty}</li>
+      ) : (
+        rows.map((r) => (
+          <li key={r.key} className={cn(QUEUE_GRID, TABLE_ROW)}>
+            <span className="truncate text-foreground" title={r.name}>
+              {r.name}
+            </span>
+            <span className={QUEUE_WIDE}>
+              <Progress pct={r.pct} tone={r.tone} active={r.active} />
+            </span>
+            <span className={cn(CELL_QUIET, 'text-right text-foreground')}>
+              {r.pct === null ? '' : `${r.pct.toFixed(0)}%`}
+            </span>
+            <span
+              className={cn(
+                CELL_QUIET,
+                QUEUE_WIDE,
+                'flex min-w-0 items-center justify-end gap-1.5 truncate',
+              )}
+            >
+              {r.detail}
+            </span>
+          </li>
+        ))
+      )}
+    </ul>
+  )
 }

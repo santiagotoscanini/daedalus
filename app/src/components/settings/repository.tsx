@@ -2,8 +2,11 @@ import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit, SiteState } from '../../core/site'
 import type { RepoFacts } from '../../host/contract/domains/repo'
 import { Chip } from '../viz'
-import { NOTE_SHOWN } from './form'
-import { Commit, Mono, Section, SourceNote, Unset, Value } from './shared'
+import { Commit, Mono, NOTE_SHOWN, SECTIONS, Section, SourceNote, Unset, Value } from './shared'
+
+/** A healthy state, said quietly: only a state that differs from the norm wears a chip. */
+const QUIET = 'text-[0.78rem] text-muted-foreground'
+
 import { SiteSection } from './site-dir'
 
 // The configuration repository, and the one directory in it that daedalus
@@ -36,7 +39,7 @@ export function Repository({
   const headRuns = running !== null && f.head !== null && f.head.rev === running
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className={SECTIONS}>
       <SiteSection dir={f.site} site={site} edit={edit} git={r.git} />
 
       <Section
@@ -72,7 +75,7 @@ export function Repository({
                 </span>
               </span>
             ) : (
-              <Chip tone="ok">clean</Chip>
+              <span className={QUIET}>clean</span>
             ),
           },
           { k: 'Against origin', v: <AgainstOrigin upstream={f.upstream} /> },
@@ -103,7 +106,11 @@ export function Repository({
                 <Unset label="no revision recorded" />
               ) : (
                 <span className="inline-flex items-center gap-2">
-                  {headRuns ? <Chip tone="ok">is HEAD</Chip> : <Chip tone="warn">behind HEAD</Chip>}
+                  {headRuns ? (
+                    <span className={QUIET}>is HEAD</span>
+                  ) : (
+                    <Chip tone="warn">behind HEAD</Chip>
+                  )}
                   <Mono>{running.slice(0, 10)}</Mono>
                 </span>
               ),
@@ -166,7 +173,7 @@ function AgainstOrigin({ upstream }: { upstream: RepoFacts['upstream'] }) {
   if (upstream.ahead === 0 && upstream.behind === 0) {
     return (
       <span className="inline-flex items-center gap-2">
-        <Chip tone="ok">in sync</Chip>
+        <span className={QUIET}>in sync</span>
         <Mono>{upstream.ref}</Mono>
       </span>
     )

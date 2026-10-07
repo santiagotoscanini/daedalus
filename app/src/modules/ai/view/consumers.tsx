@@ -1,56 +1,93 @@
-import { CAPTION, FOOT, LIST, NOTE, ROW, ROW_MAIN, ROW_SIDE } from '../../../components/tokens'
-import { Board, BoardGrid } from '../../../components/viz'
+import { Link } from '@tanstack/react-router'
+import { CAPTION, FOOT } from '../../../components/tokens'
+import { BoardGrid } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { ConsumersData } from '../data/consumers'
 import { N8nView } from './n8n'
 import { OpenWebUiView } from './open-webui'
+import {
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_LINK,
+  TABLE_ROW,
+  TABLE_ROW_LINK,
+  TableSection,
+} from './shared'
 
-// The Consumers tab: what calls the gateway. Open WebUI and n8n keep the
-// pages they had, one under the other; the apps that hold a key are a
-// list, since each has a page of its own.
+// The Consumers tab: what calls the gateway. The apps that hold a key are a
+// table, each row the way to that app's own page; Open WebUI and n8n keep the
+// pages they had, one under the other.
 
-/* A heading between the stacked service pages: quiet, with the air of a
-   section break above it. */
-const SECTION = 'm-0 mt-8 mb-3 text-[0.8rem] text-muted-foreground [font-weight:550]'
+/* The stacked service pages each open with their own ServiceHead, which
+   already names the service; the break between them is air and a hairline,
+   not a third heading saying the name again. */
+const BREAK = 'mt-10 border-hairline border-t pt-8'
+
+const APP_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8rem]',
+  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_8rem]',
+)
 
 export function ConsumersView({ data }: { data: ConsumersData }) {
   return (
     <>
       <BoardGrid>
-        <Board
+        <TableSection
           title="Apps holding a gateway key"
-          icon="rows"
-          span={12}
-          aside={<span className={NOTE}>{num(data.apps.length)} of the box's apps</span>}
+          note={`${num(data.apps.length)} of the box's apps`}
+          foot={
+            <p className={FOOT}>
+              A key per app, minted by the box and rotated with the app; what each key may call is
+              the gateway's policy, and the Gateway tab's callers list is who actually did.
+            </p>
+          }
         >
-          {data.apps.length === 0 ? (
-            <p className={CAPTION}>No app on this box asked for a gateway key.</p>
-          ) : (
-            <ul className={LIST}>
-              {data.apps.map((a) => (
-                <li key={a.name} className={ROW}>
-                  <span className={ROW_MAIN}>{a.name}</span>
-                  <span className={ROW_SIDE}>LITELLM_API_KEY injected at deploy</span>
+          <ul className={TABLE} aria-label="Apps holding a gateway key">
+            <li aria-hidden="true" className={cn(APP_GRID, TABLE_HEAD)}>
+              <span>App</span>
+              <span className="@max-[36rem]/table:hidden">Credential</span>
+              <span className="text-right">Delivered</span>
+            </li>
+            {data.apps.length === 0 ? (
+              <li className={TABLE_EMPTY}>No app on this box asked for a gateway key.</li>
+            ) : (
+              data.apps.map((a) => (
+                <li key={a.name} className={cn(APP_GRID, TABLE_ROW, TABLE_ROW_LINK)}>
+                  <Link
+                    to="/apps/$name"
+                    params={{ name: a.name }}
+                    search={{ tab: 'overview' as const }}
+                    className={cn(TABLE_LINK, CELL_NAME)}
+                  >
+                    {a.name}
+                  </Link>
+                  {/* The same variable on every row: quiet, so a row that ever
+                      differs is the one that shows. */}
+                  <span className={cn(CELL_MONO, '@max-[36rem]/table:hidden')}>
+                    LITELLM_API_KEY
+                  </span>
+                  <span className={cn(CELL_QUIET, 'text-right')}>injected at deploy</span>
                 </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            A key per app, minted by the box and rotated with the app; what each key may call is the
-            gateway's policy, and the Gateway tab's callers list is who actually did.
-          </p>
-        </Board>
+              ))
+            )}
+          </ul>
+        </TableSection>
       </BoardGrid>
 
       {data.openWebui !== null && (
-        <section>
-          <p className={SECTION}>Open WebUI — the chat window</p>
+        <section className={BREAK}>
           <OpenWebUiView data={data.openWebui} />
         </section>
       )}
       {data.n8n !== null && (
-        <section>
-          <p className={SECTION}>
+        <section className={BREAK}>
+          <p className={cn(CAPTION, '-mt-3 mb-5')}>
             n8n — workflows that call a model through the gateway, on the key its own page shows.
           </p>
           <N8nView data={data.n8n} />

@@ -68,7 +68,12 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
       />
 
       <BoardGrid>
-        <Board title="What it did" icon="⌫" span={8} aside={<span className={NOTE}>{window}</span>}>
+        <Board
+          title="What it did"
+          icon="⌫"
+          span={12}
+          aside={<span className={NOTE}>{window}</span>}
+        >
           <Measures
             items={[
               { k: 'Stuck items removed', v: num(cleanuparr.removed) },
@@ -84,9 +89,9 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
             Counted out of its own log lines in Loki. Cleanuparr publishes no metrics and 2.10.1
             closed the API that used to report this, so these three phrases are the interface.
           </p>
-        </Board>
-
-        <Board title="Why it is here" icon="◈" span={4}>
+          {/* Was a board of its own holding only this paragraph, which folds:
+              an empty panel until its ⓘ was pressed. It explains the figures
+              above, so it folds with them. */}
           <p className={FOOT}>
             A download that stalls does not fail. It sits in the queue at 97% forever, and the *arr
             goes on believing the episode is handled. Nothing else on this box notices. Cleanuparr

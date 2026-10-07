@@ -1,39 +1,23 @@
-// Home › Sign-in's boards: signing in, declared against live, who, the logs.
+// Home › Sign-in's boards: signing in, the applications, declared against
+// live, the logs. Who and the devices are in ./idp-who.tsx.
 
 import { GrafanaLogs, LogDetails } from '../../../components/logs'
-import { AXIS, CAPTION, EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
+import { BOARD_TABLE, BOARD_TABLE_HEAD, BOARD_TABLE_ROW } from '../../../components/modules/parts'
+import { CELL_MONO, CELL_NAME, CELL_QUIET } from '../../../components/table'
+import { AXIS, CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, Chip, Columns, Measures } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { IdpData } from '../data/signin'
-import { AppList, COUNT } from './idp-apps'
-import { LIST, MAIN, SIDE } from './shared'
+import { AppList } from './idp-apps'
 
-/* An identifier in the side slot: the slot's own size, in monospace. */
-const SIDE_MONO = `${SIDE} font-mono`
-
-export function SigningInBoard({
-  d,
-  w,
-  shared,
-  idle,
-  max,
-}: {
-  d: IdpData
-  w: IdpData['window']
-  shared: IdpData['clients']
-  idle: number
-  max: number
-}) {
+export function SigningInBoard({ d, w }: { d: IdpData; w: IdpData['window'] }) {
   return (
     <Board
       title="Signing in"
       icon="key"
-      span={6}
-      aside={
-        <span className={NOTE}>
-          {w.days} days · {d.clients.length} applications registered
-        </span>
-      }
+      span={8}
+      aside={<span className={NOTE}>last {w.days} days</span>}
     >
       <Measures
         items={[
@@ -51,7 +35,7 @@ export function SigningInBoard({
           display: `${num(p.authorizations)} app${p.authorizations === 1 ? '' : 's'} opened`,
         }))}
         tone="ok"
-        height={100}
+        height={120}
         empty="nothing in the window"
       />
       {d.daily.length > 0 && (
@@ -62,6 +46,51 @@ export function SigningInBoard({
         </p>
       )}
 
+      <p className={FOOT}>
+        The measures are the value of single sign-on stated as a subtraction:{' '}
+        <b>{num(w.signIns)} passkey sign-ins</b> against{' '}
+        <b>{num(w.authorizations)} applications opened</b> is {num(w.authorizations - w.signIns)}{' '}
+        logins that did not have to happen. A <b>re-consent</b> is not a first use: rewriting a
+        client drops its stored consent, and the convergence job rewrites every one of them on every
+        rebuild, so these mark where a rebuild made everybody agree again.
+      </p>
+      {d.truncated && (
+        <p className={CAPTION}>
+          The window is longer than the pages read, so these are a lower bound.
+        </p>
+      )}
+    </Board>
+  )
+}
+
+/**
+ * The registrations, as a table. One board, not a chronological sign-in list
+ * beside the per-app aggregate: both are the same audit log, and a
+ * chronological list fills with whatever re-authorises on a timer. The
+ * per-row drill-down keeps the part an aggregate loses — who, from what.
+ */
+export function AppsBoard({
+  d,
+  shared,
+  idle,
+  max,
+}: {
+  d: IdpData
+  shared: IdpData['clients']
+  idle: number
+  max: number
+}) {
+  return (
+    <Board
+      title="Applications"
+      icon="rows"
+      span={12}
+      aside={
+        <span className={NOTE}>
+          {d.clients.length} registered · {num(idle)} not opened in {d.window.days} days
+        </span>
+      }
+    >
       <AppList clients={d.clients} max={max} />
 
       {shared.length > 0 && (
@@ -84,36 +113,41 @@ export function SigningInBoard({
       )}
 
       <p className={FOOT}>
-        The measures are the value of single sign-on stated as a subtraction:{' '}
-        <b>{num(w.signIns)} passkey sign-ins</b> against{' '}
-        <b>{num(w.authorizations)} applications opened</b> is {num(w.authorizations - w.signIns)}{' '}
-        logins that did not have to happen. The list is ordered by when each was last used rather
-        than by volume, so the five above are the recent activity and the {num(idle)} nobody opened
-        at all sit at the end of the full one. For a proxy-gated app that means nobody visited it,
-        not that the registration is dead. Open a row for who went in and from what; the full log is
-        in Pocket ID. A <b>re-consent</b> is not a first use: rewriting a client drops its stored
-        consent, and the convergence job rewrites every one of them on every rebuild, so these mark
-        where a rebuild made everybody agree again.
+        The table is ordered by when each was last used rather than by volume, so the five above are
+        the recent activity and the {num(idle)} nobody opened at all sit at the end of the full one.
+        For a proxy-gated app that means nobody visited it, not that the registration is dead. Open
+        a row for who went in and from what; the full log is in Pocket ID.
       </p>
-      {d.truncated && (
-        <p className={CAPTION}>
-          The window is longer than the pages read, so these are a lower bound.
-        </p>
-      )}
     </Board>
   )
 }
 
+/* Declared against live: what the row is, which client, its id, what that means. */
+const DECLARED_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)]',
+  '@max-[44rem]/table:grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,1.2fr)]',
+)
+const HIDE_NARROW = '@max-[44rem]/table:hidden'
+
 export function DeclaredBoard({ d }: { d: IdpData }) {
+  const rows = [
+    ...d.nix.orphans.map((c) => ({
+      ...c,
+      state: 'orphan',
+      what: 'live at the IdP, declared nowhere',
+    })),
+    ...d.nix.unsynced.map((c) => ({
+      ...c,
+      state: 'not synced',
+      what: 'declared, absent at the IdP',
+    })),
+  ]
   return (
     <Board
-      title={
-        d.nix.orphans.length === 0 && d.nix.unsynced.length === 0
-          ? 'Declared and live agree'
-          : 'Declared vs live'
-      }
+      title={rows.length === 0 ? 'Declared and live agree' : 'Declared vs live'}
       icon="▣"
-      span={12}
+      span={8}
       aside={
         <span className={NOTE}>
           {num(d.nix.declared)} declared in nix · {num(d.clients.length)} live at the IdP
@@ -125,27 +159,29 @@ export function DeclaredBoard({ d }: { d: IdpData }) {
           /export/sso.json is not published, so the declared side of the diff is missing and nothing
           here can be called an orphan yet.
         </p>
-      ) : d.nix.orphans.length === 0 && d.nix.unsynced.length === 0 ? (
+      ) : rows.length === 0 ? (
         <p className={EMPTY}>
           Every live client is declared in <span className={MONO}>fleet.ssoClients</span>, and every
           declaration exists at the IdP. Nothing has outlived its stack.
         </p>
       ) : (
-        <ul className={LIST}>
-          {d.nix.orphans.map((c) => (
-            <li key={c.id}>
-              <Chip tone="warn">orphan</Chip>
-              <span className={MAIN}>{c.name}</span>
-              <span className={SIDE_MONO}>{c.id}</span>
-              <span className={SIDE}>live at the IdP, declared nowhere</span>
-            </li>
-          ))}
-          {d.nix.unsynced.map((c) => (
-            <li key={c.id}>
-              <Chip tone="warn">not synced</Chip>
-              <span className={MAIN}>{c.name}</span>
-              <span className={SIDE_MONO}>{c.id}</span>
-              <span className={SIDE}>declared, absent at the IdP</span>
+        <ul className={BOARD_TABLE}>
+          <li className={cn(DECLARED_GRID, BOARD_TABLE_HEAD)}>
+            <span>State</span>
+            <span>Client</span>
+            <span className={HIDE_NARROW}>Client id</span>
+            <span>Meaning</span>
+          </li>
+          {rows.map((c) => (
+            <li key={c.id} className={cn(DECLARED_GRID, BOARD_TABLE_ROW)}>
+              <span>
+                <Chip tone="warn">{c.state}</Chip>
+              </span>
+              <span className={CELL_NAME}>{c.name}</span>
+              <span className={cn(CELL_MONO, HIDE_NARROW)} title={c.id}>
+                {c.id}
+              </span>
+              <span className={cn(CELL_QUIET, 'truncate')}>{c.what}</span>
             </li>
           ))}
         </ul>
@@ -164,83 +200,9 @@ export function DeclaredBoard({ d }: { d: IdpData }) {
   )
 }
 
-export function WhoBoard({ d }: { d: IdpData }) {
-  return (
-    <Board title="Who" icon="◑" span={3}>
-      <ul className={LIST}>
-        {d.users.map((u) => (
-          <li key={u.username} title={u.groups.join(', ')}>
-            <span className={MAIN}>
-              {u.displayName}
-              {u.admin && <span className="text-subdued"> · admin</span>}
-            </span>
-            {u.disabled && <Chip tone="bad">disabled</Chip>}
-            {/* An admin account that is not a person, and the only place
-                on this dashboard it is visible at all. */}
-            {u.service && (
-              <Chip tone="muted">
-                <span title="The principal behind STATIC_API_KEY, how daedalus reads this page">
-                  api key
-                </span>
-              </Chip>
-            )}
-            <span className={SIDE}>
-              {u.service ? 'never signs in' : (u.lastSignInAgo ?? 'not in the window')}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <h4 className={SUB}>Groups</h4>
-      <ul className={LIST}>
-        {d.groups.map((g) => (
-          <li key={g.name}>
-            <span className={MAIN}>{g.name}</span>
-            <span className={SIDE}>
-              {g.members === 0
-                ? 'nobody in it'
-                : `${String(g.members)} member${g.members === 1 ? '' : 's'}`}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      {/* Grouped, not listed — see `IdpData['devices']`. */}
-      <h4 className={SUB}>Devices that signed in</h4>
-      {d.devices.length === 0 ? (
-        <p className={EMPTY}>nobody signed in during the window</p>
-      ) : (
-        <ul className={LIST}>
-          {d.devices.map((v) => (
-            <li key={v.name}>
-              <span className={MAIN} title={v.name}>
-                {v.name}
-              </span>
-              <span className={SIDE}>{v.lastAgo}</span>
-              <span className={COUNT}>{num(v.signIns)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* A quarter of the width, so this says the things that change what
-          the three lists above mean, and stops. */}
-      <p className={FOOT}>
-        A group is what an application restricts itself to, so an empty one is an application nobody
-        can reach through it. A passkey belongs to a device, so the devices are the credentials. One
-        you do not recognise is the thing to notice here.
-      </p>
-      <p className={CAPTION}>
-        Sign-ups are <b>{d.signups ?? 'unknown'}</b>, read back from the IdP rather than restated
-        here.
-      </p>
-    </Board>
-  )
-}
-
 export function LogsBoard() {
   return (
-    <Board title="Logs" icon="logs" span={9}>
+    <Board title="Logs" icon="logs" span={12}>
       <GrafanaLogs source={{ container: 'pocket-id' }} title="Pocket ID logs" />
       {/* The two units that WRITE the client list above. Neither is a
           container and neither has anywhere else on this dashboard to be

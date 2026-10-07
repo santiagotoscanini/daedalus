@@ -9,6 +9,7 @@ import {
   PartPhoto,
 } from '../../../components/part'
 import {
+  CAPTION,
   EMPTY,
   FOOT,
   LIST,
@@ -36,15 +37,18 @@ export function BuildView({ d }: { d: Build }) {
 
   return (
     <BoardGrid>
-      <MotherboardBoard f={f} />
-
+      {/* Rows of peers with related heights: the three compact parts, then
+          the two with lists (the board's sensors, the memory slots), then
+          the power supply beside the case it fits. */}
       <ProcessorBoard f={f} />
 
       <CoolingBoard f={f} />
 
-      <MemoryBoard f={f} />
-
       <GraphicsBoard f={f} />
+
+      <MotherboardBoard f={f} />
+
+      <MemoryBoard f={f} />
 
       <PowerBoard f={f} />
 
@@ -80,7 +84,7 @@ function MotherboardBoard({ f }: { f: BuildFacts }) {
     <Board
       title="Motherboard"
       icon="hash"
-      span={4}
+      span={6}
       aside={
         <span className={NOTE}>
           {board.bios.version === null ? 'no BIOS reading' : `BIOS ${board.bios.version}`}
@@ -104,9 +108,19 @@ function MotherboardBoard({ f }: { f: BuildFacts }) {
             k: 'BIOS vendor',
             v: board.bios.vendor === null ? DASH : shortVendor(board.bios.vendor),
           },
-          { k: 'Chipset temp', v: temp(d.temps.find((t) => t.label === 'PCH')?.value ?? null) },
-          { k: 'VRM temp', v: temp(d.temps.find((t) => t.label === 'VRM MOS')?.value ?? null) },
         ]}
+      />
+      {/* The board's own sensors, on the board they are soldered to — the
+          chipset (PCH) and VRM readings included, so they are said once. */}
+      <h4 className={SUB}>Board temperatures</h4>
+      <BarList
+        items={d.temps.map((t) => ({
+          label: t.label,
+          value: t.value,
+          display: `${t.value.toFixed(0)}°`,
+        }))}
+        tone="muted"
+        empty="no board sensors"
       />
       <p className={FOOT}>
         Read from SMBIOS, so a BIOS update appears here on its own. It is deliberately not compared
@@ -177,31 +191,31 @@ function CoolingBoard({ f }: { f: BuildFacts }) {
     >
       <PartHead part={PARTS.cooler} />
       <h4 className={SUB}>Fan headers</h4>
+      {/* The spinning headers are rows; the empty ones are one line. Seven
+          rows of "not connected" were most of the board and said one thing. */}
       <ul className={LIST}>
-        {d.fans.map((f) => (
-          <li key={f.label} className={ROW}>
-            <span className={ROW_MAIN}>{f.label}</span>
-            <span className={ROW_SIDE}>
-              {f.rpm > 0 ? (
+        {d.fans
+          .filter((f) => f.rpm > 0)
+          .map((f) => (
+            <li key={f.label} className={ROW}>
+              <span className={ROW_MAIN}>{f.label}</span>
+              <span className={ROW_SIDE}>
                 <span className={MONO}>{num(f.rpm)} rpm</span>
-              ) : (
-                <span className="text-muted-foreground">not connected</span>
-              )}
-            </span>
-          </li>
-        ))}
+              </span>
+            </li>
+          ))}
         {d.fans.length === 0 && <p className={EMPTY}>no fan sensors; see the note below</p>}
       </ul>
-      <h4 className={SUB}>Board temperatures</h4>
-      <BarList
-        items={d.temps.map((t) => ({
-          label: t.label,
-          value: t.value,
-          display: `${t.value.toFixed(0)}°`,
-        }))}
-        tone="info"
-        empty="no board sensors"
-      />
+      {d.fans.some((f) => f.rpm <= 0) && (
+        <p className={CAPTION}>
+          Not connected:{' '}
+          {d.fans
+            .filter((f) => f.rpm <= 0)
+            .map((f) => f.label)
+            .join(', ')}
+          .
+        </p>
+      )}
       <p className={FOOT}>
         These readings exist because a driver was added for the board&rsquo;s Nuvoton super-I/O
         chip; without it Linux sees three sensors and counts no revolutions at all, which on a
@@ -218,7 +232,7 @@ function MemoryBoard({ f }: { f: BuildFacts }) {
     <Board
       title="Memory"
       icon="rows"
-      span={4}
+      span={6}
       aside={
         <span className={NOTE}>
           {hw.memory.populated === null || hw.memory.slots === null
@@ -362,7 +376,7 @@ function PowerBoard({ f }: { f: BuildFacts }) {
 
 function TheCaseBoard() {
   return (
-    <Board title="The case" icon="▣" span={12}>
+    <Board title="The case" icon="▣" span={8}>
       {/* The full-width panel (`PART_WIDE`): the photo earns real size here
           and the specs sit beside it rather than under it. */}
       <div className={PART_WIDE}>

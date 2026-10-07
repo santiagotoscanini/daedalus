@@ -1,4 +1,5 @@
 import { LogBoard } from '../../../components/logs'
+import { QuietState } from '../../../components/modules/parts'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
 import { FOOT } from '../../../components/tokens'
@@ -30,8 +31,9 @@ export function ToolsView({ data: d }: { data: Tools }) {
       />
 
       <BoardGrid>
-        <Board title="Status" icon="◔" span={12}>
+        <Board title="Status" icon="◔" span={4}>
           <Facts
+            list
             rows={[
               {
                 k: 'Health',
@@ -39,19 +41,18 @@ export function ToolsView({ data: d }: { data: Tools }) {
                   d.status === null ? (
                     DASH
                   ) : d.status === 'UP' ? (
-                    <Chip tone="ok">up</Chip>
+                    <QuietState>up</QuietState>
                   ) : (
                     <Chip tone="warn">{d.status.toLowerCase()}</Chip>
                   ),
               },
-              { k: 'Version', v: d.version ?? DASH },
               {
                 k: 'Latest release',
                 v:
                   d.gap.latest === null ? (
                     DASH
                   ) : d.gap.behind.length === 0 ? (
-                    <Chip tone="ok">up to date</Chip>
+                    <QuietState>up to date</QuietState>
                   ) : (
                     <Chip tone="warn">{d.gap.latest} available</Chip>
                   ),
@@ -65,7 +66,7 @@ export function ToolsView({ data: d }: { data: Tools }) {
           </p>
         </Board>
 
-        <Changelog gap={d.gap} span={12} />
+        <Changelog gap={d.gap} span={8} />
 
         <LogBoard source={{ container: 'stirling-pdf' }} title="Stirling-PDF logs" />
       </BoardGrid>

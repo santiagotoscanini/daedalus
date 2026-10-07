@@ -1,17 +1,10 @@
 import { Ago } from '../../../components/ago'
-import {
-  CAPTION,
-  FOOT,
-  LIST,
-  MONO,
-  NOTE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-  SUB,
-} from '../../../components/tokens'
+import { CELL_QUIET, TABLE, TABLE_HEAD, TABLE_ROW, TableGroup } from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import { FOOT, MONO } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
-import { num } from '../../../lib/format'
+import { cn } from '../../../lib/cn'
+import { DASH, num } from '../../../lib/format'
 import type { ActionsData } from '../data'
 import { accessTone, accessWord, Ext, imageWord, RunChip, took } from './shared'
 
@@ -64,7 +57,7 @@ export function WorkflowsView({ d }: { d: Workflows }) {
           </p>
         </Board>
 
-        <Board title="Actions used" icon="rows" span={4}>
+        <Board title="Actions used" icon="rows" span={8}>
           <BarList
             items={t.actions.slice(0, 10).map((a) => ({ label: a.label, value: a.value }))}
             empty="no uses read"
@@ -75,110 +68,165 @@ export function WorkflowsView({ d }: { d: Workflows }) {
           </p>
         </Board>
 
-        <Board title="What the box read" icon="panels" span={4}>
-          <ul className={LIST}>
-            {d.repos.map((r) => (
-              <li key={r.repo} className={ROW}>
-                <span className={ROW_MAIN}>{r.repo}</span>
-                <span className={ROW_SIDE}>
-                  <Chip tone={accessTone(r.access.files)}>files</Chip>{' '}
-                  <Chip tone={accessTone(r.access.runs)}>runs</Chip>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className={FOOT}>
-            Files come through <span className={MONO}>contents: read</span>, which the App has had
-            since it was made; runs need <span className={MONO}>actions: read</span>. Green is the
-            App, blue is what anyone can read, amber is the permission not yet granted.
-          </p>
-        </Board>
-
-        {d.repos.map((r) => (
-          <RepoBoard key={r.repo} r={r} />
-        ))}
+        <WorkflowsTable repos={d.repos} />
       </BoardGrid>
     </>
   )
 }
 
-/** One repository: its workflows, how they have run, and what they use. */
-function RepoBoard({ r }: { r: Workflows['repos'][number] }) {
+/** State · workflow · runs · failed · median · last. The tallies step away first. */
+const WF_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[6.5rem_minmax(14rem,1fr)_3.5rem_3.5rem_4.5rem_6rem] @max-[46rem]/table:grid-cols-[6.5rem_minmax(10rem,1fr)_6rem] @max-[46rem]/table:[&>.tally]:hidden'
+
+/** What the box could read of a repository, said only where it is not the App. */
+function readNote(r: Workflows['repos'][number]): string {
+  const files = r.access.files
+  const runs = r.access.runs
+  if (files === 'app' && runs === 'app') return `${r.kind} · read as the App`
+  if (files === runs) return `${r.kind} · ${accessWord(runs)}`
+  return `${r.kind} · files ${accessWord(files)} · runs ${accessWord(runs)}`
+}
+
+/**
+ * Every workflow file of every repository, one table grouped by repository.
+ * A repository with no workflow file is not a group of its own: they share
+ * one quiet row at the foot, since "nothing here" said thirteen times is a
+ * page of empty boards.
+ */
+function WorkflowsTable({ repos }: { repos: Workflows['repos'] }) {
+  const withFiles = repos.filter((r) => r.workflows.length > 0)
+  const without = repos.filter((r) => r.workflows.length === 0)
+  const listed = without.filter((r) => r.access.files === 'app' || r.access.files === 'public')
+  const unlisted = without.filter((r) => !(r.access.files === 'app' || r.access.files === 'public'))
   return (
-    <Board
-      title={r.repo}
-      icon="logs"
-      span={12}
-      aside={
-        <span className={NOTE}>
-          <Ext href={`${r.url}/actions`} className="text-primary">
-            {num(r.workflows.length)} workflows
-          </Ext>
-          {' · '}
-          {r.kind} · {accessWord(r.access.runs)}
-        </span>
-      }
+    <TableSection
+      title="Every workflow"
+      aside={`${num(repos.reduce((n, r) => n + r.workflows.length, 0))} files in ${num(withFiles.length)} repositories`}
     >
-      {r.workflows.length === 0 ? (
-        <p className={CAPTION}>
-          {r.access.files === 'app' || r.access.files === 'public'
-            ? 'No workflow files.'
-            : `Could not list the files: ${accessWord(r.access.files)}.`}
-        </p>
-      ) : (
-        <ul className={LIST}>
-          {r.workflows.map((w) => (
-            <li key={w.id} className="border-hairline border-t py-2.5 first:border-t-0">
-              <div className="flex min-w-0 items-center gap-2 text-[0.8rem]">
-                {w.lastRun !== null ? (
-                  <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />
-                ) : (
-                  <Chip tone="muted">
-                    {w.state === 'unknown' ? 'no run read' : w.state.replace(/_/g, ' ')}
-                  </Chip>
-                )}
-                <span className={ROW_MAIN}>
-                  <Ext href={w.url}>
-                    <b className="[font-weight:560]">{w.name}</b>
+      <ul className={TABLE} aria-label="Workflows by repository">
+        <li className={cn(WF_GRID, TABLE_HEAD)}>
+          <span>Last run</span>
+          <span>Workflow</span>
+          <span className="tally text-right">Runs</span>
+          <span className="tally text-right">Failed</span>
+          <span className="tally text-right">Median</span>
+          <span className="text-right">Last</span>
+        </li>
+        {withFiles.map((r) => (
+          <RepoGroup key={r.repo} r={r} />
+        ))}
+        {listed.length > 0 && (
+          <>
+            <TableGroup title="No workflow files" note={`${String(listed.length)} repositories`} />
+            <li className={cn(TABLE_ROW, 'flex flex-wrap items-center gap-x-4 gap-y-1 px-5')}>
+              {listed.map((r) => (
+                <span key={r.repo} title={readNote(r)}>
+                  <Ext href={`${r.url}/actions`} className="text-[0.8rem] text-subdued">
+                    {r.repo}
                   </Ext>
-                  <span className={`ml-1.5 ${MONO} text-muted-foreground`}>
-                    {w.path.replace(/^\.github\/workflows\//, '')}
-                  </span>
+                  <span className="ml-1 text-[0.72rem] text-muted-foreground">{r.kind}</span>
                 </span>
-                <span className={ROW_SIDE}>
-                  {w.runs > 0 && (
-                    <>
-                      {num(w.runs)} runs
-                      {w.failed > 0 && (
-                        <span className="text-danger"> · {num(w.failed)} failed</span>
-                      )}
-                      {' · median '}
-                      {took(w.p50)}
-                      {w.lastRun !== null && (
-                        <>
-                          {' · last '}
-                          <Ago at={w.lastRun.at} />
-                        </>
-                      )}
-                    </>
-                  )}
-                </span>
-              </div>
-              <p className={`${SUB} mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-normal`}>
-                <span>
-                  on {w.triggers.length === 0 ? 'unknown' : w.triggers.map(triggerWord).join(', ')}
-                  {w.schedules.length > 0 && ` (${w.schedules.join('; ')})`}
-                </span>
-                <span>
-                  {num(w.jobs)} {w.jobs === 1 ? 'job' : 'jobs'}
-                  {w.runsOn.length > 0 && ` on ${[...new Set(w.runsOn.map(imageWord))].join(', ')}`}
-                </span>
-                {w.uses.length > 0 && <span>uses {w.uses.join(', ')}</span>}
-              </p>
+              ))}
             </li>
-          ))}
-        </ul>
-      )}
-    </Board>
+          </>
+        )}
+        {unlisted.length > 0 && (
+          <>
+            <TableGroup
+              title="Could not list the files"
+              note={`${String(unlisted.length)} repositories`}
+            />
+            {unlisted.map((r) => (
+              <li key={r.repo} className={cn(TABLE_ROW, 'flex items-center gap-3 px-5')}>
+                <Ext href={`${r.url}/actions`} className="text-foreground">
+                  {r.repo}
+                </Ext>
+                <Chip tone={accessTone(r.access.files)}>{accessWord(r.access.files)}</Chip>
+              </li>
+            ))}
+          </>
+        )}
+      </ul>
+      <p className={FOOT}>
+        Files come through <span className={MONO}>contents: read</span>, which the App has had since
+        it was made; runs need <span className={MONO}>actions: read</span>. Each repository's line
+        says how it was read; only a repository read some other way than as the App says so with a
+        mark.
+      </p>
+    </TableSection>
+  )
+}
+
+function RepoGroup({ r }: { r: Workflows['repos'][number] }) {
+  return (
+    <>
+      <li
+        data-group=""
+        className="flex h-8 items-center gap-2.5 border-hairline border-y bg-foreground/[0.02] px-5 text-[0.75rem] first:border-t-0"
+      >
+        <Ext href={`${r.url}/actions`} className="text-foreground [font-weight:560]">
+          {r.repo}
+        </Ext>
+        <span className="text-muted-foreground">
+          {num(r.workflows.length)} workflow{r.workflows.length === 1 ? '' : 's'} · {readNote(r)}
+        </span>
+        {r.access.runs !== 'app' && (
+          <Chip tone={accessTone(r.access.runs)} className="ml-auto">
+            runs: {accessWord(r.access.runs)}
+          </Chip>
+        )}
+      </li>
+      {r.workflows.map((w) => (
+        <li key={w.id} className={cn(WF_GRID, TABLE_ROW, 'py-2.5')}>
+          <span>
+            {w.lastRun !== null ? (
+              <RunChip status={w.lastRun.status} conclusion={w.lastRun.conclusion} />
+            ) : (
+              <span className="text-[0.75rem] text-muted-foreground">
+                {w.state === 'unknown' ? 'no run read' : w.state.replace(/_/g, ' ')}
+              </span>
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className="flex min-w-0 items-baseline gap-2">
+              <Ext href={w.url} className="truncate text-foreground [font-weight:560]">
+                {w.name}
+              </Ext>
+              <span className={cn(MONO, 'truncate text-muted-foreground')}>
+                {w.path.replace(/^\.github\/workflows\//, '')}
+              </span>
+            </span>
+            <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0 text-[0.75rem] text-muted-foreground">
+              <span>
+                on {w.triggers.length === 0 ? 'unknown' : w.triggers.map(triggerWord).join(', ')}
+                {w.schedules.length > 0 && ` (${w.schedules.join('; ')})`}
+              </span>
+              <span>
+                {num(w.jobs)} {w.jobs === 1 ? 'job' : 'jobs'}
+                {w.runsOn.length > 0 && ` on ${[...new Set(w.runsOn.map(imageWord))].join(', ')}`}
+              </span>
+              {w.uses.length > 0 && <span>uses {w.uses.join(', ')}</span>}
+            </span>
+          </span>
+          <span className={cn(CELL_QUIET, 'tally text-right')}>
+            {w.runs > 0 ? num(w.runs) : DASH}
+          </span>
+          <span
+            className={cn(
+              'tally text-right tabular-nums',
+              w.failed > 0 ? 'text-danger [font-weight:560]' : CELL_QUIET,
+            )}
+          >
+            {w.failed > 0 ? num(w.failed) : DASH}
+          </span>
+          <span className={cn(CELL_QUIET, 'tally text-right')}>
+            {w.runs > 0 ? took(w.p50) : DASH}
+          </span>
+          <span className={cn(CELL_QUIET, 'text-right')}>
+            {w.lastRun !== null ? <Ago at={w.lastRun.at} /> : DASH}
+          </span>
+        </li>
+      ))}
+    </>
   )
 }

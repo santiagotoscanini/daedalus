@@ -1,11 +1,23 @@
 import { LogBoard } from '../../../../components/logs'
 import { Changelog } from '../../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/service-head'
-import { Board, BoardGrid, Measures } from '../../../../components/viz'
+import { BoardGrid, Stat, StatStrip } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { num } from '../../../../lib/format'
-import { EMPTY, FEED, FEED_EVENT, FEED_ROW, FEED_TITLE, FOOT, NOTE } from '../shared'
+import {
+  CELL_QUIET,
+  FOOT,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableSection,
+} from '../shared'
 import type { Downloaders } from './shared'
+
+/* Status, then title. The status column is narrow and quiet: its vocabulary
+   is small and nearly always the same word. */
+const RECENT_GRID = 'grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-6 px-5'
 
 export function MetubePage({ d }: { d: Downloaders['metube'] }) {
   return (
@@ -27,48 +39,53 @@ export function MetubePage({ d }: { d: Downloaders['metube'] }) {
         actions={<Open name="MeTube" host="metube" />}
       />
 
+      {/* Three counts read across: a strip, not a board beside a list that
+          repeated two of them in its header. */}
+      <StatStrip>
+        <Stat label="Completed, all time" value={num(d.done)} />
+        <Stat label="Queued" value={num(d.queued)} />
+        <Stat label="Pending" value={num(d.pending)} />
+      </StatStrip>
+
       <BoardGrid>
-        <Board
-          title="Queue"
-          icon="down"
-          span={8}
-          aside={
-            <span className={NOTE}>
-              {num(d.queued)} queued · {num(d.pending)} pending
-            </span>
+        <TableSection
+          title="Recent"
+          foot={
+            <p className={FOOT}>
+              The most recent finished items. MeTube keeps its history in the browser session as
+              well as on the server, so this list and the one in its own UI can differ.
+            </p>
           }
         >
-          {d.recent.length === 0 ? (
-            <p className={EMPTY}>Nothing downloaded yet.</p>
-          ) : (
-            <ul className={FEED}>
-              {d.recent.map((r, i) => (
-                <li key={`${r.title}-${String(i)}`} className={FEED_ROW}>
-                  <span className={cn(FEED_EVENT, r.status !== 'finished' && 'text-danger')}>
+          <ul className={TABLE} aria-label="MeTube, recent">
+            <li aria-hidden="true" className={cn(RECENT_GRID, TABLE_HEAD)}>
+              <span>Status</span>
+              <span>Title</span>
+            </li>
+            {d.recent.length === 0 ? (
+              <li className={TABLE_EMPTY}>Nothing downloaded yet.</li>
+            ) : (
+              d.recent.map((r, i) => (
+                <li key={`${r.title}-${String(i)}`} className={cn(RECENT_GRID, TABLE_ROW)}>
+                  {/* Finished is every row on a good day: quiet. Anything else
+                      is the row to read. */}
+                  <span
+                    className={cn(
+                      CELL_QUIET,
+                      'first-letter:uppercase',
+                      r.status !== 'finished' && 'text-danger',
+                    )}
+                  >
                     {r.status}
                   </span>
-                  <span className={FEED_TITLE} title={r.title}>
+                  <span className="truncate text-foreground" title={r.title}>
                     {r.title}
                   </span>
                 </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            The most recent finished items. MeTube keeps its history in the browser session as well
-            as on the server, so this list and the one in its own UI can differ.
-          </p>
-        </Board>
-
-        <Board title="All time" icon="grid" span={4}>
-          <Measures
-            items={[
-              { k: 'Completed', v: num(d.done) },
-              { k: 'Queued', v: num(d.queued) },
-              { k: 'Pending', v: num(d.pending) },
-            ]}
-          />
-        </Board>
+              ))
+            )}
+          </ul>
+        </TableSection>
 
         <Changelog
           gap={d.gap}

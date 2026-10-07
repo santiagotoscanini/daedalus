@@ -2,7 +2,7 @@ import { DASH } from '../../lib/format'
 import type { AppTabData } from '../../server/registry'
 import { FOOT } from '../tokens'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
-import { type AppRecord, LEDE, STRIP_FOOT } from './shared'
+import { type AppRecord, LEDE } from './shared'
 
 /**
  * The VPN this app's traffic exits through.
@@ -64,6 +64,10 @@ export function Vpn({
             interfaces of its own. Only the namespace owner may publish a port, which is why the
             app’s host port is declared on gluetun.
           </p>
+          <p className={FOOT}>
+            Read from the gluetun exporter’s prometheus job rather than from gluetun’s control API,
+            so it works the same for every instance and needs no per-app port table.
+          </p>
         </Board>
 
         <Board title="What this protects" icon="⛨" span={6}>
@@ -81,11 +85,6 @@ export function Vpn({
           </p>
         </Board>
       </BoardGrid>
-
-      <p className={STRIP_FOOT}>
-        Read from the gluetun exporter’s prometheus job rather than from gluetun’s control API, so
-        it works the same for every instance and needs no per-app port table.
-      </p>
     </>
   )
 }

@@ -1,5 +1,23 @@
+import type { ReactNode } from 'react'
+import { ExplainToggle, useExplain } from '../../../components/explain'
 import { type CompareRow, latestRow } from '../../../components/service-head'
+import { SECTION_NOTE, SECTION_TITLE } from '../../../components/table'
+import { cn } from '../../../lib/cn'
 import type { VersionGap } from '../../../lib/dashboard/github'
+
+export {
+  CELL_MONO,
+  CELL_NAME,
+  CELL_QUIET,
+  CELL_SUB,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_LINK,
+  TABLE_ROW,
+  TABLE_ROW_LINK,
+  TableGroup,
+} from '../../../components/table'
 
 /**
  * The latest release, paired with the PIN rather than with the running version.
@@ -43,3 +61,55 @@ export const ITEM_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
    into, not something that is currently broken. */
 export const REJECTED =
   'm-0 rounded-xl border border-warning/30 bg-warning/[0.07] px-3 py-2 text-[0.75rem] leading-[1.5] text-subdued [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums'
+
+/* ── a table with a heading ────────────────────────────────────────────────
+   The section a list of things is drawn in: SECTION_TITLE over a TABLE, on the
+   board grid beside the boards. Its explanation folds behind an ⓘ in the title,
+   the way a Board's does, so moving a list out of a board into a table loses
+   neither the prose nor the fold. */
+
+export function TableSection({
+  title,
+  note,
+  aside,
+  foot,
+  span = 12,
+  children,
+}: {
+  title: string
+  /** A visible line under the title: counts, a state. */
+  note?: ReactNode
+  /** Right of the title: a live reading. */
+  aside?: ReactNode
+  /** Under the table: FOOT folds behind the ⓘ, CAPTION stays. */
+  foot?: ReactNode
+  span?: 6 | 8 | 12
+  children: ReactNode
+}) {
+  const explain = useExplain()
+  return (
+    <section
+      className={cn(TABLE_SECTION, explain.body)}
+      style={{ ['--span' as string]: String(span) }}
+    >
+      <h3 className={cn(SECTION_TITLE, 'mt-0 min-h-6')}>
+        {title}
+        <ExplainToggle
+          open={explain.open}
+          onToggle={explain.toggle}
+          className="-my-1 hidden group-has-[.explain]/section:inline-flex"
+        />
+        {aside !== undefined && (
+          <span className="ml-auto text-[0.78rem] font-normal text-muted-foreground">{aside}</span>
+        )}
+      </h3>
+      {note !== undefined && <p className={SECTION_NOTE}>{note}</p>}
+      {children}
+      {foot !== undefined && <div className="mt-3 flex flex-col gap-2 px-1">{foot}</div>}
+    </section>
+  )
+}
+
+/** On the board grid like a Board, with a section's air above it. */
+const TABLE_SECTION =
+  'group/section min-w-0 my-6 first:mt-0 last:mb-0 [grid-column:span_var(--span,12)] max-[78rem]:[grid-column:span_min(12,calc(var(--span,12)*2))] max-[50rem]:[grid-column:span_12]'

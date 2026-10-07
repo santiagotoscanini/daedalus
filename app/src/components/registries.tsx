@@ -44,6 +44,10 @@ const ZOT_NEIGHBOURS: readonly LogNeighbour[] = [
   },
 ]
 
+/** Two boards in one third-width column of the board grid, the last taking the slack. */
+const STACK =
+  'flex min-w-0 flex-col gap-4 [grid-column:span_4] max-[78rem]:[grid-column:span_12] [&>section:last-child]:flex-1'
+
 export function ImagesView({ d }: { d: ImagesData }) {
   const site = useSite()
   const total = d.repositories.length + d.cachedRepos.length || 0
@@ -115,53 +119,57 @@ export function ImagesView({ d }: { d: ImagesData }) {
           </p>
         </Board>
 
-        <Board title="Repositories" icon="◲" span={4}>
-          <div className={REPOS}>
-            {d.repositories.map((r) => (
-              <Chip key={r} className={REPO}>
-                {r}
-              </Chip>
-            ))}
-            {d.repositories.length === 0 && (
-              <p className={EMPTY}>
-                {d.reachable ? 'nothing published yet' : 'could not read the catalogue'}
-              </p>
-            )}
-          </div>
-          <h4 className={SUB}>Cached from upstream</h4>
-          <div className={REPOS}>
-            {d.cachedRepos.map((r) => (
-              <Chip key={r} className={cn(REPO, REPO_MUTED)}>
-                {r}
-              </Chip>
-            ))}
-            {d.cachedRepos.length === 0 && <p className={EMPTY}>none</p>}
-          </div>
-        </Board>
+        {/* The two short boards stacked beside the long bar list, so the row
+            has one bottom edge; the pulls get the full width below. */}
+        <div className={STACK}>
+          <Board title="Repositories" icon="◲" span={12}>
+            <div className={REPOS}>
+              {d.repositories.map((r) => (
+                <Chip key={r} className={REPO}>
+                  {r}
+                </Chip>
+              ))}
+              {d.repositories.length === 0 && (
+                <p className={EMPTY}>
+                  {d.reachable ? 'nothing published yet' : 'could not read the catalogue'}
+                </p>
+              )}
+            </div>
+            <h4 className={SUB}>Cached from upstream</h4>
+            <div className={REPOS}>
+              {d.cachedRepos.map((r) => (
+                <Chip key={r} className={cn(REPO, REPO_MUTED)}>
+                  {r}
+                </Chip>
+              ))}
+              {d.cachedRepos.length === 0 && <p className={EMPTY}>none</p>}
+            </div>
+          </Board>
 
-        <Board title="Pulls since zot started" icon="↓" span={8}>
+          <Board title="How it is reached" icon="⇢" span={12}>
+            <Facts
+              list
+              rows={[
+                { k: 'hostname', v: <code>{site.registryHost}</code> },
+                { k: 'read', v: 'anonymous' },
+                { k: 'push', v: 'htpasswd, from sops' },
+                { k: 'pulled by', v: 'app deploy timers' },
+                { k: 'pushed by', v: 'the box’s build service' },
+              ]}
+            />
+            <p className={FOOT}>
+              Anonymous read is deliberate: it is what lets every deploy work with no credential at
+              all, so a token expiry can never stop one. Writing still needs the htpasswd.
+            </p>
+          </Board>
+        </div>
+
+        <Board title="Pulls since zot started" icon="↓" span={12}>
           <BarList items={d.pulls} empty="no pulls recorded" />
           <p className={FOOT}>
             Each app’s deploy timer pulls by tag every two minutes and restarts only when the digest
             actually moved, so these climb steadily on a box where nothing is being deployed. A flat
             counter is the thing worth noticing, not a large one.
-          </p>
-        </Board>
-
-        <Board title="How it is reached" icon="⇢" span={4}>
-          <Facts
-            list
-            rows={[
-              { k: 'hostname', v: <code>{site.registryHost}</code> },
-              { k: 'read', v: 'anonymous' },
-              { k: 'push', v: 'htpasswd, from sops' },
-              { k: 'pulled by', v: 'app deploy timers' },
-              { k: 'pushed by', v: 'the box’s build service' },
-            ]}
-          />
-          <p className={FOOT}>
-            Anonymous read is deliberate: it is what lets every deploy work with no credential at
-            all, so a token expiry can never stop one. Writing still needs the htpasswd.
           </p>
         </Board>
 
@@ -242,7 +250,11 @@ export function PackagesView({ d }: { d: PackagesData }) {
         <Stat
           label="Versions held"
           value={d.versions === null ? DASH : num(d.versions)}
-          sub="across those packages"
+          sub={
+            d.multiVersion === null
+              ? 'across those packages'
+              : `${num(d.multiVersion)} with several versions`
+          }
         />
         <Stat
           label="With a tarball"
@@ -263,30 +275,10 @@ export function PackagesView({ d }: { d: PackagesData }) {
       </StatStrip>
 
       <BoardGrid>
-        <Board title="What is in it" icon="◳" span={6}>
+        {/* One board: what is in it is the strip above, so a second panel
+            restating those four numbers was the same facts twice. */}
+        <Board title="How it is reached" icon="⇢" span={12}>
           <Facts
-            rows={[
-              { k: 'Published here', v: d.published === null ? DASH : num(d.published) },
-              { k: 'Cached from npmjs', v: d.cached === null ? DASH : num(d.cached) },
-              { k: 'Versions held', v: d.versions === null ? DASH : num(d.versions) },
-              { k: 'With a tarball', v: d.withTarball === null ? DASH : num(d.withTarball) },
-              {
-                k: 'Several versions',
-                v: d.multiVersion === null ? DASH : num(d.multiVersion),
-              },
-            ]}
-          />
-          <p className={FOOT}>
-            A pull-through cache first: a package counts as cached the moment its manifest is
-            resolved, which is why that number leads the tarball count: resolving a dependency tree
-            records a manifest even when no tarball is ever fetched. Publishing here is opt-in and
-            nothing does it yet.
-          </p>
-        </Board>
-
-        <Board title="How it is reached" icon="⇢" span={6}>
-          <Facts
-            list
             rows={[
               { k: 'hostname', v: <code>verdaccio.{site.baseDomain}</code> },
               { k: 'exposure', v: 'LAN only' },
@@ -302,6 +294,12 @@ export function PackagesView({ d }: { d: PackagesData }) {
             The request figures above come from traefik, not from verdaccio: it publishes no
             prometheus endpoint at all (upstream issue #1815, open since 2020), which is also why
             its Grafana dashboard is built out of proxy metrics.
+          </p>
+          <p className={FOOT}>
+            A pull-through cache first: a package counts as cached the moment its manifest is
+            resolved, which is why that number leads the tarball count: resolving a dependency tree
+            records a manifest even when no tarball is ever fetched. Publishing here is opt-in and
+            nothing does it yet.
           </p>
         </Board>
 

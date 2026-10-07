@@ -198,6 +198,7 @@ export function Segmented<T extends string>({
   options,
   disabled,
   label,
+  className,
 }: {
   value: T
   onChange: (v: T) => void
@@ -217,10 +218,14 @@ export function Segmented<T extends string>({
     label: string
     icon?: string
     dot?: Tone | null
+    /** A tally beside the label: the filter IS the count. */
+    count?: number
     disabled?: boolean
     reason?: string
   }[]
   disabled?: boolean
+  /** Extra classes on the track (a toolbar sets its height). */
+  className?: string
 }) {
   return (
     <div
@@ -233,6 +238,7 @@ export function Segmented<T extends string>({
         // would be wider than a phone and scroll the page sideways.
         SEGMENT_TRACK,
         'flex-wrap',
+        className,
       )}
     >
       {options.map((o) => (
@@ -258,6 +264,9 @@ export function Segmented<T extends string>({
           {o.icon && <span aria-hidden="true">{o.icon}</span>}
           {'dot' in o && <Pulse on={o.dot === 'ok'} tone={o.dot ?? 'muted'} />}
           {o.label}
+          {o.count !== undefined && (
+            <span className="text-muted-foreground tabular-nums [font-weight:450]">{o.count}</span>
+          )}
         </button>
       ))}
     </div>

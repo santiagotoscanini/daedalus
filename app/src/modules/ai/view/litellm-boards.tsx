@@ -1,8 +1,8 @@
 import { GrafanaLogs } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
-import { Board, Chip, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
+import { Board, Columns, Measures, Pulse } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { compact, DASH, daysAgo, ms, num, pct } from '../../../lib/format'
+import { compact, DASH, ms, num, pct } from '../../../lib/format'
 import type { LitellmData } from '../data/litellm'
 import type { LitellmFacts } from './litellm'
 import {
@@ -18,8 +18,6 @@ import {
   LIVE,
   MONO,
   NOTE,
-  RANKS,
-  REJECTED,
 } from './shared'
 
 export function TrafficBoard({ f }: { f: LitellmFacts }) {
@@ -126,7 +124,9 @@ export function ToolsModelsCalledBoard({ f }: { f: LitellmFacts }) {
         <ul className={ITEMS}>
           {data.mcp.map((t) => (
             <li key={`${t.server}/${t.tool}`} className={ITEM}>
-              <Chip tone="info">{t.server}</Chip>
+              <span className="w-[4.5rem] flex-none truncate text-[0.75rem] text-muted-foreground">
+                {t.server}
+              </span>
               <span className={cn(ITEM_MAIN, MONO)} title={t.tool}>
                 {t.tool}
               </span>
@@ -144,59 +144,6 @@ export function ToolsModelsCalledBoard({ f }: { f: LitellmFacts }) {
         The other direction: tools the gateway hands to a model mid-answer, counted when one was
         invoked. A registered server with no calls does not appear, and a tool whose counters were
         reset by a restart shows no time.
-      </p>
-    </Board>
-  )
-}
-
-export function WhoIsCallingBoard({ f }: { f: LitellmFacts }) {
-  const { data, total, todayDate } = f
-  return (
-    <Board
-      title="Who is calling"
-      icon="◑"
-      span={6}
-      aside={<span className={NOTE}>requests, {total.days}d</span>}
-    >
-      {data.callers.length === 0 ? (
-        <p className={EMPTY}>no keyed traffic in the window</p>
-      ) : (
-        <ul className={RANKS}>
-          {data.callers.map((c) => (
-            <CallerRow
-              key={c.name}
-              caller={c}
-              max={data.callers[0]?.requests ?? 1}
-              today={todayDate}
-            />
-          ))}
-        </ul>
-      )}
-
-      {/* Rejected keys are split out rather than ranked — see `callersOf`:
-          a rejected key returns no tokens at all, so on a token ranking it
-          would score zero and never appear. */}
-      {data.rejected.keys > 0 && (
-        <p className={REJECTED}>
-          <b>{num(data.rejected.keys)}</b> keys never completed a request.{' '}
-          <b>{num(data.rejected.requests)}</b> attempts, last{' '}
-          {ledgerAgo(data.rejected.last, todayDate)}.{' '}
-          {data.rejected.live === 0 ? (
-            'None of them exists on the gateway today.'
-          ) : (
-            <>
-              <b>{num(data.rejected.live)}</b> of them still exists on the gateway, which is a fault
-              rather than a stale credential.
-            </>
-          )}
-        </p>
-      )}
-
-      <p className={FOOT}>
-        Named by their key’s alias; a key with none shows as its hash, and one the gateway no longer
-        holds is marked <b>revoked</b>. Hover any name for what it is. A key that fails
-        authentication never reaches a model, so it has no tokens and no model against it. The
-        gateway is LAN-only, so every attempt above came from something in the house.
       </p>
     </Board>
   )
@@ -242,61 +189,6 @@ export function NeighbourPair({ n }: { n: NeighbourData }) {
       </Board>
     </>
   )
-}
-
-type Caller = LitellmData['callers'][number]
-
-/**
- * One caller.
- *
- * Failures get the only colour in the row, and only when there are any. A
- * caller that works is the normal case and does not need to be decorated to
- * say so.
- */
-function CallerRow({ caller, max, today }: { caller: Caller; max: number; today: string }) {
-  return (
-    <RankRow
-      name={caller.name}
-      note={caller.note}
-      badges={caller.live ? [] : [{ text: 'revoked', tone: 'warn' } as const]}
-      value={caller.requests}
-      max={max}
-      meta={
-        <>
-          {caller.tokens > 0 && <span>{compact(caller.tokens)} tok</span>}
-          {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
-          {caller.failed > 0 && <span className="text-danger">{num(caller.failed)} failed</span>}
-          {/* One name and a count. A caller reaching a single model is the
-              norm, and two full model names wrap this line onto a second row
-              for the one caller (usually the master key) that reaches several —
-              the rest is a hover away. */}
-          {caller.models[0] !== undefined && (
-            <span className={cn(MONO, 'truncate')} title={caller.models.join(', ')}>
-              {caller.models[0]}
-              {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
-            </span>
-          )}
-          <span>{ledgerAgo(caller.last, today)}</span>
-        </>
-      }
-    />
-  )
-}
-
-/**
- * A ledger date as a phrase.
- *
- * Days rather than `since`, because the ledger's resolution IS a day: it knows
- * a key called on the 3rd, not at what time, and "2 days ago" is the strongest
- * true statement available. Computed against a date passed in rather than
- * against `Date.now()` — this page renders on the server and hydrates in the
- * browser, and a relative time derived from two different clocks is a
- * hydration mismatch waiting for midnight.
- */
-function ledgerAgo(date: string | null, today: string): string {
-  if (date === null || date === '') return DASH
-  const days = Math.round((Date.parse(today) - Date.parse(date)) / 86400_000)
-  return Number.isFinite(days) ? daysAgo(days) : date
 }
 
 /** `29 req · 28k tok`, or an em dash for a day the gateway served nothing. */

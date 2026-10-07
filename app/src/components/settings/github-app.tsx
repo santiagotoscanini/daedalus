@@ -13,10 +13,20 @@ import { useNow } from '../poll'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Chip } from '../viz'
-import { NOTE_SHOWN } from './form'
 import { CreateApp, PendingApply } from './github-app-steps'
 import { PasteKey } from './github-paste-key'
-import { ASIDE, ExtLink, Mono, Pending, Rows, Stack, Unset } from './shared'
+import {
+  ASIDE,
+  Band,
+  ExtLink,
+  Mono,
+  NOTE_SHOWN,
+  Pending,
+  Rows,
+  Section,
+  Stack,
+  Unset,
+} from './shared'
 
 // The GitHub half of Settings › Integrations: the box's own GitHub App from
 // creation through installation.
@@ -48,30 +58,45 @@ const APP_STATE: Record<GithubAppState, { tone: Tone; label: string }> = {
  * except the ones typed into the recovery form, which are cleared on submit.
  */
 export function GithubApp({ app, notice, onDismissNotice }: GithubAppProps) {
+  const identity = app !== null && app.state !== 'none' ? app.identity : undefined
   return (
-    <div className="flex flex-col gap-3 border-hairline border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="m-0 text-[0.875rem] [font-weight:560]">GitHub App</h3>
-        {app === null ? (
+    <Section
+      title="GitHub App"
+      icon="/icon-github.svg"
+      mono
+      description="The box’s own App, which is how it talks to GitHub once created and installed."
+      aside={
+        app === null ? (
           <Pending className="w-20" />
         ) : (
           <Chip tone={APP_STATE[app.state].tone}>{APP_STATE[app.state].label}</Chip>
-        )}
-      </div>
-      {notice !== null && <CallbackNotice notice={notice} app={app} onDismiss={onDismissNotice} />}
-      {app !== null &&
-        (app.state === 'none' ? (
-          <CreateApp app={app} />
-        ) : (
-          <>
-            {app.pending !== undefined && (
-              <PendingApply pending={app.pending} owner={app.owner} appsUrl={app.appsUrl} />
-            )}
-            {app.identity !== undefined && <AppFacts app={app} identity={app.identity} />}
-            {app.identity !== undefined && <PasteKey settingsUrl={app.settingsUrl} />}
-          </>
-        ))}
-    </div>
+        )
+      }
+      body={
+        <>
+          {(notice !== null ||
+            (app !== null && (app.state === 'none' || app.pending !== undefined))) && (
+            <Band>
+              {notice !== null && (
+                <CallbackNotice notice={notice} app={app} onDismiss={onDismissNotice} />
+              )}
+              {app !== null && app.state === 'none' && <CreateApp app={app} />}
+              {app !== null && app.state !== 'none' && app.pending !== undefined && (
+                <PendingApply pending={app.pending} owner={app.owner} appsUrl={app.appsUrl} />
+              )}
+            </Band>
+          )}
+          {app !== null && identity !== undefined && <Rows framed rows={appFacts(app, identity)} />}
+        </>
+      }
+    >
+      {app !== null && identity !== undefined && (
+        <>
+          <AppActions app={app} identity={identity} />
+          <PasteKey settingsUrl={app.settingsUrl} />
+        </>
+      )}
+    </Section>
   )
 }
 
@@ -174,7 +199,8 @@ function CallbackNotice({
 
 type Installation = NonNullable<GithubAppStatus['installation']>
 
-function AppFacts({ app, identity }: { app: GithubAppStatus; identity: SiteGithubApp }) {
+/** The App's facts, as the section's rows: what it is, and — once installed — where and how fresh. */
+function appFacts(app: GithubAppStatus, identity: SiteGithubApp): { k: string; v: ReactNode }[] {
   const inst = app.installation
   const installed = app.state === 'installed' || app.state === 'installed-elsewhere'
   const rows: { k: string; v: ReactNode }[] = [
@@ -210,10 +236,15 @@ function AppFacts({ app, identity }: { app: GithubAppStatus; identity: SiteGithu
       { k: 'Token', v: <TokenFreshness installation={inst} /> },
     )
   }
+  return rows
+}
 
+/** What the App's state asks for next: install it, install it on the owner too, or its settings. */
+function AppActions({ app, identity }: { app: GithubAppStatus; identity: SiteGithubApp }) {
+  const inst = app.installation
+  const installed = app.state === 'installed' || app.state === 'installed-elsewhere'
   return (
-    <div className="flex flex-col gap-3">
-      <Rows rows={rows} />
+    <div className="flex flex-col gap-3 empty:hidden">
       {app.state === 'created' && app.installUrl !== undefined && (
         <div className="flex flex-col gap-2">
           <div>

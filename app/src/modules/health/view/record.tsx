@@ -1,12 +1,11 @@
 import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { ServiceHead } from '../../../components/service-head'
-import { FOOT, MONO } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
-import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
-import { DASH, num } from '../../../lib/format'
+import { BoardGrid } from '../../../components/viz'
 import type { Tone } from '../../../lib/tone'
 import type { HealthData } from '../data'
+import { PiecesBoard } from './record-pieces'
 import { gapTitle, VersionAside } from './shared'
 
 // Health › Record: getbased — labs, genome, body and history in one record —
@@ -32,7 +31,6 @@ function commitTitle(label: string, build: Record_['build']): string {
 const short = (sha: string | null): string | null => sha?.slice(0, 7) ?? null
 
 export function RecordView({ data: d }: { data: Record_ }) {
-  const kb = d.agents.rag.health
   return (
     <>
       <ServiceHead
@@ -58,114 +56,20 @@ export function RecordView({ data: d }: { data: Record_ }) {
       />
 
       <BoardGrid>
-        <Board title="Where the record lives" icon="◱" span={8}>
-          <Facts
-            rows={[
-              { k: 'App', v: <span className={MONO}>{d.url}</span> },
-              { k: 'Sync relay', v: <span className={MONO}>{d.relayUrl}</span> },
-              { k: 'On the server', v: 'static files, and the relay’s ciphertext' },
-              { k: 'In each browser', v: 'the whole record' },
-            ]}
-          />
-          <p className={FOOT}>
-            Every profile is kept in the browser&rsquo;s own storage, so nothing on this page can
-            count, size or back it up. A device joins by naming the relay above under Settings ›
-            Data › Cross-device sync and pairing with the profile&rsquo;s sync phrase; the relay
-            stores only what the devices encrypted, and without that phrase its copy cannot be read.
-            Between syncs, a full backup exported from Settings is the only other copy.
-          </p>
-        </Board>
+        <PiecesBoard d={d} />
 
-        <Board title="Sync relay" icon="◔" span={4}>
-          <Facts
-            rows={[
-              { k: 'Version', v: d.relay.version ?? DASH },
-              {
-                k: 'Latest release',
-                v:
-                  d.relay.gap.latest === null ? (
-                    DASH
-                  ) : d.relay.gap.behind.length === 0 ? (
-                    <Chip tone="ok">up to date</Chip>
-                  ) : (
-                    <Chip tone="warn">{d.relay.gap.latest} available</Chip>
-                  ),
-              },
-            ]}
-          />
-          <p className={FOOT}>
-            An Evolu CRDT relay: devices push encrypted changes, and it stores and forwards what it
-            cannot read. Its owner-scoped storage is under /self on the same hostname, and the
-            context gateway — the same release, a second container — under /api.
-          </p>
-        </Board>
-
-        <Changelog build={d.build} span={6} title={commitTitle('getbased', d.build)} />
+        {/* Three projects, three release cycles: a row of three, each saying
+            what it would bring rather than one changelog speaking for all. */}
+        <Changelog build={d.build} span={4} title={commitTitle('getbased', d.build)} />
         <Changelog
           gap={d.relay.gap}
-          span={6}
+          span={4}
           title={gapTitle('Relay and context gateway', d.relay.gap)}
           aside={<VersionAside version={d.relay.version} />}
         />
-
-        <Board
-          title="Agent tools"
-          icon="◇"
-          span={6}
-          aside={<VersionAside version={short(d.agents.build.running)} />}
-        >
-          <Facts
-            rows={[
-              {
-                k: 'Knowledge base',
-                v: (
-                  <>
-                    <span className={MONO}>getbased-rag {d.agents.rag.version ?? DASH}</span>{' '}
-                    {kb === null ? (
-                      <Chip tone="bad">not answering</Chip>
-                    ) : kb.chunks === 0 ? (
-                      <Chip tone="muted">empty library</Chip>
-                    ) : (
-                      <Chip tone="ok">{num(kb.chunks)} chunks</Chip>
-                    )}
-                  </>
-                ),
-              },
-              {
-                k: 'Library manager',
-                v: (
-                  <>
-                    <span className={MONO}>
-                      getbased-dashboard {d.agents.library.version ?? DASH}
-                    </span>{' '}
-                    <a href={d.agents.library.url} target="_blank" rel="noreferrer">
-                      open ↗
-                    </a>
-                  </>
-                ),
-              },
-              {
-                k: 'MCP server',
-                v: (
-                  <>
-                    <span className={MONO}>getbased-mcp {d.agents.mcp.version ?? DASH}</span> ·
-                    Getbased on the LLM gateway
-                  </>
-                ),
-              },
-            ]}
-          />
-          <p className={FOOT}>
-            One commit of the getbased-agents repository builds all three. The app&rsquo;s Knowledge
-            Base is the knowledge base above, at{' '}
-            <span className={MONO}>{d.agents.rag.url}/query</span>; documents go in through the
-            library manager, which asks for the same key. The MCP server reads what Agent Access
-            publishes through the context gateway and decrypts it in its own container.
-          </p>
-        </Board>
         <Changelog
           build={d.agents.build}
-          span={6}
+          span={4}
           title={commitTitle('getbased-agents', d.agents.build)}
         />
 

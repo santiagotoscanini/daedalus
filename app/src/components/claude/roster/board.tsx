@@ -20,12 +20,14 @@ import { countByState, type RosterEntry, sessionRows } from '../../../lib/claude
 import { num } from '../../../lib/format'
 import { claudeSessionFn, fetchClaudeActionFn } from '../../../server/claude'
 import { ARM_MS } from '../../armed-confirm'
+import { TableGroup } from '../../table'
 import { CAPTION, EMPTY, FOOT, LIST, MONO, NOTE } from '../../tokens'
 import { useArmedKey } from '../../use-armed'
 import { useVerbRequest } from '../../verb-request'
 import { Board } from '../../viz'
 import { CycleSessionsControl } from '../controls/cycle-sessions'
 import { RosterRow } from './row'
+import { STATE_GROUP } from './tones'
 
 /** As many rows as read as a list rather than as a log. The rest are counted. */
 const ROSTER_ROWS = 24
@@ -65,6 +67,7 @@ export function RosterBoard({
   // what to say.
   const stale = sessions.filter((s) => !s.alive).length
   const shown = rows.slice(0, ROSTER_ROWS)
+  const counts = countByState(rows)
 
   // ONE poller and ONE armed row for the whole board: the poller follows one
   // request id at a time, so two rows acting at once would lose one's outcome,
@@ -114,7 +117,17 @@ export function RosterBoard({
         )
       ) : (
         <ul className={LIST}>
-          {shown.map((r) => (
+          {shown.map((r, i) => [
+            // A band where the population changes: the rows arrive sorted by
+            // state, so each group is named once instead of a chip per row.
+            (i === 0 || shown[i - 1]?.state !== r.state) && (
+              <TableGroup
+                key={`g-${r.state}`}
+                title={`${STATE_GROUP[r.state].title} · ${num(counts[r.state])}`}
+                note={STATE_GROUP[r.state].note}
+                className="-mx-5"
+              />
+            ),
             <RosterRow
               key={r.key}
               row={r}
@@ -136,8 +149,8 @@ export function RosterBoard({
                   return { ok: true, value: sent.request }
                 })
               }}
-            />
-          ))}
+            />,
+          ])}
         </ul>
       )}
 

@@ -1,4 +1,5 @@
 import { LogBoard } from '../../../components/logs'
+import { QuietState } from '../../../components/modules/parts'
 import { Changelog } from '../../../components/release-notes'
 import {
   compareOf,
@@ -43,10 +44,10 @@ export function FinanceView({ data: d }: { data: Finance }) {
       />
 
       <BoardGrid>
-        <Board title="What this page can say" icon="◔" span={12}>
+        <Board title="Build" icon="◔" span={4}>
           <Facts
+            list
             rows={[
-              { k: 'Running', v: d.running.version ?? DASH },
               {
                 k: 'Built from',
                 v:
@@ -62,7 +63,7 @@ export function FinanceView({ data: d }: { data: Finance }) {
                   d.gap.latest === null ? (
                     DASH
                   ) : d.gap.behind.length === 0 ? (
-                    <Chip tone="ok">up to date</Chip>
+                    <QuietState>up to date</QuietState>
                   ) : (
                     <Chip tone="warn">{d.gap.latest}</Chip>
                   ),
@@ -82,7 +83,7 @@ export function FinanceView({ data: d }: { data: Finance }) {
           </p>
         </Board>
 
-        <Changelog gap={d.gap} span={12} />
+        <Changelog gap={d.gap} span={8} />
 
         <LogBoard source={{ container: 'wealthfolio' }} title="Wealthfolio logs" />
       </BoardGrid>

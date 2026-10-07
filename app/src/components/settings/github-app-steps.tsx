@@ -14,8 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
-import { NOTE_SHOWN } from './form'
-import { ERROR_NOTE, FIELD_LABEL, NOTE } from './shared'
+import { ERROR_NOTE, FIELD_LABEL, NOTE, NOTE_SHOWN } from './shared'
 
 type Launch = { action: string; manifest: string; state: string }
 

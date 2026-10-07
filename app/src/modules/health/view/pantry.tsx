@@ -2,10 +2,10 @@ import { LogBoard } from '../../../components/logs'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
 import { CAPTION, FOOT, NOTE } from '../../../components/tokens'
-import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
+import { Board, BoardGrid, Measures } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import type { HealthData } from '../data'
-import { FOOT_WARN, gapTitle, VersionAside } from './shared'
+import { gapTitle, VersionAside } from './shared'
 
 // Health › Pantry: Grocy — stock past its date, and the chores and tasks lists —
 // and the MCP server that lets a model read and write the same stock.
@@ -44,13 +44,13 @@ export function PantryView({ data: d }: { data: Pantry }) {
         >
           <Measures
             items={[
-              { k: 'due in 3 days', v: num(d.due) },
-              { k: 'overdue', v: num(d.overdue) },
-              { k: 'expired', v: num(d.expired) },
-              { k: 'missing from stock', v: num(d.missing) },
+              { k: 'Due in 3 days', v: num(d.due) },
+              { k: 'Overdue', v: num(d.overdue), tone: (d.overdue ?? 0) > 0 ? 'warn' : undefined },
+              { k: 'Expired', v: num(d.expired), tone: (d.expired ?? 0) > 0 ? 'warn' : undefined },
+              { k: 'Missing from stock', v: num(d.missing) },
             ]}
           />
-          <p className={alarm > 0 ? FOOT_WARN : FOOT}>
+          <p className={alarm > 0 ? CAPTION : FOOT}>
             {alarm > 0 ? (
               <>
                 <b>{num(alarm)}</b> products are past their date. Grocy distinguishes the two:{' '}
@@ -68,27 +68,19 @@ export function PantryView({ data: d }: { data: Pantry }) {
         </Board>
 
         <Board title="Chores & tasks" icon="✓" span={4}>
-          <Facts
-            rows={[
+          <Measures
+            items={[
               { k: 'Chores tracked', v: num(d.chores.total) },
               {
                 k: 'Chores overdue',
-                v:
-                  (d.chores.overdue ?? 0) > 0 ? (
-                    <span className="text-warning">{num(d.chores.overdue)}</span>
-                  ) : (
-                    num(d.chores.overdue)
-                  ),
+                v: num(d.chores.overdue),
+                tone: (d.chores.overdue ?? 0) > 0 ? 'warn' : undefined,
               },
               { k: 'Open tasks', v: num(d.tasks.total) },
               {
                 k: 'Tasks overdue',
-                v:
-                  (d.tasks.overdue ?? 0) > 0 ? (
-                    <span className="text-warning">{num(d.tasks.overdue)}</span>
-                  ) : (
-                    num(d.tasks.overdue)
-                  ),
+                v: num(d.tasks.overdue),
+                tone: (d.tasks.overdue ?? 0) > 0 ? 'warn' : undefined,
               },
             ]}
           />
@@ -97,10 +89,10 @@ export function PantryView({ data: d }: { data: Pantry }) {
           )}
         </Board>
 
-        <Changelog gap={d.gap} span={6} />
+        <Changelog gap={d.gap} span={12} />
         <Changelog
           gap={d.mcp.gap}
-          span={6}
+          span={12}
           title={gapTitle('Grocy MCP', d.mcp.gap)}
           aside={<VersionAside version={d.mcp.version} />}
           foot={

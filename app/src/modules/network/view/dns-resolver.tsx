@@ -16,6 +16,7 @@ import {
 import { cn } from '../../../lib/cn'
 import { bytes, compact, DASH, ms, num, pct, since, until } from '../../../lib/format'
 import type { NetworkData } from '../data'
+import { DeclaredNames } from './dns-names'
 import { FOLD_STACK } from './dns-records'
 import { CAPTION, FOOT, GROUP, MAIN, MONO, N, NOTE, ROW, ROWS, SIDE, SUB } from './shared'
 
@@ -96,12 +97,13 @@ export function ResolverView({
       />
 
       <BoardGrid>
-        <DeclaredNames lan={lan} />
-        <AnswerSources d={d} />
         <Traffic d={d} />
-        <ResolverItself d={d} />
+        <AnswerSources d={d} />
 
-        <Changelog gap={d.gap} span={12} />
+        <DeclaredNames lan={lan} />
+
+        <ResolverItself d={d} />
+        <Changelog gap={d.gap} span={8} />
 
         <LogBoard
           source={{ unit: 'pihole-ftl.service' }}
@@ -119,64 +121,6 @@ export function ResolverView({
         />
       </BoardGrid>
     </>
-  )
-}
-
-/** pi-hole's hosts file, joined to traefik's routers and the zone. */
-function DeclaredNames({ lan }: { lan: Dns['lan'] }) {
-  const unserved = lan.filter((n) => n.served === false)
-  return (
-    <Board
-      title="The names we declare"
-      icon="⌂"
-      span={8}
-      aside={
-        <span className={NOTE}>
-          {lan.length} entries · {lan.filter((n) => n.public).length} also public
-        </span>
-      }
-    >
-      {/* Forty short names. A wrapping flex rather than a grid of fixed
-              columns: `jellyfin` and `homeassistant` differ by a factor of two,
-              and a column wide enough for the longest leaves the shortest
-              floating in whitespace. Wrapping puts as many on each line as fit
-              and nothing anywhere else. */}
-      <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
-        {lan.map((n) => (
-          <li
-            key={n.fqdn}
-            className={cn(
-              'inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 py-1 text-[0.75rem] ring-1 ring-hairline ring-inset',
-              // The one state worth interrupting the wall of names for.
-              n.served === false && 'ring-danger/50',
-            )}
-          >
-            <span className={cn(MONO, 'text-foreground')}>{n.short}</span>
-            {/* Printed only when the entry does not point at this box, so
-                    it is a distinction rather than a column — it earns the eye
-                    by being rare. */}
-            {n.elsewhere && (
-              <span className={cn(MONO, 'text-[0.7rem] text-muted-foreground tabular-nums')}>
-                {n.ip}
-              </span>
-            )}
-            {n.public && <Chip tone="info">public</Chip>}
-            {n.served === false && <Chip tone="bad">no route</Chip>}
-          </li>
-        ))}
-      </ul>
-      <p className={FOOT}>
-        The names this house answers for itself instead of asking anyone. Each one is an entry in
-        pi-hole’s hosts file generated from the stack that owns it, so a name gets here by being
-        declared and never by being typed into the admin. Nothing in this list can outlive the thing
-        it points at. An address is printed only when the entry points somewhere other than this
-        box. <b>public</b> marks the ones the zone publishes as well, which is the same set the
-        other side of this tab lists, seen from outside.
-        {unserved.length === 0
-          ? ' Everything pointed at this box has a traefik router behind it.'
-          : ' A name marked no route resolves, then lands on the default certificate and 404s.'}
-      </p>
-    </Board>
   )
 }
 
@@ -295,15 +239,15 @@ function ResolverItself({ d }: { d: Resolver }) {
                 : d.blocking.on
                   ? 'on'
                   : `off, back in ${until(d.blocking.resumesIn)}`,
-            tone: d.blocking.on === false ? 'bad' : 'ok',
+            tone: d.blocking.on === false ? 'bad' : undefined,
           },
           {
             k: 'Cache',
             v: d.cache.evicted === 0 ? 'not full' : `${num(d.cache.evicted)} evicted`,
-            tone: d.cache.evicted === 0 ? 'ok' : 'warn',
+            tone: d.cache.evicted === 0 ? undefined : 'warn',
           },
-          { k: 'Clients', v: num(d.clients.active), tone: 'muted' },
-          { k: 'On the list', v: compact(d.lists.gravity), tone: 'muted' },
+          { k: 'Clients', v: num(d.clients.active) },
+          { k: 'On the list', v: compact(d.lists.gravity) },
         ]}
       />
       <p className={FOOT}>

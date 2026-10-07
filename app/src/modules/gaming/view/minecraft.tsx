@@ -1,6 +1,6 @@
-import { DAY_TIME, LocalTime } from '../../../components/ago'
 import { ImageRow } from '../../../components/image-row'
 import { LogBoard } from '../../../components/logs'
+import { QuietState } from '../../../components/modules/parts'
 import { Changelog, ReleaseNotes } from '../../../components/release-notes'
 import { ServiceHead } from '../../../components/service-head'
 import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
@@ -8,7 +8,7 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../../../compone
 import type { GamingData } from '../data'
 import { VersionBoard } from './minecraft-update'
 import { RosterBoard } from './roster'
-import { NEWS, NEWS_DATE, NEWS_ROW, NEWS_TITLE } from './shared'
+import { EventsTable } from './shared'
 
 /**
  * Paper, and the only tab here whose numbers are live.
@@ -63,7 +63,7 @@ export function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'mine
           mc.healthy === null ? (
             <Chip tone="muted">not scraped</Chip>
           ) : mc.healthy ? (
-            <Chip tone="ok">answering</Chip>
+            <QuietState>answering</QuietState>
           ) : (
             <Chip tone="bad">not answering</Chip>
           )
@@ -109,7 +109,7 @@ export function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'mine
         {data.update.commits.behind.length > 0 && (
           <Changelog
             build={data.update.commits}
-            span={6}
+            span={data.update.notes.length > 0 ? 6 : 12}
             title={`Paper for ${data.update.options.find((o) => o.newGame)?.version ?? 'the next game'}`}
             aside={<span className={NOTE}>papermc</span>}
             foot={
@@ -168,7 +168,7 @@ function Panel({ f }: { f: MinecraftFacts }) {
       <Board
         title={`What ${data.update.notes[0]?.version ?? ''} brings`}
         icon="panels"
-        span={6}
+        span={data.update.commits.behind.length > 0 ? 6 : 12}
         aside={<span className={NOTE}>mojang</span>}
       >
         <ReleaseNotes releases={data.update.notes} />
@@ -190,23 +190,7 @@ function ComingsAndGoingsBoard({ f }: { f: MinecraftFacts }) {
       span={6}
       aside={<span className={NOTE}>last 7 days</span>}
     >
-      {events.length === 0 ? (
-        <p className={EMPTY}>nobody has joined this week</p>
-      ) : (
-        <ul className={NEWS}>
-          {events.map((e) => (
-            <li key={`${String(e.at)}-${e.who}`} className={NEWS_ROW}>
-              <Chip tone={e.kind === 'join' ? 'ok' : 'muted'}>
-                {e.kind === 'join' ? 'joined' : 'left'}
-              </Chip>
-              <span className={NEWS_TITLE}>{e.who}</span>
-              <span className={NEWS_DATE}>
-                <LocalTime at={e.at} opts={DAY_TIME} />
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <EventsTable events={events} empty="nobody has joined this week" />
       {/* The log is the record — see joinsAndLeaves in data/minecraft.ts. */}
       <p className={FOOT}>
         Parsed from the server’s log in Loki, newest first. The panel below is the whole log; this

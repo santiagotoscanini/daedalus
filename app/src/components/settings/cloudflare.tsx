@@ -8,8 +8,18 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { useAction } from '../use-action'
 import { Chip } from '../viz'
-import { INSET, NOTE_SHOWN } from './form'
-import { ASIDE, Bad, ERROR_NOTE, FIELD_LABEL, Mono, Pending, Stack, Unset } from './shared'
+import {
+  ASIDE,
+  Bad,
+  ERROR_NOTE,
+  FIELD_LABEL,
+  INSET,
+  Mono,
+  NOTE_SHOWN,
+  Pending,
+  Stack,
+  Unset,
+} from './shared'
 
 // The Cloudflare half of Settings › Integrations: the cells that say what the
 // box is configured with and whether the token can still read it, and the one

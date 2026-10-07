@@ -6,11 +6,12 @@ import { cn } from '../../lib/cn'
 import { removeAppSecretFn, setAppSecretFn } from '../../server/registry'
 import { When } from '../ago'
 import { useRootAction } from '../root-action'
-import { EMPTY, INPUT_ROW } from '../tokens'
+import { CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW } from '../table'
+import { INPUT_ROW } from '../tokens'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { Board } from '../viz'
+import { SECTION_EXPLAIN, TabSection } from './section'
 
 /* ── the operator-secrets editor ──────────────────────────────────────────
    Write-only, and not as a policy choice. daedalus holds an encrypt-only sops
@@ -29,6 +30,12 @@ import { Board } from '../viz'
 
 const FIELD = INPUT_ROW
 const SMALL_BTN = 'h-auto flex-none rounded-[7px] px-2 py-1 text-[0.72rem] leading-none'
+/** Name · when it was set · the row's actions. */
+const SECRET_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,18rem)_minmax(0,1fr)_11rem]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)_11rem]',
+)
 
 export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey[] }) {
   const router = useRouter()
@@ -51,18 +58,40 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
   }
 
   return (
-    <Board
+    <TabSection
       title="Operator secrets"
-      icon="⚿"
-      span={12}
-      aside={busy ? <span className="text-[0.75rem] text-muted-foreground">working…</span> : null}
+      label="Operator secrets"
+      note={
+        <>
+          Write-only: sealed into <code>site/vault/apps/{app}-env.sops</code>, never read back.
+        </>
+      }
+      aside={
+        <>
+          {busy && <span>working…</span>}
+          <Button
+            type="button"
+            size="sm"
+            className="h-8"
+            disabled={busy || form === ''}
+            onClick={() => {
+              setConfirming(null)
+              setForm('')
+            }}
+          >
+            Add a secret
+          </Button>
+        </>
+      }
     >
-      <p className={ENV_LEGEND}>
+      <p className={SECTION_EXPLAIN}>
         The encrypted file behind the <code>secrets</code> rows above:{' '}
         <code>site/vault/apps/{app}-env.sops</code>. daedalus can seal a value into it and never
         read one back out — so a secret can be added, replaced or removed, never shown. To turn one
         back into a plain variable, remove it here and add it again on <b>Variables</b> — the same
-        environment, the half that is committed in the clear.
+        environment, the half that is committed in the clear. A write commits the encrypted file
+        straight away; the container picks the new value up on the next Apply, which is what
+        rebuilds and restarts it.
       </p>
 
       {answer !== null && answer.outcome !== 'done' && (
@@ -78,19 +107,24 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
         </Alert>
       )}
 
-      <div className={ENV_TABLE}>
-        {keys.length === 0 && (
-          <p className={EMPTY}>
+      <ul className={TABLE} aria-label="Operator secrets">
+        <li className={cn(SECRET_GRID, TABLE_HEAD)}>
+          <span>Name</span>
+          <span className="@max-[44rem]/table:hidden">Set</span>
+          <span />
+        </li>
+        {keys.length === 0 && form !== '' && (
+          <li className={TABLE_EMPTY}>
             No operator secrets yet. The file is created by the first key you add.
-          </p>
+          </li>
         )}
         {keys.map((k) => (
-          <div className={ENV_ROW} key={k.key}>
-            <div className="flex min-w-0 items-baseline gap-2 [&>code]:[overflow-wrap:anywhere]">
-              <code>{k.key}</code>
-            </div>
-            <div>
-              {form === k.key ? (
+          <li className={cn(SECRET_GRID, TABLE_ROW)} key={k.key}>
+            <code className="min-w-0 font-mono text-[0.78rem] text-foreground [overflow-wrap:anywhere]">
+              {k.key}
+            </code>
+            {form === k.key ? (
+              <div className="col-start-2 col-end-4 min-w-0 py-1 @max-[44rem]/table:col-start-1">
                 <SecretForm
                   app={app}
                   fixedKey={k.key}
@@ -101,20 +135,27 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
                     start(submit)
                   }}
                 />
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[0.75rem] text-muted-foreground">
-                    {k.history === null ? (
-                      'not in a commit yet'
-                    ) : (
-                      <>
-                        set <When at={k.history.setAt} /> by {k.history.actor}
-                      </>
-                    )}
-                  </span>
+              </div>
+            ) : (
+              <>
+                <span className={cn(CELL_QUIET, 'truncate @max-[44rem]/table:hidden')}>
+                  {k.history === null ? (
+                    'not in a commit yet'
+                  ) : (
+                    <>
+                      <When at={k.history.setAt} /> by {k.history.actor}
+                    </>
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    'flex items-center justify-end gap-1.5 whitespace-nowrap opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100',
+                    confirming === k.key && 'opacity-100',
+                  )}
+                >
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     className={SMALL_BTN}
                     disabled={busy}
@@ -128,9 +169,9 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
                   {confirming === k.key ? (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="destructive"
                       size="sm"
-                      className={cn(SMALL_BTN, 'border-danger/50 text-danger')}
+                      className={SMALL_BTN}
                       disabled={busy}
                       onClick={() => {
                         close()
@@ -142,7 +183,7 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
                   ) : (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       className={SMALL_BTN}
                       disabled={busy}
@@ -154,47 +195,27 @@ export function OperatorSecrets({ app, keys }: { app: string; keys: AppSecretKey
                       Remove
                     </Button>
                   )}
-                </div>
-              )}
-            </div>
-          </div>
+                </span>
+              </>
+            )}
+          </li>
         ))}
-      </div>
-
-      <div className="mt-4">
-        {form === '' ? (
-          <SecretForm
-            app={app}
-            fixedKey={null}
-            busy={busy}
-            onCancel={close}
-            onSubmit={(submit) => {
-              close()
-              start(submit)
-            }}
-          />
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={SMALL_BTN}
-            disabled={busy}
-            onClick={() => {
-              setConfirming(null)
-              setForm('')
-            }}
-          >
-            + Add a secret
-          </Button>
+        {form === '' && (
+          <li className={cn(TABLE_ROW, 'px-5 py-3')}>
+            <SecretForm
+              app={app}
+              fixedKey={null}
+              busy={busy}
+              onCancel={close}
+              onSubmit={(submit) => {
+                close()
+                start(submit)
+              }}
+            />
+          </li>
         )}
-      </div>
-
-      <p className="explain mt-4 mr-0 mb-0 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground">
-        A write commits the encrypted file straight away; the container picks the new value up on
-        the next Apply, which is what rebuilds and restarts it.
-      </p>
-    </Board>
+      </ul>
+    </TabSection>
   )
 }
 
@@ -279,16 +300,17 @@ function SecretForm({
   )
 }
 
-/* A grid, not a table: `table-layout: auto` sizes the key column to its widest
-   name and hands the leftover to the value, which is exactly backwards here —
-   names are short and bounded, values are long and variable. Fixed columns
-   instead, collapsing to stacked rows when there is no room for two. */
-export const ENV_TABLE = 'text-[0.85rem]'
+/* The environment tables: name and value in fixed columns — names are short
+   and bounded, values long and variable — with the origin in a narrow column
+   where a table mixes origins. The value drops under the name on a phone. */
+export const ENV_TABLE = TABLE
 
-export const ENV_ROW =
-  'grid grid-cols-[minmax(0,20rem)_minmax(0,1fr)] items-baseline gap-x-5 gap-y-1.5 border-hairline border-b py-2.5 last:border-b-0 max-[60rem]:grid-cols-[minmax(0,1fr)]'
+export const ENV_ROW = cn(
+  'grid items-center gap-x-6 gap-y-1 px-5',
+  'grid-cols-[minmax(0,18rem)_minmax(0,1fr)]',
+  '@max-[44rem]/table:grid-cols-[minmax(0,1fr)]',
+)
 
-/** The prose that opens an env board: what the rows are and where they come from.
-    Explanation, so it folds behind the board's ⓘ. */
-export const ENV_LEGEND =
-  'explain mt-0 mr-0 mb-3 ml-0 max-w-[72ch] text-[0.78rem] leading-[1.55] text-muted-foreground'
+/** The prose that opens an env section: what the rows are and where they come
+    from. Explanation, so it folds behind the section's ⓘ. */
+export const ENV_LEGEND = SECTION_EXPLAIN

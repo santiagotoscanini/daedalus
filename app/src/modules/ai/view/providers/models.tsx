@@ -1,41 +1,25 @@
-// The model widget: one machine's catalog grouped by kind.
+// The model table: one machine's catalog, grouped by kind.
 
-import { CAPTION, FOOT, MONO, NOTE } from '../../../../components/tokens'
-import { Board, Chip } from '../../../../components/viz'
+import { CAPTION, FOOT, MONO } from '../../../../components/tokens'
 import { cn } from '../../../../lib/cn'
 import { compact, DASH, num } from '../../../../lib/format'
 import { MODE_WORD } from '../../../../lib/providers/policy'
 import type { CatalogEntry, ProviderMachine } from '../../data/providers'
-import { ModelAlt, ModelHero } from './model-row'
+import { TABLE, TABLE_EMPTY, TABLE_HEAD, TABLE_ROW, TableGroup, TableSection } from '../shared'
+import { MODEL_GRID, ModelRow, NARROW, NARROWEST } from './model-row'
 
-/* ── the model widget ─────────────────────────────────────────────────── */
-
-/* Styled as a sibling of the changelog's release rows: both are "a stack of
-   things you open", and looking alike is the point. */
-const KIND = 'border-b border-hairline last-of-type:border-b-0 [&[open]>summary]:before:rotate-90'
-const KIND_SUMMARY =
-  "flex min-w-0 cursor-pointer list-none items-baseline gap-2 rounded-lg px-1 py-2 transition-colors hover:bg-foreground/[0.05] [&::-webkit-details-marker]:hidden before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:ease-[ease] before:content-['▸']"
-const KIND_TYPE =
-  'inline-block text-[0.8rem] first-letter:uppercase text-foreground [font-weight:550]'
-/* The aggregate for the whole kind, so a collapsed row still says
-   something. Interpuncts generated rather than typed, so a missing figure
-   does not leave a dangling separator. */
-const KIND_AGG =
-  "ml-auto flex gap-2 whitespace-nowrap text-[0.75rem] text-muted-foreground tabular-nums [&>span+span]:before:mr-2 [&>span+span]:before:text-border [&>span+span]:before:content-['·']"
-const KIND_BODY = 'pt-1 pb-3'
-const KIND_EMPTY = 'm-0 text-[0.8rem] text-warning'
-
-/* The other models of this kind — one click from the slot. */
-const ALTS = 'm-0 mt-1.5 flex list-none flex-col gap-0.5 p-0'
+/* ── the model table ──────────────────────────────────────────────────── */
 
 /* Only present mid-download, so it is allowed to be loud. */
-const DOWNLOADS = 'm-0 flex list-none flex-col gap-1 p-0'
-const DOWNLOAD = 'flex gap-2.5 rounded-lg bg-primary/10 px-2.5 py-1 text-[0.75rem] text-subdued'
+const DOWNLOADS = 'm-0 mb-3 flex list-none flex-col gap-1 p-0'
+const DOWNLOAD = 'flex gap-2.5 rounded-lg bg-primary/10 px-3 py-1.5 text-[0.75rem] text-subdued'
 
-/* Build numbers for the runtimes named on the models above. One line: that
-   is all they are worth once the runtime itself is stated per model. */
-const BUILDS =
-  'm-0 flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline pt-3 text-[0.75rem] text-muted-foreground'
+/* Build numbers for the runtimes named on the models. One line: that is all
+   they are worth once the runtime itself is stated per model. */
+const BUILDS = 'm-0 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] text-muted-foreground'
+
+/* A kind with nothing in its slot: the one row that is a state, not a model. */
+const SLOT_EMPTY = 'col-span-full text-[0.8rem]'
 
 type Group = { mode: CatalogEntry['mode']; models: CatalogEntry[] }
 
@@ -60,68 +44,76 @@ function groupsOf(models: CatalogEntry[]): Group[] {
   )
 }
 
+const word = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
 /**
- * Every model of one kind, folded away until asked for.
- *
- * Open when something of this kind is resident, because that is the group
- * whose state is live and the one a glance came for. A closed summary still
- * has to earn its line — a row you must open to learn anything from is
- * worse than no row — so it carries the aggregate: how many models, how
- * much disk, and what they have managed between them.
- *
- * `details` rather than a state hook: it works before hydration, survives
- * it, and the browser already knows how.
+ * The aggregate for a whole kind, on its group band: how many models, how much
+ * disk, and what they have managed between them. Abbreviated — these are a
+ * sense of scale rather than quantities.
  */
-function ModelKind({ group, m }: { group: Group; m: ProviderMachine }) {
-  const resident = group.models.find((x) => x.loaded !== null) ?? null
-  const others = group.models.filter((x) => x !== resident)
+function aggregateOf(group: Group): string {
   const sum = (pick: (x: CatalogEntry) => number | null | undefined) =>
     group.models.reduce((n, x) => n + (pick(x) ?? 0), 0)
   const size = sum((x) => x.sizeGb)
   const requests = sum((x) => x.figures?.requests)
   const tokens = sum((x) => (x.figures?.inputTokens ?? 0) + (x.figures?.outputTokens ?? 0))
-  // An empty slot is only worth calling out where a slot is a thing: a
-  // provider the box cannot load into has no empty slot, just nothing
-  // resident.
-  const slotFree = m.manageable && resident === null
+  return [
+    group.models.length === 1 ? '1 model' : `${String(group.models.length)} models`,
+    size > 0 ? `${num(size, 1)} GB` : null,
+    requests > 0 ? `${compact(requests)} req` : null,
+    tokens > 0 ? `${compact(tokens)} tok` : null,
+  ]
+    .filter((x) => x !== null)
+    .join(' · ')
+}
 
+/**
+ * One kind: a group band, the model in its slot, then the alternatives.
+ *
+ * One model of each kind may be resident, so a kind's models are competing
+ * answers to one question rather than a flat list — the band is that question,
+ * and the row with the pulse is today's answer.
+ */
+function ModelKind({ group, m }: { group: Group; m: ProviderMachine }) {
+  const resident = group.models.find((x) => x.loaded !== null) ?? null
+  const others = group.models.filter((x) => x !== resident)
   return (
-    <details className={KIND} open={resident !== null}>
-      <summary className={KIND_SUMMARY}>
-        <span className={KIND_TYPE}>{MODE_WORD[group.mode]}</span>
-        {slotFree && <Chip tone="warn">slot free</Chip>}
-        {/* Abbreviated: these are a sense of scale rather than quantities —
-            976k answers "has anything been using these", and 976,228
-            answers it no better while costing half the row. */}
-        <span className={KIND_AGG}>
-          <span>
-            {group.models.length === 1 ? '1 model' : `${String(group.models.length)} models`}
-          </span>
-          {size > 0 && <span>{num(size, 1)} GB</span>}
-          {requests > 0 && <span>{compact(requests)} req</span>}
-          {tokens > 0 && <span>{compact(tokens)} tok</span>}
-        </span>
-      </summary>
-
-      <div className={KIND_BODY}>
-        {resident === null ? (
-          <p className={KIND_EMPTY}>
+    <>
+      <TableGroup title={word(MODE_WORD[group.mode])} note={aggregateOf(group)} />
+      {resident === null ? (
+        <li className={cn(MODEL_GRID, TABLE_ROW, 'min-h-11')}>
+          {/* An empty slot is only worth calling out where a slot is a thing:
+              a provider the box cannot load into has no empty slot, just
+              nothing resident. */}
+          <span className={cn(SLOT_EMPTY, m.manageable ? 'text-warning' : 'text-muted-foreground')}>
             {m.manageable
-              ? 'nothing loaded. The next request cold-loads one'
-              : 'nothing resident right now'}
-          </p>
-        ) : (
-          <ModelHero model={resident} m={m} />
-        )}
-        {others.length > 0 && (
-          <ul className={ALTS}>
-            {others.map((x) => (
-              <ModelAlt key={x.id} model={x} m={m} replacing={resident} />
-            ))}
-          </ul>
-        )}
-      </div>
-    </details>
+              ? 'Slot free: nothing loaded. The next request cold-loads one.'
+              : 'Nothing resident right now.'}
+          </span>
+        </li>
+      ) : (
+        <ModelRow model={resident} m={m} replacing={null} />
+      )}
+      {others.map((x) => (
+        <ModelRow key={x.id} model={x} m={m} replacing={resident} />
+      ))}
+    </>
+  )
+}
+
+/** The labels row; numeric columns right-aligned, units in the label. */
+function ModelHead() {
+  return (
+    <li aria-hidden="true" className={cn(MODEL_GRID, TABLE_HEAD)}>
+      <span>Model</span>
+      <span className={NARROWEST}>Gateway name</span>
+      <span className={cn(NARROWEST, 'text-right')}>Size, GB</span>
+      <span className={cn(NARROWEST, 'text-right')}>tok/s</span>
+      <span className={cn(NARROW, 'text-right')}>First token, ms</span>
+      <span className={cn(NARROW, 'text-right')}>Requests</span>
+      <span className={cn(NARROW, 'text-right')}>Tokens</span>
+      <span />
+    </li>
   )
 }
 
@@ -129,26 +121,84 @@ function ModelKind({ group, m }: { group: Group; m: ProviderMachine }) {
 export function ModelsBoard({ m }: { m: ProviderMachine }) {
   const groups = groupsOf(m.models)
   const { downloads, backends } = m.detail
+  const onDisk = m.models.filter((x) => x.downloaded)
+  const routed = m.models.filter((x) => x.routed !== null).length
   // A provider that reports no size for anything is not a provider holding
   // nought gigabytes — subgen serves one model it never sizes.
-  const diskGb = m.models.filter((x) => x.downloaded).reduce((n, x) => n + (x.sizeGb ?? 0), 0)
+  const diskGb = onDisk.reduce((n, x) => n + (x.sizeGb ?? 0), 0)
+
   return (
-    <Board
+    <TableSection
       title="Models"
-      icon="rows"
-      span={8}
-      aside={
+      // What the catalog holds, what is on disk, and what the gateway gets:
+      // the readings the Offered panel drew, said once, over the table.
+      note={
         m.models.length === 0 ? undefined : (
-          <span className={NOTE}>
-            {num(m.models.length)}
-            {diskGb > 0 && ` · ${num(diskGb, 1)} GB on disk`}
-          </span>
+          <>
+            {num(m.models.length)} in the catalog · {num(onDisk.length)} on disk
+            {diskGb > 0 && ` (${num(diskGb, 1)} GB)`} ·{' '}
+            <span className={m.offerableCount > 0 ? undefined : 'text-warning'}>
+              {num(m.offerableCount)} offered to the gateway
+            </span>{' '}
+            · {num(routed)} routed now
+          </>
         )
       }
+      foot={
+        <>
+          {/* Not offered: the state and its fix, which a glance needs. */}
+          {!m.offered && (
+            <p className={CAPTION}>
+              {m.machine === 'box'
+                ? 'Speech to text, served by the box itself rather than by a node. Offer it on Settings › Machines to publish it through the gateway.'
+                : 'Switch "offer to the gateway" on Settings › Machines to publish these.'}
+            </p>
+          )}
+          {/* The build behind each runtime named on the models above — the
+              build NUMBER moves far more often than a release does, and it is
+              the thing that changes how fast a model runs. */}
+          {backends.length > 0 && (
+            <p className={BUILDS}>
+              <span>Runtime builds</span>
+              {backends.map((b) => (
+                <span key={`${b.recipe}-${b.backend}`} className="inline-flex gap-1.5">
+                  <span className="text-subdued">{b.recipe}</span>
+                  {b.url === null ? (
+                    <span className={MONO}>{b.version ?? DASH}</span>
+                  ) : (
+                    <a
+                      className={cn(MONO, 'text-muted-foreground no-underline hover:text-primary')}
+                      href={b.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {b.version ?? DASH}
+                    </a>
+                  )}
+                </span>
+              ))}
+            </p>
+          )}
+          {m.offered && (
+            <p className={FOOT}>
+              The gateway sync writes a route per offered model and removes it when the model
+              leaves. Which models are offered, and under what name, is Settings › Machines.
+            </p>
+          )}
+          {/* Only where there is something for it to explain. */}
+          {groups.length > 0 && (
+            <p className={FOOT}>
+              {m.manageable
+                ? 'One model of each kind is resident at a time, so picking a different one means putting the current one down. Switch does both in order, because a pinned model is exempt from eviction and the incoming load is refused if the slot is not freed first. Figures survive an eviction, so a model you have not run today still shows what it managed last time — but not a restart of the provider, which is where they are counted. A figure that is still zero is left blank.'
+                : 'This provider serves one model and holds it for its lifetime; there is no slot to change.'}
+            </p>
+          )}
+        </>
+      }
     >
-      {/* Only while something is actually downloading, and above
-          everything else: it is the one thing here that is mid-change
-          and the one thing that looks wrong if left unexplained. */}
+      {/* Only while something is actually downloading, and above everything
+          else: it is the one thing here that is mid-change and the one thing
+          that looks wrong if left unexplained. */}
       {downloads.length > 0 && (
         <ul className={DOWNLOADS}>
           {downloads.map((d) => (
@@ -163,51 +213,16 @@ export function ModelsBoard({ m }: { m: ProviderMachine }) {
         </ul>
       )}
 
-      {groups.length === 0 ? (
-        <p className={CAPTION}>
-          {m.reachable ? 'The provider lists no models.' : 'Unknown until it answers.'}
-        </p>
-      ) : (
-        groups.map((g) => <ModelKind key={g.mode} group={g} m={m} />)
-      )}
-
-      {/* The build behind each runtime named on the models above. Folded
-          in here rather than given a panel, which restated every runtime
-          name a second time: what is worth knowing separately is the
-          build NUMBER, and it moves far more often than a release does
-          — it is the thing that changes how fast a model runs. */}
-      {backends.length > 0 && (
-        <p className={BUILDS}>
-          {backends.map((b) => (
-            <span key={`${b.recipe}-${b.backend}`} className="inline-flex gap-1.5">
-              {b.recipe}
-              {b.url === null ? (
-                <span className={cn(MONO, 'text-subdued')}>{b.version ?? DASH}</span>
-              ) : (
-                <a
-                  className={cn(MONO, 'text-subdued no-underline hover:text-primary')}
-                  href={b.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {b.version ?? DASH}
-                </a>
-              )}
-            </span>
-          ))}
-        </p>
-      )}
-
-      {/* Only where there is something for it to explain: under an
-          empty catalog it is a paragraph about buttons that are not
-          there. */}
-      {groups.length > 0 && (
-        <p className={FOOT}>
-          {m.manageable
-            ? 'One model of each kind is resident at a time, so picking a different one means putting the current one down. Switch does both in order, because a pinned model is exempt from eviction and the incoming load is refused if the slot is not freed first. Figures survive an eviction, so a model you have not run today still shows what it managed last time — but not a restart of the provider, which is where they are counted.'
-            : 'This provider serves one model and holds it for its lifetime; there is no slot to change.'}
-        </p>
-      )}
-    </Board>
+      <ul className={TABLE} aria-label={`Models on ${m.name}`}>
+        <ModelHead />
+        {groups.length === 0 ? (
+          <li className={TABLE_EMPTY}>
+            {m.reachable ? 'The provider lists no models.' : 'Unknown until it answers.'}
+          </li>
+        ) : (
+          groups.map((g) => <ModelKind key={g.mode} group={g} m={m} />)
+        )}
+      </ul>
+    </TableSection>
   )
 }

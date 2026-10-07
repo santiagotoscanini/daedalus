@@ -1,33 +1,34 @@
+import { useState } from 'react'
 import { LogBoard } from '../../../components/logs'
 import { LinkRow, ServiceHead } from '../../../components/service-head'
+import {
+  CELL_MONO,
+  CELL_QUIET,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableGroup,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, since } from '../../../lib/format'
 import type { NetworkData } from '../data'
-import { CAPTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
+import { CAPTION, FOOT, MONO, NOTE } from './shared'
 
 /** A device that has asked for a name today is a device that is switched on. */
 const ACTIVE = 24 * 3600
 
 type Device = Dhcp['devices'][number]
 
-/* Sixty-odd rows of four short fields. Wrapping columns rather than one tall
-   list: a full-width board holding a single column of 9rem-wide content is a
-   page of nothing on the right, and these rows are read by scanning down the
-   addresses. */
-const DEVICE_LIST = 'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] gap-x-6 p-0'
-
-/* On a phone the MAC goes before anything else does. Not at half width — below
-   78rem every board is already full width, so the row has MORE room there, not
-   less; the only place four columns genuinely do not fit is the narrowest
-   breakpoint, where the name and address are what gets scanned and the MAC is
-   what gets looked up once. */
-const DEVICE_ROW =
-  'grid grid-cols-[1fr_6.6rem_9.4rem_4.6rem] items-center gap-2 border-t border-hairline py-1.5 text-[0.78rem] text-muted-foreground max-[34rem]:grid-cols-[1fr_6.6rem_4.6rem]'
+/** Device · address · hardware address · last seen. The MAC steps away first. */
+const DEVICE_GRID =
+  'grid items-center gap-x-6 px-5 grid-cols-[minmax(9rem,1.2fr)_7.5rem_minmax(9rem,1fr)_6.5rem] @max-[38rem]/table:grid-cols-[minmax(8rem,1fr)_7rem_5.5rem] @max-[38rem]/table:[&>.mac]:hidden'
 
 /**
- * The LAN, in two sections that are one list.
+ * The LAN, in two groups of one table.
  *
  * Split by whether the address is ours to decide rather than by how recently
  * the thing was seen, because that is the distinction a reader is here for:
@@ -36,49 +37,55 @@ const DEVICE_ROW =
  * and marking the difference would bury the handful of reservations among
  * dozens of devices.
  *
- * Within each section, most recently seen first, and the quiet tail folds. A
+ * Within each group, most recently seen first, and the quiet tail folds. A
  * reservation that has never been seen sorts last and says so — a declared
  * address for a device that has not existed in months is the one thing in here
  * worth acting on.
  */
 function LanDevices({ devices }: { devices: Device[] }) {
-  if (devices.length === 0) return <p className={EMPTY}>no devices recorded</p>
-
+  const [all, setAll] = useState(false)
   const fixed = devices.filter((d) => d.reserved)
   const rest = devices.filter((d) => !d.reserved)
   const recent = rest.filter((d) => d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE)
   const quiet = rest.filter((d) => d.lastSeenAgo === null || d.lastSeenAgo >= ACTIVE)
 
   return (
-    <>
+    <ul className={TABLE} aria-label="Devices on the LAN">
+      <li className={cn(DEVICE_GRID, TABLE_HEAD)}>
+        <span>Device</span>
+        <span>Address</span>
+        <span className="mac">Hardware address</span>
+        <span className="text-right">Last seen</span>
+      </li>
+      {devices.length === 0 && <li className={TABLE_EMPTY}>no devices recorded</li>}
       {fixed.length > 0 && (
-        <>
-          <h4 className={SUB}>Fixed here, {fixed.length} declared</h4>
-          <ul className={DEVICE_LIST}>
-            {fixed.map((d) => (
-              <DeviceRow key={d.mac} d={d} />
-            ))}
-          </ul>
-        </>
+        <TableGroup title="Fixed here" note={`${String(fixed.length)} declared`} />
       )}
-
-      <h4 className={SUB}>Given whatever was free, {rest.length} seen</h4>
-      <ul className={DEVICE_LIST}>
-        {recent.map((d) => (
-          <DeviceRow key={d.mac} d={d} />
-        ))}
-      </ul>
+      {fixed.map((d) => (
+        <DeviceRow key={d.mac} d={d} />
+      ))}
+      {rest.length > 0 && (
+        <TableGroup title="Given whatever was free" note={`${String(rest.length)} seen`} />
+      )}
+      {recent.map((d) => (
+        <DeviceRow key={d.mac} d={d} />
+      ))}
+      {all && quiet.map((d) => <DeviceRow key={d.mac} d={d} />)}
       {quiet.length > 0 && (
-        <details className={MORE}>
-          <summary>{quiet.length} not seen today</summary>
-          <ul className={DEVICE_LIST}>
-            {quiet.map((d) => (
-              <DeviceRow key={d.mac} d={d} />
-            ))}
-          </ul>
-        </details>
+        <li className={cn(TABLE_ROW, 'flex min-h-11 items-center px-5')}>
+          <button
+            type="button"
+            className="cursor-pointer border-0 bg-transparent p-0 text-[0.78rem] text-muted-foreground hover:text-foreground"
+            aria-expanded={all}
+            onClick={() => {
+              setAll((v) => !v)
+            }}
+          >
+            {all ? 'Hide the ones not seen today' : `${String(quiet.length)} not seen today`}
+          </button>
+        </li>
       )}
-    </>
+    </ul>
   )
 }
 
@@ -88,20 +95,33 @@ function LanDevices({ devices }: { devices: Device[] }) {
 function DeviceRow({ d }: { d: Device }) {
   const active = d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE
   return (
-    <li className={DEVICE_ROW}>
-      <span className={cn('truncate', active ? 'text-foreground' : 'text-subdued')}>
-        {d.name ?? <span className="text-subdued">unnamed</span>}
-      </span>
-      <span className={cn(MONO, 'tabular-nums', active && 'text-subdued')}>{d.ip}</span>
+    <li className={cn(DEVICE_GRID, TABLE_ROW)}>
       <span
-        className={cn(MONO, 'text-[0.7rem] max-[34rem]:hidden')}
+        className={cn(
+          'truncate',
+          active ? 'text-foreground [font-weight:520]' : 'text-subdued',
+          d.name === null && 'text-muted-foreground [font-weight:400]',
+        )}
+      >
+        {d.name ?? 'unnamed'}
+      </span>
+      <span
+        className={cn(
+          'font-mono text-[0.75rem] tabular-nums',
+          active ? 'text-subdued' : 'text-muted-foreground',
+        )}
+      >
+        {d.ip}
+      </span>
+      <span
+        className={cn(CELL_MONO, 'mac')}
         title={
           d.knownForDays === null ? 'never seen' : `first seen ${num(d.knownForDays)} days ago`
         }
       >
         {d.mac}
       </span>
-      <span className="text-right text-[0.72rem]">
+      <span className={cn(CELL_QUIET, 'text-right')}>
         {d.lastSeenAgo === null ? (
           <span
             className="text-warning"
@@ -210,7 +230,7 @@ function ThePoolBoard({ f }: { f: DhcpFacts }) {
       title="The pool"
       icon="⊞"
       span={6}
-      aside={<Chip tone={dhcp.active ? 'ok' : 'muted'}>{dhcp.active ? 'serving' : 'off'}</Chip>}
+      aside={dhcp.active ? <span className={NOTE}>serving</span> : <Chip tone="warn">off</Chip>}
     >
       <Facts
         rows={[
@@ -261,7 +281,7 @@ function LeasesBoard({ f }: { f: DhcpFacts }) {
               dhcp.counters.declines === null ? (
                 DASH
               ) : dhcp.counters.declines === 0 ? (
-                <span className="text-success">0</span>
+                0
               ) : (
                 <span className="text-warning">{num(dhcp.counters.declines)}</span>
               ),
@@ -272,7 +292,7 @@ function LeasesBoard({ f }: { f: DhcpFacts }) {
               dhcp.counters.nak === null ? (
                 DASH
               ) : dhcp.counters.nak === 0 ? (
-                <span className="text-success">0</span>
+                0
               ) : (
                 <span className="text-warning">{num(dhcp.counters.nak)}</span>
               ),
@@ -293,15 +313,9 @@ function LeasesBoard({ f }: { f: DhcpFacts }) {
 function EverythingOnTheLANBoard({ f }: { f: DhcpFacts }) {
   const { dhcp, devices, active, unbound } = f
   return (
-    <Board
+    <TableSection
       title="Everything on the LAN"
-      icon="rows"
-      span={12}
-      aside={
-        <span className={NOTE}>
-          {active.length} active · {devices.length} known · {dhcp.reservations.length} fixed
-        </span>
-      }
+      aside={`${String(active.length)} active · ${String(devices.length)} known · ${String(dhcp.reservations.length)} fixed`}
     >
       <LanDevices devices={devices} />
       <p className={FOOT}>
@@ -319,7 +333,7 @@ function EverythingOnTheLANBoard({ f }: { f: DhcpFacts }) {
           <b>never</b>: declared, and no device has appeared at them.
         </p>
       )}
-    </Board>
+    </TableSection>
   )
 }
 

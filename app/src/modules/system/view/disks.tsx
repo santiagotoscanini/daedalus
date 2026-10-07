@@ -1,19 +1,28 @@
 import { LogBoard } from '../../../components/logs'
 import { DISK_MODEL } from '../../../components/part'
 import {
+  CELL_NAME,
+  CELL_QUIET,
+  CELL_SUB,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+} from '../../../components/table'
+import { TableSection } from '../../../components/table-section'
+import {
   CAPTION,
   EMPTY,
   FOOT,
   LIST,
   MONO,
   MONO_FACE,
-  NOTE,
   ROW,
   ROW_MAIN,
   ROW_SIDE,
   SUB,
 } from '../../../components/tokens'
-import { Board, BoardGrid, Chip, Facts, Measures } from '../../../components/viz'
+import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, num, pct } from '../../../lib/format'
 import type { SystemData } from '../data'
@@ -23,74 +32,164 @@ import { hours, SYSTEM_SNAPSHOT } from './shared'
 /* ── Disks ────────────────────────────────────────────────────────────── */
 
 type Disks = Extract<SystemData, { tab: 'disks' }>
+type Disk = Disks['disks'][number]
+type Io = Disks['io'][number]
+
+// The drives as ONE table first, because the question this tab is for is a
+// comparison across them — which is hottest, which is oldest, which has the
+// counter that moved — and a column is how a comparison is read. Then a board
+// per drive for what does not compare: its identity, the counters that would
+// fail first, its self-test log. Healthy readings stay in quiet ink; colour
+// is kept for the drive that differs.
+
+const GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1.6fr)_4.5rem_3.5rem_5rem_4rem_5.5rem_5.5rem_5.5rem_3.5rem_5.5rem]',
+  '@max-[64rem]/table:grid-cols-[minmax(0,1.6fr)_4.5rem_3.5rem_5rem_5.5rem_5.5rem]',
+  '@max-[36rem]/table:grid-cols-[minmax(0,1fr)_3.5rem_5.5rem]',
+)
+/** Steps away below a laptop half-window, and below a phone. */
+const WIDE = '@max-[64rem]/table:hidden'
+const MID = '@max-[36rem]/table:hidden'
+const N = 'text-right tabular-nums'
 
 export function DisksView({ d }: { d: Disks }) {
   const io = new Map(d.io.map((i) => [i.device, i]))
 
   return (
-    <BoardGrid>
-      {d.disks.length === 0 && (
-        <Board title="Disks" icon="grid" span={12}>
-          <p className={EMPTY}>
-            No snapshot yet. The host reader has not run, or could not read SMART.
+    <div className="flex flex-col gap-10">
+      <TableSection title="Drives" aside={`${String(d.disks.length)} in this box`}>
+        <ul className={TABLE}>
+          <li aria-hidden="true" className={cn(GRID, TABLE_HEAD)}>
+            <span>Drive</span>
+            <span className={cn(N, MID)}>Size</span>
+            <span className={N}>Temp</span>
+            <span className={cn(N, MID)}>Powered on</span>
+            <span className={cn(N, WIDE)}>Cycles</span>
+            <span className={cn(N, MID)}>Wear</span>
+            <span className={cn(N, WIDE)}>Read</span>
+            <span className={cn(N, WIDE)}>Written</span>
+            <span className={cn(N, WIDE)}>Busy</span>
+            <span className="text-right">SMART</span>
+          </li>
+          {d.disks.length === 0 && (
+            <li className={TABLE_EMPTY}>
+              No snapshot yet. The host reader has not run, or could not read SMART.
+            </li>
+          )}
+          {d.disks.map((disk) => (
+            <DiskRow key={disk.device} disk={disk} stats={io.get(disk.device)} />
+          ))}
+        </ul>
+        <p className={FOOT}>
+          Temperature, age and wear from each drive&rsquo;s own SMART log, read by the host every
+          ten minutes. Wear is reallocated sectors on a spinning disk and the share of rated
+          endurance used on an NVMe one. Read, written and busy are node-exporter&rsquo;s 5-minute
+          averages.
+        </p>
+      </TableSection>
+
+      <BoardGrid>
+        {d.disks.map((disk) => (
+          <DiskBoard key={disk.device} disk={disk} />
+        ))}
+
+        <Board title="How these are tested" icon="✓" span={12}>
+          <Facts
+            rows={[
+              { k: 'Short self-test', v: 'every Saturday, 02:00' },
+              { k: 'Extended self-test', v: 'the 1st of each month, 03:00' },
+              {
+                k: 'smartd',
+                v:
+                  d.smartdActive === null ? (
+                    DASH
+                  ) : d.smartdActive ? (
+                    <span className="text-muted-foreground">running</span>
+                  ) : (
+                    <Chip tone="bad">not running</Chip>
+                  ),
+              },
+            ]}
+          />
+          <p className={FOOT}>
+            Autodetected across every disk, with no per-drive configuration: the schedule is one
+            string in <span className={MONO}>platform/smartd.nix</span>. A drive that reports
+            pre-failure sends mail, wired in <span className={MONO}>platform/mail</span>. The
+            results above are read back off each drive&rsquo;s own log rather than from that
+            schedule, so a test that was configured and never ran shows as an absence here.
           </p>
         </Board>
-      )}
 
-      {d.disks.map((disk) => (
-        <DiskBoard key={disk.device} disk={disk} stats={io.get(disk.device)} />
-      ))}
-
-      <Board title="How these are tested" icon="✓" span={12}>
-        <Facts
-          rows={[
-            { k: 'Short self-test', v: 'every Saturday, 02:00' },
-            { k: 'Extended self-test', v: 'the 1st of each month, 03:00' },
-            {
-              k: 'smartd',
-              v:
-                d.smartdActive === null ? (
-                  DASH
-                ) : d.smartdActive ? (
-                  <Chip tone="ok">running</Chip>
-                ) : (
-                  <Chip tone="bad">not running</Chip>
-                ),
-            },
-          ]}
+        <LogBoard
+          source={{ unit: 'smartd.service' }}
+          title="smartd"
+          neighbours={[SYSTEM_SNAPSHOT]}
+          foot={
+            <p className={FOOT}>
+              The daemon that runs the tests above and watches every attribute between them. Quiet
+              is correct; it speaks when an attribute crosses its threshold.
+            </p>
+          }
         />
-        <p className={FOOT}>
-          Autodetected across every disk, with no per-drive configuration: the schedule is one
-          string in <span className={MONO}>platform/smartd.nix</span>. A drive that reports
-          pre-failure sends mail, wired in <span className={MONO}>platform/mail</span>. The results
-          above are read back off each drive&rsquo;s own log rather than from that schedule, so a
-          test that was configured and never ran shows as an absence here.
-        </p>
-      </Board>
-
-      <LogBoard
-        source={{ unit: 'smartd.service' }}
-        title="smartd"
-        neighbours={[SYSTEM_SNAPSHOT]}
-        foot={
-          <p className={FOOT}>
-            The daemon that runs the tests above and watches every attribute between them. Quiet is
-            correct; it speaks when an attribute crosses its threshold.
-          </p>
-        }
-      />
-    </BoardGrid>
+      </BoardGrid>
+    </div>
   )
 }
 
-/** One drive: what it is, how worn, how it is doing, and its last tests. */
-function DiskBoard({
-  disk,
-  stats,
-}: {
-  disk: Disks['disks'][number]
-  stats: Disks['io'][number] | undefined
-}) {
+/** One drive, read across: the row the comparison is made on. */
+function DiskRow({ disk, stats }: { disk: Disk; stats: Io | undefined }) {
+  const nvme = disk.percentageUsed !== null
+  const kind = disk.family ?? (nvme ? 'solid state' : 'hard disk')
+  // Wear that has started is the exception the column exists for.
+  const worn = nvme ? (disk.percentageUsed ?? 0) >= 80 : (disk.reallocated ?? 0) > 0
+  return (
+    <li className={cn(GRID, TABLE_ROW)}>
+      <span className="flex min-w-0 flex-col">
+        <span className={cn(CELL_NAME, MONO_FACE)}>{disk.device}</span>
+        <span className={CELL_SUB} title={disk.model ?? undefined}>
+          {kind}
+          {disk.rotationRate !== null &&
+            disk.rotationRate > 0 &&
+            ` · ${num(disk.rotationRate)} rpm`}
+        </span>
+      </span>
+      <span className={cn(CELL_QUIET, N, MID)}>
+        {disk.sizeBytes === null ? DASH : bytes(disk.sizeBytes)}
+      </span>
+      <span className={cn(N, 'text-foreground')}>
+        {disk.temperature === null ? DASH : `${String(disk.temperature)}°`}
+      </span>
+      <span className={cn(CELL_QUIET, N, MID)}>{hours(disk.powerOnHours)}</span>
+      <span className={cn(CELL_QUIET, N, WIDE)}>{num(disk.powerCycles)}</span>
+      <span
+        className={cn(N, MID, worn ? 'text-warning' : CELL_QUIET)}
+        title={nvme ? 'Rated endurance used' : 'Reallocated sectors'}
+      >
+        {nvme ? `${pct(disk.percentageUsed)} used` : `${num(disk.reallocated)} realloc.`}
+      </span>
+      <span className={cn(CELL_QUIET, N, WIDE)}>
+        {stats?.readBytes == null ? DASH : `${bytes(stats.readBytes)}/s`}
+      </span>
+      <span className={cn(CELL_QUIET, N, WIDE)}>
+        {stats?.writtenBytes == null ? DASH : `${bytes(stats.writtenBytes)}/s`}
+      </span>
+      <span className={cn(CELL_QUIET, N, WIDE)}>{pct(stats?.utilPct ?? null, 1)}</span>
+      <span className="flex justify-end">
+        {disk.passed === null ? (
+          <span className={CELL_QUIET}>no SMART</span>
+        ) : disk.passed ? (
+          <span className={CELL_QUIET}>ok</span>
+        ) : (
+          <Chip tone="bad">failing</Chip>
+        )}
+      </span>
+    </li>
+  )
+}
+
+/** One drive's detail: what it is, what would fail first, its last tests. */
+function DiskBoard({ disk }: { disk: Disk }) {
   const nvme = disk.percentageUsed !== null
   const failedTest = disk.selfTests.find((t) => !t.passed)
   const photo = diskPhoto(disk.model)
@@ -100,17 +199,13 @@ function DiskBoard({
     <Board
       title={disk.device}
       icon={nvme ? '⚡' : '▦'}
-      /* A third each, so three drives are one row and one reading — at a
-         half, the third lands alone on a line beside empty grid and reads
-         as a second subject, while the comparison this page is for is
-         across all of them: which is hottest, which is oldest, which has
-         the counter that moved. Boards stretch to a shared bottom edge,
-         so the row is as tall as the drive with the most to say. */
+      /* A third each, so three drives are one row — the same order as the
+         table above, so a reading there is found here by position. Boards
+         stretch to a shared bottom edge, so the row is as tall as the drive
+         with the most to say. */
       span={4}
       aside={
-        disk.passed === null ? (
-          <span className={NOTE}>no SMART</span>
-        ) : disk.passed ? (
+        disk.passed === null ? undefined : disk.passed ? (
           <Chip tone="ok">SMART ok</Chip>
         ) : (
           <Chip tone="bad">SMART failing</Chip>
@@ -151,21 +246,6 @@ function DiskBoard({
         </div>
       </div>
 
-      <Measures
-        items={[
-          {
-            k: 'temperature',
-            v: disk.temperature === null ? DASH : `${String(disk.temperature)}°`,
-          },
-          { k: 'powered on', v: hours(disk.powerOnHours) },
-          { k: 'power cycles', v: num(disk.powerCycles) },
-          {
-            k: nvme ? 'endurance used' : 'reallocated',
-            v: nvme ? pct(disk.percentageUsed) : num(disk.reallocated),
-          },
-        ]}
-      />
-
       <h4 className={SUB}>What would fail first</h4>
       <Facts
         rows={
@@ -180,7 +260,7 @@ function DiskBoard({
                     disk.criticalWarning === null ? (
                       DASH
                     ) : disk.criticalWarning === 0 ? (
-                      <Chip tone="ok">none</Chip>
+                      'none'
                     ) : (
                       <Chip tone="bad">{num(disk.criticalWarning)}</Chip>
                     ),
@@ -219,13 +299,11 @@ function DiskBoard({
           <li key={`${t.type ?? '?'}-${String(t.hours ?? i)}-${String(i)}`} className={ROW}>
             <span className={ROW_MAIN}>{t.type ?? '?'}</span>
             <span className={ROW_SIDE}>
-              {t.passed ? (
-                <Chip tone="ok">ok</Chip>
-              ) : (
-                <Chip tone="warn">{t.status ?? 'failed'}</Chip>
-              )}
+              {/* A pass is the norm and reads as a word; only the test that
+                  did not finish takes a chip. */}
+              {t.passed ? 'ok' : <Chip tone="warn">{t.status ?? 'failed'}</Chip>}
             </span>
-            <span className={ROW_SIDE}>
+            <span className={cn(ROW_SIDE, 'w-16 text-right')}>
               {/* Against the drive's CURRENT hours, because the drive has
                   no calendar — it counts hours, not dates. */}
               {t.hours === null || disk.powerOnHours === null
@@ -236,19 +314,6 @@ function DiskBoard({
         ))}
         {disk.selfTests.length === 0 && <p className={EMPTY}>no tests on record</p>}
       </ul>
-
-      {stats !== undefined && (
-        <>
-          <h4 className={SUB}>Throughput, 5-minute average</h4>
-          <Measures
-            items={[
-              { k: 'read', v: `${bytes(stats.readBytes)}/s` },
-              { k: 'written', v: `${bytes(stats.writtenBytes)}/s` },
-              { k: 'busy', v: pct(stats.utilPct, 1) },
-            ]}
-          />
-        </>
-      )}
 
       {failedTest !== undefined && (
         <p className={cn(CAPTION, 'text-warning')}>

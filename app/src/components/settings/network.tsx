@@ -1,4 +1,3 @@
-import { RouterIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import {
@@ -8,8 +7,7 @@ import {
   leaseTimeError,
   upstreamsError,
 } from '../../lib/site-fields'
-import { NOTE_SHOWN } from './form'
-import { Line, NOTE, Section, SourceNote, Value } from './shared'
+import { Line, NOTE, NOTE_SHOWN, SECTIONS, Section, SourceNote, Value } from './shared'
 import { SiteList, SiteSwitch, SiteText, SiteUnwritten } from './site-fields'
 
 /** Optional address: empty is null in the document, anything else is a quad. */
@@ -18,12 +16,11 @@ const gatewayError = (v: string) => (v.trim() === '' ? null : ipv4Error(v))
 export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteEdit }) {
   const n = settings.network
   return (
-    <div className="flex flex-col gap-5">
+    <div className={SECTIONS}>
       <SiteUnwritten edit={edit} />
 
       <Section
         title="Addresses"
-        icon={<RouterIcon />}
         description="Where the box is on the LAN, and the one name that reaches it from anywhere."
         rows={[
           {

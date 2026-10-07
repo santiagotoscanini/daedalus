@@ -159,16 +159,7 @@ export function OutboundView({ data }: { data: Outbound }) {
           one thing here that genuinely differs between them. The switch sits
           on the boundary rather than in the header, so it is visibly the thing
           that governs what follows it and not what precedes it. */}
-      <div className={SWITCH_BAR}>
-        {/* What the switch cannot say, and only that: where the selected
-            tunnel comes out. Its name and its health are on the button. */}
-        <span className="inline-flex min-w-0 items-baseline gap-2 text-[0.84rem] text-muted-foreground">
-          <span className={cn(MONO, 'text-[0.78rem] text-muted-foreground')}>
-            {t.exit.ip ?? DASH}
-          </span>
-          <span>{flag(t.exit.country)}</span>
-          {t.portForwarding && t.port !== null && <span>port {t.port}</span>}
-        </span>
+      <div className={cn(SWITCH_BAR, 'mt-10')}>
         {data.tunnels.length > 1 && (
           <Segmented
             value={t.key}
@@ -291,10 +282,14 @@ function RidersBoard({ t }: { t: Outbound['tunnels'][number] }) {
       <ul className={ROWS}>
         {t.tenants.map((c) => (
           <li key={c.name} className={ROW}>
-            <Chip tone={c.up === null ? 'muted' : c.up ? 'ok' : 'bad'}>
-              {c.up === null ? '?' : c.up ? 'up' : 'down'}
-            </Chip>
             <span className={cn(MAIN, MONO)}>{c.name}</span>
+            {/* Up is the norm and says nothing; only a tenant that is down,
+                or cannot be read, carries a mark. */}
+            {c.up !== true && (
+              <Chip tone={c.up === null ? 'muted' : 'bad'}>
+                {c.up === null ? 'unknown' : 'down'}
+              </Chip>
+            )}
           </li>
         ))}
       </ul>

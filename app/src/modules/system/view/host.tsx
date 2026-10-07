@@ -14,6 +14,7 @@ import {
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, duration, num, pct } from '../../../lib/format'
+import type { Tone } from '../../../lib/tone'
 import type { SystemData } from '../data'
 import { RestartControl } from './restart'
 import { HOST_READERS, PARTS } from './shared'
@@ -21,6 +22,26 @@ import { HOST_READERS, PARTS } from './shared'
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
 type Host = Extract<SystemData, { tab: 'host' }>
+
+// The page in reading order, each row a pair or a trio of related heights:
+//
+//   failed units (only when there are any — a fault goes above everything)
+//   Load ················· Temperature      what the machine is doing now
+//   Running · Pressure · The box            the small facts, three of a size
+//   Controller ··········· Generations      two lists of about one length
+//   Host journal
+//
+// Load is the focal point: the cpu figure is the one number on the page set
+// large, and everything else steps down from it.
+
+/** The figure the page is about: set larger than anything else on the tab. */
+const HEADLINE =
+  'm-0 text-[2.25rem] leading-none tracking-[-0.035em] text-foreground tabular-nums [font-weight:560]'
+
+/** A temperature only takes colour when it is one to worry about. */
+function heat(c: number): Tone {
+  return c >= 85 ? 'bad' : c >= 75 ? 'warn' : 'muted'
+}
 
 /**
  * The controller: the agent on the box, as it answers the app over its socket.
@@ -32,11 +53,12 @@ function ControllerBoard({ c }: { c: Host['controller'] }) {
     <Board
       title="Controller"
       icon="⌬"
-      span={12}
+      span={8}
       aside={c.reachable ? <Chip tone="ok">running</Chip> : <Chip tone="bad">not reachable</Chip>}
     >
       {c.reachable ? (
         <Facts
+          list
           rows={[
             { k: 'Agent', v: <span className={MONO}>{c.version}</span> },
             { k: 'Mode', v: c.mode },
@@ -56,14 +78,14 @@ function ControllerBoard({ c }: { c: Host['controller'] }) {
             },
             {
               k: 'Capabilities',
+              // One quiet line: a pill per capability, seven of them, was the
+              // loudest thing on a panel whose verdict is the chip above.
               v:
                 c.capabilities.length === 0 ? (
                   DASH
                 ) : (
-                  <span className="flex flex-wrap gap-1">
-                    {c.capabilities.map((cap) => (
-                      <Chip key={cap}>{cap}</Chip>
-                    ))}
+                  <span className={cn(MONO, 'text-muted-foreground')}>
+                    {c.capabilities.join(' · ')}
                   </span>
                 ),
             },
@@ -82,21 +104,47 @@ function ControllerBoard({ c }: { c: Host['controller'] }) {
 }
 
 export function HostView({ d }: { d: Host }) {
-  const f = hostFacts({ d })
+  // The named list is the snapshot's and the count is prometheus's, and either
+  // can lead the other by ten minutes — so either one saying "failed" earns
+  // the board. Healthy, the Running board's "none" says it once.
+  const failing = d.failedUnitsList.length > 0 || (d.failedUnits ?? 0) > 0
 
   return (
     <BoardGrid>
-      <LoadBoard f={f} />
+      {failing && <FailedUnitsBoard d={d} />}
 
-      <PressureBoard f={f} />
+      <LoadBoard d={d} />
 
-      <Board title="Temperature" icon="◉" span={4}>
+      <Board
+        title="Temperature"
+        icon="◉"
+        span={4}
+        aside={
+          d.temps.length > 0 && (
+            <span className={NOTE}>
+              hottest {Math.max(...d.temps.map((t) => t.value)).toFixed(0)}°
+            </span>
+          )
+        }
+      >
         <BarList
-          items={d.temps.map((t) => ({ ...t, display: `${t.value.toFixed(0)}°` }))}
-          tone="info"
+          items={d.temps.map((t) => ({
+            ...t,
+            display: `${t.value.toFixed(0)}°`,
+            tone: heat(t.value),
+          }))}
+          tone="muted"
           empty="no sensors reporting"
         />
+        <p className={FOOT}>
+          Every hwmon sensor the host reports. A bar takes colour only when its reading is one to
+          act on: amber from 75°, red from 85°.
+        </p>
       </Board>
+
+      <RunningBoard d={d} failing={failing} />
+
+      <PressureBoard d={d} />
 
       {/* The machine itself, on the tab about the machine itself. It carries
           no reading and is not trying to: every other panel here is a number
@@ -107,59 +155,51 @@ export function HostView({ d }: { d: Host }) {
           It is also where the restart lives, for the same reason: the one
           control that acts on the object rather than on a service belongs on
           the panel that IS the object. */}
-      <TheBoxBoard f={f} />
-
-      <RunningBoard f={f} />
-
-      <Panel f={f} />
-
-      <GenerationsBoard f={f} />
+      <TheBoxBoard d={d} />
 
       <ControllerBoard c={d.controller} />
+
+      <GenerationsBoard d={d} />
 
       <HostJournalBoard />
     </BoardGrid>
   )
 }
 
-/** What the page's boards read. */
-function hostFacts({ d }: { d: Host }) {
-  return { d }
-}
-
-type HostFacts = NonNullable<ReturnType<typeof hostFacts>>
-
-function LoadBoard({ f }: { f: HostFacts }) {
-  const { d } = f
+function LoadBoard({ d }: { d: Host }) {
   return (
     <Board
       title="Load"
       icon="◔"
       span={8}
-      aside={<span className={NOTE}>{num(d.cores)} threads</span>}
+      aside={<span className={NOTE}>{num(d.cores)} threads · last 6h</span>}
     >
-      <Trend values={d.cpuSpark} tone="accent" height={90} />
-      <Measures
-        items={[
-          { k: 'cpu now', v: pct(d.cpuPct, 1) },
-          { k: 'load 1m', v: num(d.load.m1, 2) },
-          { k: 'load 5m', v: num(d.load.m5, 2) },
-          { k: 'load 15m', v: num(d.load.m15, 2) },
-        ]}
-      />
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[0.75rem] text-muted-foreground">cpu now</span>
+          <p className={HEADLINE}>{pct(d.cpuPct, 1)}</p>
+        </div>
+        <Measures
+          items={[
+            { k: 'load 1m', v: num(d.load.m1, 2) },
+            { k: 'load 5m', v: num(d.load.m5, 2) },
+            { k: 'load 15m', v: num(d.load.m15, 2) },
+          ]}
+        />
+      </div>
+      <Trend values={d.cpuSpark} tone="accent" height={96} />
       <p className={FOOT}>
         Six hours of cpu, and the load averages beside it for scale: on {num(d.cores)} threads a
         load of {num(d.cores)} is fully committed, not overloaded. What load cannot tell you is what
-        those tasks were waiting FOR, which is the panel to the right.
+        those tasks were waiting FOR, which is the Pressure panel below.
       </p>
     </Board>
   )
 }
 
-function PressureBoard({ f }: { f: HostFacts }) {
-  const { d } = f
+function PressureBoard({ d }: { d: Host }) {
   return (
-    <Board title="Pressure" icon="⌁" span={4}>
+    <Board title="Pressure" icon="⌁" span={4} aside={<span className={NOTE}>share of time</span>}>
       {/* PSI — see `HostData.pressure`. */}
       <Facts
         rows={[
@@ -177,8 +217,7 @@ function PressureBoard({ f }: { f: HostFacts }) {
   )
 }
 
-function TheBoxBoard({ f }: { f: HostFacts }) {
-  const { d } = f
+function TheBoxBoard({ d }: { d: Host }) {
   return (
     <Board title="The box" icon="▣" span={4}>
       <div className={PART}>
@@ -196,8 +235,7 @@ function TheBoxBoard({ f }: { f: HostFacts }) {
   )
 }
 
-function RunningBoard({ f }: { f: HostFacts }) {
-  const { d } = f
+function RunningBoard({ d, failing }: { d: Host; failing: boolean }) {
   return (
     <Board title="Running" icon="▣" span={4}>
       <Facts
@@ -207,13 +245,14 @@ function RunningBoard({ f }: { f: HostFacts }) {
           { k: 'Containers', v: num(d.containers.total) },
           {
             k: 'Failed units',
+            // Healthy is a quiet word; only a fault takes colour.
             v:
               d.failedUnits === null ? (
                 DASH
               ) : d.failedUnits > 0 ? (
-                <Chip tone="bad">{num(d.failedUnits)}</Chip>
+                <span className="text-danger">{num(d.failedUnits)}</span>
               ) : (
-                <Chip tone="ok">none</Chip>
+                <span className="text-muted-foreground">none</span>
               ),
           },
         ]}
@@ -222,17 +261,35 @@ function RunningBoard({ f }: { f: HostFacts }) {
         // Named, not counted — "3 containers down" makes you go hunting.
         <p className={cn(CAPTION, 'text-danger')}>Not answering: {d.containers.down.join(', ')}</p>
       )}
+      {!failing && (
+        <p className={FOOT}>
+          No systemd unit on the box is in the failed state: everything that ran either succeeded or
+          is still running. {FAILED_UNITS_NOTE}
+        </p>
+      )}
     </Board>
   )
 }
 
-function Panel({ f }: { f: HostFacts }) {
-  const { d } = f
+/** What "no failed units" does and does not claim, wherever it is said. */
+const FAILED_UNITS_NOTE = (
+  <>
+    The count is prometheus&rsquo;s and the named list the host snapshot&rsquo;s, which the count
+    can lead by up to ten minutes. Empty is a weaker claim than it sounds on this box: every
+    container unit is a green <span className={MONO}>Type=oneshot</span> whose container can die
+    without the unit noticing, so &ldquo;no failed units&rdquo; and &ldquo;every container
+    alive&rdquo; are different questions. The second is the Containers row and its list of who is
+    not answering.
+  </>
+)
+
+/** Drawn only while something has failed: a fault opens the page. */
+function FailedUnitsBoard({ d }: { d: Host }) {
   return (
     <Board
       title={d.failedUnitsList.length === 0 ? 'No failed units' : 'Failed units'}
       icon="⚑"
-      span={8}
+      span={12}
       aside={
         d.failedUnitsList.length === 0 ? (
           <Chip tone="ok">none</Chip>
@@ -257,20 +314,12 @@ function Panel({ f }: { f: HostFacts }) {
           ))}
         </ul>
       )}
-      <p className={FOOT}>
-        Named, from the host snapshot. The count in the panel above is prometheus&rsquo;s and can
-        lead this list by up to ten minutes. Empty is a weaker claim than it sounds on this box:
-        every container unit is a green <span className={MONO}>Type=oneshot</span> whose container
-        can die without the unit noticing, so &ldquo;no failed units&rdquo; and &ldquo;every
-        container alive&rdquo; are different questions. The second is the Containers row and its
-        list of who is not answering.
-      </p>
+      <p className={FOOT}>Named, from the host snapshot. {FAILED_UNITS_NOTE}</p>
     </Board>
   )
 }
 
-function GenerationsBoard({ f }: { f: HostFacts }) {
-  const { d } = f
+function GenerationsBoard({ d }: { d: Host }) {
   return (
     <Board
       title="Generations"
@@ -284,7 +333,7 @@ function GenerationsBoard({ f }: { f: HostFacts }) {
           .slice(0, 6)
           .map((g) => (
             <li key={g.id} className={ROW}>
-              <span className={ROW_MAIN}>
+              <span className={cn(ROW_MAIN, 'tabular-nums', !g.current && 'text-subdued')}>
                 #{g.id}
                 {g.current && (
                   <>

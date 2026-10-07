@@ -73,13 +73,27 @@ export function RunningBoard({ f }: { f: HostFacts }) {
             k: node.os === 'macos' ? 'Jobs failing' : 'Services down',
             v:
               t.services.length > 0 ? (
-                <Chip tone="bad">{num(t.services.length)}</Chip>
+                <span className="text-danger">{num(t.services.length)}</span>
               ) : (
-                <Chip tone="ok">none</Chip>
+                // Healthy is a quiet word; the count it is out of says what
+                // "none" covered.
+                <span className="text-muted-foreground">
+                  none{t.service_count === null ? '' : ` of ${num(t.service_count)}`}
+                </span>
               ),
           },
         ]}
       />
+      {/* Healthy, the Services board is not drawn and this row says it once;
+          what "none" covers moves here, folded. */}
+      {t.services.length === 0 && (
+        <p className={FOOT}>
+          {node.os === 'macos'
+            ? `Nothing outside Apple's own launchd jobs exited with an error${t.service_count === null ? '' : `, of ${num(t.service_count)} loaded`}: Apple’s own are left out because half of them exit non-zero by design. The box’s equivalent is its failed units.`
+            : `Every Automatic service is running or stopped cleanly${t.service_count === null ? '' : `, of ${num(t.service_count)} installed`} — the Windows reading of the box’s failed units. A service that finished its work and exited zero is not counted.`}{' '}
+          Read every ten minutes.
+        </p>
+      )}
     </Board>
   )
 }
@@ -98,7 +112,7 @@ export function ServicesBoard({ f }: { f: HostFacts }) {
             : 'Services down'
       }
       icon="⚑"
-      span={t.battery === null ? 8 : 4}
+      span={12}
       aside={
         t.services.length === 0 ? (
           <Chip tone="ok">none</Chip>
@@ -177,14 +191,14 @@ export function ProvidersBoard({ f }: { f: HostFacts }) {
     <Board
       title="Providers"
       icon="◈"
-      span={12}
+      span={f.t.battery === null ? 8 : 4}
       aside={
         providers === null ? (
           <span className={NOTE}>no report yet</span>
         ) : providers.length === 0 ? (
           <span className={NOTE}>none found</span>
         ) : providers.every((p) => p.running) ? (
-          <Chip tone="ok">{num(providers.length)} running</Chip>
+          <span className={NOTE}>{num(providers.length)} running</span>
         ) : (
           <Chip tone="warn">
             {num(providers.filter((p) => p.running).length)} of {num(providers.length)} running

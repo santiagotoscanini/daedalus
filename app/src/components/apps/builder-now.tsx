@@ -14,7 +14,7 @@ import { type Tone, toneStyle } from '../../lib/tone'
 import { fetchBuilderNow } from '../../server/builds'
 import { Ago } from '../ago'
 import { useLiveValue, useNow } from '../poll'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_N, ROW_SIDE } from '../tokens'
+import { FOOT, LIST, MONO, NOTE, ROW, ROW_N, ROW_SIDE } from '../tokens'
 import { Board, Pulse } from '../viz'
 import { BuildStateChip, requesterLabel } from './builds'
 
@@ -62,7 +62,7 @@ export function NowBoard({ initial }: { initial: LiveBuild[] }) {
       }
     >
       {builds.length === 0 ? (
-        <p className={EMPTY}>Nothing is queued or building.</p>
+        <p className="m-0 text-[0.82rem] text-muted-foreground">Nothing is queued or building.</p>
       ) : (
         <ul className={LIST}>
           {builds.map((b) => (

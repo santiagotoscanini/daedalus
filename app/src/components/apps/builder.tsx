@@ -1,12 +1,11 @@
 import { Link } from '@tanstack/react-router'
 import type { BuilderData } from '../../lib/apps/builder'
-import { sha7 } from '../../lib/build-display'
 import { cn } from '../../lib/cn'
-import { bytes, DASH, ms, pct } from '../../lib/format'
-import { Ago } from '../ago'
+import { bytes } from '../../lib/format'
 import { ImageRow } from '../image-row'
-import { EMPTY, FOOT, LIST, MONO, NOTE, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
-import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
+import { EMPTY, FOOT, LIST, MONO, ROW, ROW_MAIN, ROW_N, ROW_SIDE, SUB } from '../tokens'
+import { Board, BoardGrid, Facts } from '../viz'
+import { FailuresSection, HistorySection } from './builder-history'
 import { GithubBoard, MachineryBoard } from './builder-machinery'
 import { NowBoard } from './builder-now'
 
@@ -27,133 +26,20 @@ export type Builder = BuilderData
 
 export function BuilderView({ d }: { d: Builder }) {
   return (
-    <BoardGrid>
-      <NowBoard initial={d.now} />
-      <HistoryBoard h={d.history} />
-      <StagesBoard h={d.history} />
-      <FailuresBoard h={d.history} />
-      <ToolchainBoard d={d} />
-      <MachineryBoard m={d.machinery} />
-      <GithubBoard g={d.github} />
-    </BoardGrid>
-  )
-}
-
-/* ── history ──────────────────────────────────────────────────────────── */
-
-type History = Builder['history']
-
-function HistoryBoard({ h }: { h: History }) {
-  return (
-    <Board
-      title="History"
-      icon="logs"
-      span={8}
-      aside={<span className={NOTE}>last {String(h.days)} days</span>}
-    >
-      <StatStrip>
-        <Stat label="Builds" value={String(h.total)} />
-        <Stat
-          label="Landed"
-          value={h.successRate === null ? DASH : pct(h.successRate * 100)}
-          sub={`${String(h.succeeded)} of ${String(h.succeeded + h.failed)} · ${String(h.failed)} failed`}
-        />
-        <Stat label="Median build" value={ms(h.medianMs)} sub="hand-off to finish" />
-      </StatStrip>
-      {h.apps.length === 0 ? (
-        <p className={EMPTY}>No builds in this window.</p>
-      ) : (
-        <ul className={LIST}>
-          {h.apps.map((a) => (
-            <li key={a.app} className={ROW}>
-              <Link
-                to="/apps/$name"
-                params={{ name: a.app }}
-                search={{ tab: 'deployments' }}
-                className={ROW_MAIN}
-              >
-                {a.app}
-              </Link>
-              <span className={ROW_SIDE}>
-                {String(a.total)} build{a.total === 1 ? '' : 's'}
-                {a.failed > 0 && `, ${String(a.failed)} failed`}
-              </span>
-              <span className={ROW_SIDE}>median {ms(a.medianMs)}</span>
-              <span
-                className={cn(
-                  ROW_N,
-                  'min-w-[3rem]',
-                  a.successRate !== null && a.successRate < 1 && 'text-warning',
-                )}
-              >
-                {a.successRate === null ? DASH : pct(a.successRate * 100)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className={FOOT}>
-        “Landed” is succeeded over succeeded plus failed: a cancelled or superseded build was
-        somebody’s decision, not the builder’s result. A build’s time runs from its hand-off to the
-        host to its last word, so the wait in the queue is not in it.
-      </p>
-    </Board>
-  )
-}
-
-function StagesBoard({ h }: { h: History }) {
-  const items = h.stages
-    .filter((s) => s.medianMs !== null)
-    .map((s) => ({
-      label: s.phase,
-      value: s.medianMs ?? 0,
-      display: `${ms(s.medianMs)} · ${String(s.count)}`,
-    }))
-  return (
-    <Board title="Stage medians" icon="logs" span={4}>
-      <BarList items={items} tone="info" empty="no stage has been timed yet" />
-      <p className={FOOT}>
-        Median time per stage over the same window, with how many builds finished it. A stage a
-        failed build completed counts.
-      </p>
-    </Board>
-  )
-}
-
-function FailuresBoard({ h }: { h: History }) {
-  return (
-    <Board
-      title="Latest failures"
-      icon="warn"
-      span={12}
-      aside={<span className={NOTE}>{String(h.failed)} in the window</span>}
-    >
-      {h.failures.length === 0 ? (
-        <p className={EMPTY}>No build failed in the last {String(h.days)} days.</p>
-      ) : (
-        <ul className={LIST}>
-          {h.failures.map((f) => (
-            <li key={f.id} className={ROW}>
-              <Link
-                to="/apps/$name/builds/$id"
-                params={{ name: f.app, id: f.id }}
-                className="inline-flex min-w-[10rem] items-baseline gap-2 no-underline"
-              >
-                <span className="text-foreground">{f.app}</span>
-                <code className="text-[0.75rem] text-muted-foreground">{sha7(f.sha)}</code>
-              </Link>
-              <Chip tone="bad">{f.phase}</Chip>
-              <span className={cn(ROW_MAIN, 'text-subdued')} title={f.error ?? undefined}>
-                {f.error ?? 'no error recorded'}
-              </span>
-              <span className={ROW_SIDE}>
-                <Ago at={f.at} />
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Board>
+    <>
+      <BoardGrid>
+        <NowBoard initial={d.now} />
+      </BoardGrid>
+      <HistorySection h={d.history} />
+      <FailuresSection h={d.history} />
+      <div className="mt-10">
+        <BoardGrid>
+          <ToolchainBoard d={d} />
+          <MachineryBoard m={d.machinery} />
+          <GithubBoard g={d.github} />
+        </BoardGrid>
+      </div>
+    </>
   )
 }
 

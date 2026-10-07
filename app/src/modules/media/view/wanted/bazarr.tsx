@@ -4,8 +4,25 @@ import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/
 import { Board, BoardGrid, Chip, Facts } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { DASH, num } from '../../../../lib/format'
-import { EMPTY, FOOT, MONO, NOTE, PROV, PROVS } from '../shared'
+import {
+  CELL_MONO,
+  CELL_QUIET,
+  FOOT,
+  MONO,
+  NOTE,
+  TABLE,
+  TABLE_EMPTY,
+  TABLE_HEAD,
+  TABLE_ROW,
+  TableSection,
+} from '../shared'
 import type { Wanted } from './shared'
+
+/* Provider, its status, when it may be asked again. */
+const PROV_GRID = cn(
+  'grid items-center gap-x-6 px-5',
+  'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8rem]',
+)
 
 /* ── Bazarr — reached from the Wanted switch above ────────────────────── */
 
@@ -41,39 +58,51 @@ export function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
       />
 
       <BoardGrid>
-        <Board
+        <TableSection
           title="Providers"
-          icon="⛁"
-          span={8}
-          aside={
+          note={
             throttled.length === 0 ? (
-              <span className={NOTE}>all answering</span>
+              'all answering'
             ) : (
-              <span className={cn(NOTE, 'text-warning')}>{num(throttled.length)} throttled</span>
+              <span className="text-warning">{num(throttled.length)} throttled</span>
             )
           }
+          foot={
+            <p className={FOOT}>
+              The table that explains a subtitle which never arrives. A throttled provider answers
+              nothing and reports no error, so &ldquo;none found&rdquo; and &ldquo;we are not
+              currently allowed to ask&rdquo; look identical everywhere except here.
+            </p>
+          }
         >
-          {d.providers.length === 0 ? (
-            <p className={EMPTY}>could not read the provider list</p>
-          ) : (
-            <ul className={PROVS}>
-              {d.providers.map((p) => (
-                <li key={p.name} className={PROV}>
-                  <Chip tone={p.ok ? 'ok' : 'warn'}>{p.status}</Chip>
-                  <span className={MONO}>{p.name}</span>
-                  {p.retry !== '-' && (
-                    <span className="text-[0.72rem] text-warning">retry {p.retry}</span>
-                  )}
+          <ul className={TABLE} aria-label="Subtitle providers">
+            <li aria-hidden="true" className={cn(PROV_GRID, TABLE_HEAD)}>
+              <span>Provider</span>
+              <span>Status</span>
+              <span className="text-right">Retry</span>
+            </li>
+            {d.providers.length === 0 ? (
+              <li className={TABLE_EMPTY}>Could not read the provider list.</li>
+            ) : (
+              d.providers.map((p) => (
+                <li key={p.name} className={cn(PROV_GRID, TABLE_ROW)}>
+                  <span className={cn(CELL_MONO, 'text-[0.8rem] text-foreground')}>{p.name}</span>
+                  {/* Answering is the norm: quiet. Throttled is the row to read. */}
+                  <span>
+                    {p.ok ? (
+                      <span className={CELL_QUIET}>{p.status}</span>
+                    ) : (
+                      <Chip tone="warn">{p.status}</Chip>
+                    )}
+                  </span>
+                  <span className={cn(CELL_QUIET, 'text-right', p.retry !== '-' && 'text-warning')}>
+                    {p.retry === '-' ? '' : p.retry}
+                  </span>
                 </li>
-              ))}
-            </ul>
-          )}
-          <p className={FOOT}>
-            The panel that explains a subtitle which never arrives. A throttled provider answers
-            nothing and reports no error, so &ldquo;none found&rdquo; and &ldquo;we are not
-            currently allowed to ask&rdquo; look identical everywhere except here.
-          </p>
-        </Board>
+              ))
+            )}
+          </ul>
+        </TableSection>
 
         <Board title="Still missing" icon="clock" span={4}>
           <Facts
@@ -93,7 +122,7 @@ export function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
 
         <Changelog
           gap={d.gap}
-          span={12}
+          span={8}
           aside={
             d.subgen === null ? (
               <span className={NOTE}>github</span>

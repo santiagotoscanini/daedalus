@@ -125,7 +125,7 @@ function CoverageBoard({ f }: { f: LogsFacts }) {
         d.unregistered !== null && d.unregistered > 0 ? (
           <Chip tone="warn">{compact(d.unregistered)} unlabelled</Chip>
         ) : (
-          <Chip tone="ok">all labelled</Chip>
+          <span className={NOTE}>all labelled</span>
         )
       }
     >
@@ -171,7 +171,7 @@ function ShippingBoard({ f }: { f: LogsFacts }) {
               ) : d.ship.dropped24h > 0 ? (
                 <span className="text-warning">{num(d.ship.dropped24h)}</span>
               ) : (
-                <Chip tone="ok">none</Chip>
+                'none'
               ),
           },
           {
@@ -182,7 +182,7 @@ function ShippingBoard({ f }: { f: LogsFacts }) {
               ) : d.ship.retries24h > 0 ? (
                 <span className="text-warning">{num(d.ship.retries24h)}</span>
               ) : (
-                <Chip tone="ok">none</Chip>
+                'none'
               ),
           },
           {
@@ -191,7 +191,7 @@ function ShippingBoard({ f }: { f: LogsFacts }) {
               d.ship.configOk === null ? (
                 DASH
               ) : d.ship.configOk ? (
-                <Chip tone="ok">loaded</Chip>
+                'loaded'
               ) : (
                 <Chip tone="bad">failed — running old rules</Chip>
               ),

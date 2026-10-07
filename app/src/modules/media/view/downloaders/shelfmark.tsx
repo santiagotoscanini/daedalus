@@ -7,21 +7,10 @@ import {
   SOURCE_NOTE,
   verdictOf,
 } from '../../../../components/service-head'
-import { Board, BoardGrid, Chip, Measures, Progress } from '../../../../components/viz'
+import { BoardGrid, Chip, Stat, StatStrip } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
 import { num } from '../../../../lib/format'
-import {
-  EMPTY,
-  FOOT,
-  MONO,
-  NOTE,
-  TRANSFER_HEAD,
-  TRANSFER_META,
-  TRANSFER_NAME,
-  TRANSFER_ROW,
-  TRANSFERS,
-  VERSION_SNAPSHOT,
-} from '../shared'
+import { CAPTION, FOOT, MONO, NOTE, QueueTable, TableSection, VERSION_SNAPSHOT } from '../shared'
 import type { Downloaders } from './shared'
 
 export function ShelfmarkPage({ d }: { d: Downloaders }) {
@@ -54,64 +43,41 @@ export function ShelfmarkPage({ d }: { d: Downloaders }) {
         actions={<Open name="Shelfmark" host="shelfmark" />}
       />
 
-      <BoardGrid>
-        <Board
-          title="Downloading"
-          icon="down"
-          span={8}
-          aside={
-            counts === null ? (
-              <span className={NOTE}>did not answer</span>
-            ) : (
-              <span className={NOTE}>
-                {num(counts.done)} completed · {num(counts.errors)} failed
-              </span>
-            )
-          }
-        >
-          {shelfmark.jobs.length === 0 ? (
-            <p className={EMPTY}>Queue is empty.</p>
-          ) : (
-            <ul className={TRANSFERS}>
-              {shelfmark.jobs.map((j, i) => (
-                <li key={`${j.title}-${String(i)}`} className={TRANSFER_ROW}>
-                  <div className={TRANSFER_HEAD}>
-                    <span className={TRANSFER_NAME} title={j.title}>
-                      {j.title}
-                    </span>
-                    <span className={TRANSFER_META}>
-                      <Chip tone={j.state === 'error' ? 'bad' : 'info'}>{j.state}</Chip>
-                    </span>
-                  </div>
-                  <Progress
-                    pct={j.pct}
-                    tone={j.state === 'error' ? 'bad' : 'accent'}
-                    active={j.state === 'downloading'}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Board>
+      {/* The queue's counts, read across. The jobs table under them used to
+          repeat two of these in its header. */}
+      {counts === null ? (
+        <p className={cn(CAPTION, 'mb-4')}>The queue did not answer: no reading.</p>
+      ) : (
+        <StatStrip>
+          <Stat label="Downloading" value={num(counts.downloading)} />
+          <Stat label="Queued" value={num(counts.queued)} />
+          <Stat label="Completed" value={num(counts.done)} />
+          <Stat
+            label="Errors"
+            value={num(counts.errors)}
+            tone={counts.errors > 0 ? 'warn' : undefined}
+          />
+        </StatStrip>
+      )}
 
-        <Board title="Queue" icon="clock" span={4}>
-          {counts === null ? (
-            <p className={EMPTY}>no reading</p>
-          ) : (
-            <Measures
-              items={[
-                { k: 'Downloading', v: num(counts.downloading) },
-                { k: 'Queued', v: num(counts.queued) },
-                { k: 'Completed', v: num(counts.done) },
-                {
-                  k: 'Errors',
-                  v: num(counts.errors),
-                  tone: counts.errors > 0 ? 'warn' : undefined,
-                },
-              ]}
-            />
-          )}
-        </Board>
+      <BoardGrid>
+        <TableSection title="Downloading">
+          <QueueTable
+            label="Shelfmark jobs"
+            detail="State"
+            empty="Queue is empty."
+            rows={shelfmark.jobs.map((j, i) => ({
+              key: `${j.title}-${String(i)}`,
+              name: j.title,
+              pct: j.pct,
+              tone: j.state === 'error' ? 'bad' : 'accent',
+              active: j.state === 'downloading',
+              // An error is the state to read; the rest are the machine working.
+              detail:
+                j.state === 'error' ? <Chip tone="bad">{j.state}</Chip> : <span>{j.state}</span>,
+            }))}
+          />
+        </TableSection>
 
         <Changelog
           gap={shelfmark.gap}

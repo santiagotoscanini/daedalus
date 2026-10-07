@@ -1,14 +1,22 @@
-import { ServerIcon } from 'lucide-react'
-
 import type { BoxSettings, IntegrationStatus } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import { mailAddressError } from '../../lib/site-fields'
 import { Ago, When } from '../ago'
 import { Identified, ReplaceToken, Token } from './cloudflare'
-import { NOTE_SHOWN } from './form'
 import { GithubApp, type GithubAppProps } from './github-app'
 import { Installations } from './installations'
-import { ExtLink, Mono, Pending, Section, Stack, Unset, Value } from './shared'
+import {
+  Band,
+  ExtLink,
+  Mono,
+  NOTE,
+  Pending,
+  SECTIONS,
+  Section,
+  Stack,
+  Unset,
+  Value,
+} from './shared'
 import { SiteText, SiteUnwritten } from './site-fields'
 import { Vercel } from './vercel'
 
@@ -48,7 +56,7 @@ export function Integrations({
   const cf = settings.cloudflare
   const gh = settings.github
   return (
-    <div className="flex flex-col gap-5">
+    <div className={SECTIONS}>
       <SiteUnwritten edit={edit} />
 
       <Section
@@ -89,7 +97,7 @@ export function Integrations({
         ]}
       >
         <ReplaceToken />
-        <p className={NOTE_SHOWN}>
+        <p className={NOTE}>
           One token does all of it: Zone › Zone › Read and Zone › DNS › Edit for the certificate,
           the tunnel's records, the dynamic address and the domain picker, and Account › Cloudflare
           One Connector: cloudflared › Read for the tunnel. The zone and tunnel names are read with
@@ -101,7 +109,7 @@ export function Integrations({
         title="GitHub"
         icon="/icon-github.svg"
         mono
-        description="Where the app repos live, and the box’s own App, which is how it talks to GitHub once created and installed."
+        description="Where the app repos live, and every account the box’s App may read."
         rows={[
           {
             k: 'Owner',
@@ -112,23 +120,23 @@ export function Integrations({
                 <ExtLink href={`https://github.com/${gh.owner}`}>{gh.owner}</ExtLink>
               ),
           },
-          {
-            k: 'Installations',
-            v:
-              status === null ? (
-                <Pending />
-              ) : (
-                <Installations
-                  list={status.installations}
-                  settingsUrl={github.app?.settingsUrl ?? null}
-                  installUrl={github.app?.installUrl ?? null}
-                />
-              ),
-          },
         ]}
-      >
-        <GithubApp {...github} />
-      </Section>
+        body={
+          status === null ? (
+            <Band>
+              <Pending />
+            </Band>
+          ) : (
+            <Installations
+              list={status.installations}
+              settingsUrl={github.app?.settingsUrl ?? null}
+              installUrl={github.app?.installUrl ?? null}
+            />
+          )
+        }
+      />
+
+      <GithubApp {...github} />
 
       <Vercel
         configured={settings.vercel.tokenConfigured}
@@ -185,7 +193,6 @@ export function Integrations({
 
       <Section
         title="On this box"
-        icon={<ServerIcon />}
         rows={[
           {
             k: 'Image registry',
@@ -209,7 +216,7 @@ export function Integrations({
       />
 
       {status !== null && (
-        <p className="m-0 text-[0.74rem] text-muted-foreground">
+        <p className="m-0 -mt-7 text-[0.74rem] text-muted-foreground">
           Checked <Ago at={status.checkedAt} />; each service is asked at most every five minutes.
         </p>
       )}
