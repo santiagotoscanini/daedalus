@@ -1,203 +1,207 @@
 import { useEffect, useRef, useState } from "react";
 import { iconUrl } from "~/data/icons";
-import { SHOWN } from "~/data/services";
-import type { UniverseScene } from "./scene";
+import { SHOWN, type Service } from "~/data/services";
 
-/** Everything it touches: the hosted apps and integrations as one field of cubes, each carrying the
- * service's own mark. The page is complete without the scene: the prerender, a reader with no script,
- * a browser with no WebGL and reduced motion get the roster (the same names with their marks). Once
- * hydrated and near, the scene's chunk and the marks load, and if the GL context comes up the stage
- * pins and the scroll flies the camera through it (scene.ts); with reduced motion it renders one
- * finished frame and keeps the roster. */
+/** Everything it touches, as a wall: every integration and hosted app on one grid of glass tiles that
+ * drifts, row against row. The wall is plain DOM in the prerender, so the icons are crisp vectors, the
+ * names are real text, and nothing swaps in after first paint. Script only adds the motion and the
+ * fade-in once the icons have decoded. One RAF clock drives it: the rows' ambient drift and the
+ * scroll's push are summed, never traded, so scrolling cannot fight the drift. Hovering or focusing a
+ * tile (a tap on a phone) lifts it, shows its name, dims the rest and slows the wall to a near stop.
+ * Reduced motion: the same tiles as a still, wrapped grid. */
 
-type Mode = "static" | "pinned" | "still";
-/** svh of scroll the flight takes, beyond the stage itself */
-const RUN = 420;
+const SPEEDS = [19, -15, 23, -17, 20];
+
+function rowsOf(list: Service[], n: number) {
+  const rows: Service[][] = Array.from({ length: n }, () => []);
+  list.forEach((s, i) => rows[i % n]!.push(s));
+  return rows;
+}
+
+function Tile({ s, copy, sel, setSel, touch }: { s: Service; copy: boolean; sel: string | null; setSel: (id: string | null) => void; touch: boolean }) {
+  return (
+    <button
+      type="button"
+      className="uv-t"
+      data-on={sel === s.id ? "" : undefined}
+      aria-label={copy ? undefined : s.name}
+      aria-hidden={copy || undefined}
+      tabIndex={copy ? -1 : 0}
+      title={copy ? undefined : s.name}
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") setSel(s.id);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") setSel(null);
+      }}
+      onFocus={() => setSel(s.id)}
+      onBlur={() => setSel(null)}
+      onClick={() => {
+        setSel(touch && sel === s.id ? null : s.id);
+      }}
+    >
+      <span className="uv-glass">
+        <img src={iconUrl(s.id)} alt="" width={44} height={44} decoding="async" draggable={false} />
+      </span>
+      <span className="uv-name" aria-hidden>
+        {s.name}
+      </span>
+    </button>
+  );
+}
 
 export function Universe() {
-  const [mode, setMode] = useState<Mode>("static");
+  const [sel, setSel] = useState<string | null>(null);
+  const [mode, setMode] = useState<"static" | "live" | "still">("static");
   const [ready, setReady] = useState(false);
+  const [touch, setTouch] = useState(false);
+  const [rowsN, setRowsN] = useState(4);
   const sec = useRef<HTMLElement>(null);
-  const holder = useRef<HTMLDivElement>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const labelEls = useRef<Array<HTMLSpanElement | null>>([]);
-  const scene = useRef<UniverseScene | null>(null);
+  const wall = useRef<HTMLDivElement>(null);
+  const rowEls = useRef<Array<HTMLDivElement | null>>([]);
+  const selRef = useRef<string | null>(null);
+  selRef.current = sel;
 
   useEffect(() => {
-    const section = sec.current;
-    const el = canvas.current;
-    const box = holder.current;
-    if (!section || !el || !box) return;
+    const phone = window.matchMedia("(max-width: 767px)").matches;
+    setTouch(window.matchMedia("(hover: none)").matches);
+    setRowsN(phone ? 5 : 4);
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const mobile = window.matchMedia("(max-width: 767px)").matches;
-    let cancelled = false;
+    setMode(reduced ? "still" : "live");
+  }, []);
+
+  // fade in once the marks have decoded, never before (a tile with no icon is never shown)
+  useEffect(() => {
+    const el = wall.current;
+    if (!el) return;
+    let off = false;
+    const imgs = Array.from(el.querySelectorAll("img"));
+    const done = Promise.all(imgs.map((i) => i.decode().catch(() => undefined)));
+    const cap = new Promise((r) => setTimeout(r, 2500));
+    void Promise.race([done, cap]).then(() => {
+      if (!off) requestAnimationFrame(() => setReady(true));
+    });
+    return () => {
+      off = true;
+    };
+  }, [rowsN]);
+
+  // a name never leaves the screen: the label of a tile near an edge slides inward
+  useEffect(() => {
+    const n = wall.current?.querySelector<HTMLElement>("[data-on] .uv-name");
+    if (!n) return;
+    n.style.translate = "-50% 0";
+    const b = n.getBoundingClientRect();
+    const pad = 12;
+    const dx = b.left < pad ? pad - b.left : b.right > window.innerWidth - pad ? window.innerWidth - pad - b.right : 0;
+    if (dx) n.style.translate = `calc(-50% + ${dx}px) 0`;
+  }, [sel]);
+
+  useEffect(() => {
+    if (mode !== "live") return;
+    const section = sec.current;
+    if (!section) return;
     let raf = 0;
     let visible = true;
-    let started = false;
     let last = performance.now();
+    let pt = 0;
+    let sp = 0;
     let fs = -1;
-    let alive: UniverseScene | null = null;
-
-    const fit = () => alive?.resize(box.clientWidth, box.clientHeight);
-    const ro = new ResizeObserver(() => {
-      fit();
-      if (reduced && alive) alive.renderStill();
+    let sf = 1;
+    let widths: number[] = [];
+    const measure = () => {
+      widths = rowEls.current.map((r) => (r?.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(section);
+    const io = new IntersectionObserver(([e]) => {
+      visible = !!e?.isIntersecting;
     });
-
+    io.observe(section);
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      if (!alive || !visible || document.hidden) return;
+      if (!visible || document.hidden) return;
+      // the drift slows toward a near stop while a tile is held, and eases back
+      sf += ((selRef.current ? 0.1 : 1) - sf) * (1 - Math.exp(-dt * 5));
+      pt += dt * sf;
       const r = section.getBoundingClientRect();
-      const run = r.height - window.innerHeight;
-      const target = run > 0 ? Math.min(1, Math.max(0, -r.top / run)) : 0;
-      if (fs < 0) fs = target;
-      fs += (target - fs) * (1 - Math.exp(-dt * 6));
-      if (Math.abs(target - fs) < 0.00005) fs = target;
-      alive.setProgress(fs);
-      alive.tick(dt);
-      const L = alive.labels;
-      labelEls.current.forEach((n, i) => {
-        if (!n) return;
-        const l = L[i];
-        if (!l) {
-          n.style.opacity = "0";
-          return;
-        }
-        const nm = alive!.names[l.index] ?? "";
-        if (n.textContent !== nm) n.textContent = nm;
-        n.style.opacity = l.a.toFixed(3);
-        n.style.transform = `translate3d(${l.x.toFixed(1)}px, ${l.y.toFixed(1)}px, 0)`;
+      const target = -r.top / Math.max(1, window.innerHeight);
+      if (fs < -50) fs = target;
+      fs += (target - fs) * (1 - Math.exp(-dt * 8));
+      sp = fs * 240;
+      rowEls.current.forEach((row, i) => {
+        const W = widths[i];
+        if (!row || !W) return;
+        const d = i % 2 ? -1 : 1;
+        const speed = SPEEDS[i % SPEEDS.length]!;
+        const p = Math.abs(speed) * pt * (speed > 0 ? 1 : 1) + sp * d + i * W * 0.31;
+        const m = ((p % W) + W) % W;
+        row.style.transform = d > 0 ? `translate3d(${(-m).toFixed(2)}px,0,0)` : `translate3d(${(m - W).toFixed(2)}px,0,0)`;
       });
     };
-
-    const boot = async () => {
-      if (started) return;
-      started = true;
-      try {
-        const { createUniverse } = await import("./scene");
-        if (cancelled) return;
-        const items = SHOWN.filter((_, i) => !mobile || i % 2 === 0 || SHOWN[i]!.focus).map((s) => ({
-          id: s.id,
-          name: s.name,
-          url: iconUrl(s.id),
-          focus: s.focus,
-        }));
-        const sc = await createUniverse({ canvas: el, items, mobile, onReady: () => setReady(true),
-          keepout: () => {
-            const h = box.querySelector(".uv-head");
-            if (!h) return null;
-            const b = box.getBoundingClientRect();
-            const q = h.getBoundingClientRect();
-            return { l: q.left - b.left - 16, t: q.top - b.top - 12, r: q.right - b.left + 16, b: q.bottom - b.top + 12 };
-          },
-        });
-        if (cancelled) {
-          sc.dispose();
-          return;
-        }
-        alive = sc;
-        scene.current = sc;
-        if (reduced) {
-          setMode("still");
-        } else {
-          setMode("pinned");
-          raf = requestAnimationFrame(loop);
-        }
-        ro.observe(box);
-        requestAnimationFrame(() => {
-          fit();
-          if (reduced) alive?.renderStill();
-        });
-      } catch {
-        // no GL, or a blocked context: the roster stands
-      }
+    fs = -999;
+    raf = requestAnimationFrame(loop);
+    // a tap outside the wall puts the name away
+    const away = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest(".uv-t")) setSel(null);
     };
-
-    const near = new IntersectionObserver(
-      ([e]) => {
-        if (e?.isIntersecting) void boot();
-      },
-      { rootMargin: "250% 0px" },
-    );
-    near.observe(section);
-    const vis = new IntersectionObserver(([e]) => {
-      visible = !!e?.isIntersecting;
-    });
-    vis.observe(box);
-    const move = (e: PointerEvent) => alive?.setPointer((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1);
-    window.addEventListener("pointermove", move, { passive: true });
-
+    window.addEventListener("pointerdown", away, { passive: true });
     return () => {
-      cancelled = true;
       cancelAnimationFrame(raf);
-      near.disconnect();
-      vis.disconnect();
       ro.disconnect();
-      window.removeEventListener("pointermove", move);
-      alive?.dispose();
-      scene.current = null;
+      io.disconnect();
+      window.removeEventListener("pointerdown", away);
     };
-  }, []);
+  }, [mode, rowsN]);
+
+  const rows = rowsOf(SHOWN, rowsN);
 
   return (
-    <section
-      ref={sec}
-      id="universe"
-      data-mode={mode}
-      data-ready={ready ? "" : undefined}
-      aria-labelledby="universe-title"
-      className="uv relative"
-      style={mode === "pinned" ? { height: `${RUN + 100}svh` } : undefined}
-    >
-      <div ref={holder} className="uv-stage" aria-hidden>
-        <canvas ref={canvas} className="uv-canvas" />
-        <div className="uv-vignette" />
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            ref={(n) => {
-              labelEls.current[i] = n;
-            }}
-            className="uv-label"
-          />
-        ))}
-        <div className="uv-head">
-          <p className="uv-kicker">What is in it</p>
-          <p className="uv-title">Everything it touches.</p>
-          <p className="uv-line">What it runs, and what it connects to.</p>
+    <section ref={sec} id="universe" data-mode={mode} aria-labelledby="universe-title" className="uv relative">
+      <div className="mx-auto max-w-6xl px-6 pt-24 sm:pt-32">
+        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">What is in it</p>
+        <h2 id="universe-title" className="mt-4 max-w-2xl text-balance text-[clamp(1.9rem,4vw,3rem)] font-semibold leading-[1.05] tracking-[-0.04em]">
+          Everything it touches.
+        </h2>
+        <p className="mt-4 max-w-md text-pretty text-[15px] leading-relaxed text-muted">What it runs, and what it connects to.</p>
+      </div>
+      <div ref={wall} className="uv-wall" data-ready={ready ? "" : undefined} data-sel={sel ? "" : undefined}>
+        <div className="uv-glow" aria-hidden />
+        <div className="uv-plane">
+          {rows.map((row, i) => (
+            <div key={i} className="uv-rowclip">
+              <div
+                ref={(n) => {
+                  rowEls.current[i] = n;
+                }}
+                className="uv-row"
+              >
+                <div className="uv-copy">
+                  {row.map((s) => (
+                    <Tile key={s.id} s={s} copy={false} sel={sel} setSel={setSel} touch={touch} />
+                  ))}
+                </div>
+                {mode !== "still" && (
+                  <div className="uv-copy" aria-hidden>
+                    {row.map((s) => (
+                      <Tile key={s.id} s={s} copy sel={sel} setSel={setSel} touch={touch} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-        <p className="uv-legal">Logos are trademarks of their owners, shown only to say which service is meant.</p>
       </div>
-      <Roster sr={mode === "pinned"} still={mode === "still"} />
-    </section>
-  );
-}
-
-/** The names with their marks: the section itself for the static and reduced-motion cases, screen-reader
- * only while the field flies. */
-function Roster({ sr, still }: { sr: boolean; still: boolean }) {
-  return (
-    <div className={sr ? "sr-only" : "uv-roster mx-auto max-w-6xl px-6 py-20 sm:py-28"}>
-      <div className={still ? "sr-only" : ""}>
-      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">What is in it</p>
-      <h2 id="universe-title" className="mt-3 max-w-2xl text-balance text-[clamp(1.8rem,4vw,3rem)] font-semibold leading-[1.06] tracking-[-0.035em]">
-        Everything it touches.
-      </h2>
-      <p className="mt-4 max-w-xl text-pretty text-[15px] leading-relaxed text-muted">What it runs, and what it connects to.</p>
-      </div>
-      <ul className="mt-12 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {SHOWN.map((s) => (
-          <li key={s.id} className="flex items-center gap-3 text-[13.5px] text-[#d4d4db]">
-            <span className="uv-chip">{sr ? null : <img src={iconUrl(s.id)} alt="" loading="lazy" width={26} height={26} />}</span>
-            <span className="min-w-0 truncate">{s.name}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-12 max-w-xl text-[12.5px] leading-relaxed text-dim">
+      <noscript>
+        <style>{".uv-wall{opacity:1!important}"}</style>
+      </noscript>
+      <p className="mx-auto max-w-6xl px-6 pb-20 pt-6 text-[12px] leading-relaxed text-dim sm:pb-28">
         Logos are trademarks of their owners, shown only to say which service is meant.
       </p>
-    </div>
+    </section>
   );
 }
