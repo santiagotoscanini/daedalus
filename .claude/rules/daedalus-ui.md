@@ -160,7 +160,7 @@ a generic icon set does not survive.
 `pnpm typecheck` and `pnpm lint` do not see a single pixel, and there
 are no component tests — the suite is node-side tests over `src/lib`,
 `src/core`, `src/host` and the modules' data. So the check is a browser
-(the shotter command in the root `CLAUDE.md`):
+(the shotter command in the root `AGENTS.md`):
 
 1. `events.json` before the pictures, always: the baseline is zero page
    errors, so any is yours.

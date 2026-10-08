@@ -20,7 +20,7 @@
 //                        service's own API: the numbers are identical, and it
 //                        avoids both an auth bypass and WireGuard's TOTP.
 //   host.containers.internal:<port>
-//                      — the must-keep host ports (CLAUDE.md): everything
+//                      — the must-keep host ports (AGENTS.md): everything
 //                        sharing gluetun's netns, plus Home Assistant on the
 //                        host netns.
 //   https://<hostname> — through traefik, on the published hostname: apps

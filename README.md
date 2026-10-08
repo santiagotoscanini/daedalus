@@ -57,7 +57,7 @@ to match. The craftsman, not the labyrinth.
 
 A box runs the control plane as an image built from the engine rev its
 configuration pins, so a change reaches it as a commit and a lock bump;
-[`CLAUDE.md`](CLAUDE.md) has that loop and the verification commands.
+[`AGENTS.md`](AGENTS.md) has that loop and the verification commands.
 
 None of that is needed to work on it. Node 24, a throwaway Postgres and
 two environment variables are enough, and the checks need nothing at all:

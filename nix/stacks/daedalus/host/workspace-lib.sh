@@ -8,7 +8,7 @@
 # in. Every unit that runs these (the sync, the publish, the clone) runs AS the
 # operator (`User=`): the clones are theirs, the GitHub SSH identity
 # (platform/git) is theirs, and root-made objects in a working tree are
-# exactly the "unable to open loose object" trap CLAUDE.md warns about for the
+# exactly the "unable to open loose object" trap AGENTS.md warns about for the
 # configuration checkout. Nothing here drops privilege, because nothing here
 # has any.
 

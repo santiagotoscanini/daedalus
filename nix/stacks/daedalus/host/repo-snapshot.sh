@@ -14,7 +14,7 @@
 #
 # Runs as root (its timer's unit) and drops to the operator for every git
 # call. Both repos are operator-owned, and one root-owned object under .git is
-# the "unable to open loose object" push failure CLAUDE.md warns about.
+# the "unable to open loose object" push failure AGENTS.md warns about.
 # `--no-optional-locks` on top, so even `status` never rewrites the index.
 #
 # No fetch. A snapshot must not open a connection or need a credential.

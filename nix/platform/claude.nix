@@ -1,5 +1,5 @@
 # Claude Code's project config lives in the configuration repo, so a fresh
-# checkout carries the operator manual (CLAUDE.md), the slash commands and
+# checkout carries the operator manual (AGENTS.md), the slash commands and
 # skills (.claude/) and the MCP wiring — not just the system.
 #
 # `.mcp.json` names an MCP server plus the bearer token that reaches it,

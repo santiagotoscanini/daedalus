@@ -11,7 +11,7 @@ module that runs it is this repo's `nix/stacks/daedalus/daedalus.nix`.
 
 The dev loop (what a change needs, what restarts what) and the
 verification commands — the throwaway-container gate, `shot daedalus` for
-pages under the SSO gate — are in the root `CLAUDE.md`, which is always
+pages under the SSO gate — are in the root `AGENTS.md`, which is always
 loaded. They are not repeated here.
 
 ## Architecture map

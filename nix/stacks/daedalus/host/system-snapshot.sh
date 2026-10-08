@@ -17,7 +17,7 @@
 #     filesystem statistic, so node_exporter cannot see it.
 #   - The replication pairs, and the LAG between a source snapshot and its
 #     copy on the mirror. syncoid exits 0 on a run that replicated nothing.
-#   - The boot generations, which are the rollback path CLAUDE.md documents
+#   - The boot generations, which are the rollback path AGENTS.md documents
 #     and which nothing on the dashboard could show.
 #
 # ── why one script rather than five ───────────────────────────────────────
@@ -174,7 +174,7 @@ pools_json() {
 
 # ── datasets ──────────────────────────────────────────────────────────────
 #
-# `usedbysnapshots` is the number CLAUDE.md tells you to go and check by hand
+# `usedbysnapshots` is the number AGENTS.md tells you to go and check by hand
 # after a week of normal operation, because the state dataset is 16K recordsize
 # under heavy database churn and its snapshot deltas are bigger than intuition
 # says. It is a ZFS property, so no filesystem exporter can reach it.

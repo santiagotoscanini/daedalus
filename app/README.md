@@ -9,7 +9,7 @@ image").
 
 Everything else is one level up, and this file does not restate it:
 
-- [`../CLAUDE.md`](../CLAUDE.md): the dev loop and the verification
+- [`../AGENTS.md`](../AGENTS.md): the dev loop and the verification
   commands.
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md): running and checking it
   with no host, and the image.
