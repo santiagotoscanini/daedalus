@@ -663,8 +663,27 @@ html {
     z-index: 1;
     background: var(--color-app);
   }
+  /* the list stays in the document for readers and crawlers; the pinned stage is what is seen */
   .net[data-mode="pinned"] .net-list {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* a visit that starts below the top: no hero still, no staged entrance */
+  .deep .net-poster,
+  .net[data-deep] .net-poster {
     display: none;
+  }
+  .deep .net-canvas,
+  .net[data-deep] .net-canvas {
+    transition-duration: 0.2s;
+  }
+  .deep .net[data-mode="pinned"][data-ready] .net-layer,
+  .net[data-deep][data-ready] .net-layer {
+    transition: none;
   }
 
   @media (max-width: 767px) {
@@ -704,7 +723,7 @@ html {
   .uv-wall {
     position: relative;
     margin-top: 3.2rem;
-    padding: 0.5rem 0 2.6rem;
+    padding: 0.5rem 0 5.2rem;
     opacity: 0;
     transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
@@ -791,15 +810,15 @@ html {
     height: 44px;
     object-fit: contain;
   }
-  .uv-name {
+  .uv-label {
     position: absolute;
-    left: 50%;
-    top: calc(100% + 14px);
-    translate: -50% 0;
+    left: 0;
+    top: 0;
+    z-index: 6;
     padding: 5px 10px;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(12, 12, 16, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(12, 12, 16, 0.9);
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     font: 500 12px/1.2 var(--font-mono);
@@ -807,12 +826,11 @@ html {
     white-space: nowrap;
     color: #f1f1f4;
     opacity: 0;
-    transform: translateY(-4px);
-    transition:
-      opacity 0.25s ease,
-      transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
     pointer-events: none;
-    z-index: 3;
+    transition: opacity 0.2s ease;
+  }
+  .uv-label[data-show] {
+    opacity: 1;
   }
   .uv-t[data-on] {
     z-index: 5;
@@ -827,10 +845,6 @@ html {
       0 0 0 1px rgba(226, 121, 90, 0.35),
       0 22px 40px -14px rgba(0, 0, 0, 0.9),
       0 0 46px -8px rgba(226, 121, 90, 0.4);
-  }
-  .uv-t[data-on] .uv-name {
-    opacity: 1;
-    transform: none;
   }
   .uv-wall[data-sel] .uv-t:not([data-on]) {
     opacity: 0.42;

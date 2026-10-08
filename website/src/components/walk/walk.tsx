@@ -52,7 +52,7 @@ export function Walk() {
   const nodeEls = useRef(new Map<string, HTMLElement>());
   const insEls = useRef<Array<HTMLDivElement | null>>([]);
   const lineEls = useRef<Array<SVGLineElement | null>>([]);
-  const [mode, setMode] = useState<Mode>("static");
+  const [mode, setMode] = useState<Mode>("pinned");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -71,32 +71,61 @@ export function Walk() {
     let cancelled = false;
     let raf = 0;
     let visible = true;
-    let fs = 0;
+    let fs = -1;
     let last = performance.now();
+    let W = 0;
+    let H = 0;
+    let secTop = 0;
+    let secRun = 0;
+    type Box = { l: number; t: number; r: number; b: number; v: number };
+    const heroWords: Box[] = [];
+    const nodeSize = new Map<string, { w: number; h: number }>();
+    const stepH = new Map<string, number>();
+    const stepBox = new Map<string, Box>();
+    const insBox = new Map<number, Box>();
+    let lit = new Set<number>();
+    let heroV = -1;
+
+    /** every size the loop needs, read here (on resize, when fonts land) and never per frame */
+    const measure = () => {
+      W = holder.clientWidth;
+      H = holder.clientHeight;
+      const sr = section.getBoundingClientRect();
+      secTop = sr.top + window.scrollY;
+      secRun = sr.height - window.innerHeight;
+      const sh = holder.getBoundingClientRect();
+      nodeEls.current.forEach((e, id) => nodeSize.set(id, { w: e.offsetWidth, h: e.offsetHeight }));
+      const cw = Math.min(300, W * 0.26);
+      stepEls.current.forEach((e, id) => {
+        e.style.width = `${cw}px`;
+        stepH.set(id, e.offsetHeight);
+      });
+      heroWords.length = 0;
+      hero.current?.querySelectorAll("p, h1, a").forEach((n) => {
+        const rg = document.createRange();
+        rg.selectNodeContents(n);
+        const b = rg.getBoundingClientRect();
+        heroWords.push({ l: b.left - sh.left, t: b.top - sh.top, r: b.right - sh.left, b: b.bottom - sh.top, v: 1 });
+      });
+    };
+    measure();
+    if (window.scrollY > window.innerHeight * 0.35) section.setAttribute("data-deep", "");
     let booted = false;
 
-    const fit = () => scene?.resize(holder.clientWidth, holder.clientHeight);
+    const fit = () => {
+      measure();
+      scene?.resize(W, H);
+    };
 
     const place = (f: number) => {
       if (!scene) return;
       const S = scene.screen;
-      const W = holder.clientWidth;
-      const H = holder.clientHeight;
-      // the hero copy's boxes: a label that would sit on the words steps aside
-      const words: DOMRect[] = [];
-      if (hero.current && f < 0.12) hero.current.querySelectorAll("p, h1, a").forEach((n) => {
-          const rg = document.createRange();
-          rg.selectNodeContents(n);
-          words.push(rg.getBoundingClientRect());
-        });
-      const sh = holder.getBoundingClientRect();
+      // the boxes a label would sit on: the hero copy, and the captions and screens as last laid out
+      const words: Box[] = [];
+      if (f < 0.12) words.push(...heroWords);
       if (f > 0.05) {
-        stepEls.current.forEach((el) => {
-          if (Number(el.style.opacity) > 0.3) words.push(el.getBoundingClientRect());
-        });
-        insEls.current.forEach((el) => {
-          if (el && Number(el.style.opacity) > 0.3) words.push(el.getBoundingClientRect());
-        });
+        stepBox.forEach((b) => b.v > 0.3 && words.push(b));
+        insBox.forEach((b) => b.v > 0.3 && words.push(b));
       }
       // node labels: quiet, always on, brighter while a request is at them
       for (const id of NODE_IDS) {
@@ -104,17 +133,18 @@ export function Walk() {
         const a = S.get(`lab:${id}`);
         if (!e || !a) continue;
         const busy = STEPS.some((s) => "node" in s.at && s.at.node === id && f >= s.f[0] && f < s.f[1]);
-        const ew = e.offsetWidth;
+        const sz = nodeSize.get(id);
+        const ew = sz?.w ?? 0;
         const side = NODES[id].side;
         // a label stays whole at the edge, and goes once its node has left the screen
         const lo = side === "right" ? 14 : side === "left" ? ew + 14 : ew / 2 + 14;
         const hi = side === "right" ? W - ew - 14 : side === "left" ? W - 14 : W - ew / 2 - 14;
         const cx = Math.min(hi, Math.max(lo, a.x));
         const edge = 1 - smooth(span(Math.max(lo - a.x, a.x - hi), 40, 150));
-        const eh = e.offsetHeight;
+        const eh = sz?.h ?? 0;
         const x0 = side === "right" ? cx : side === "left" ? cx - ew : cx - ew / 2;
         const y0 = side ? a.y - eh / 2 : a.y + 28;
-        const hit = words.some((r) => x0 < r.right - sh.left + 14 && x0 + ew > r.left - sh.left - 14 && y0 < r.bottom - sh.top + 10 && y0 + eh > r.top - sh.top - 10);
+        const hit = words.some((r) => x0 < r.r + 14 && x0 + ew > r.l - 14 && y0 < r.b + 10 && y0 + eh > r.t - 10);
         const off = y0 + eh > H - 10 || y0 < 62;
         e.style.opacity = a.on && !mobile ? String(edge * (hit || off ? 0 : 1)) : "0";
         if (busy) e.setAttribute("data-busy", "");
@@ -123,7 +153,7 @@ export function Walk() {
       }
       // captions: on the node or link they concern, on the side with room
       let active: (typeof STEPS)[number] | null = null;
-      lineEls.current.forEach((l) => l?.setAttribute("opacity", "0"));
+      const litNow = new Set<number>();
       for (const s of STEPS) {
         const e = stepEls.current.get(s.id);
         if (!e) continue;
@@ -132,19 +162,21 @@ export function Walk() {
         const a = S.get(key);
         if (v > 0.5) active = s;
         if (!a || !a.on || mobile) {
-          e.style.opacity = "0";
+          if (e.style.opacity !== "0") e.style.opacity = "0";
+          stepBox.delete(s.id);
           continue;
         }
         const right = a.x < W * 0.56;
         const cw = Math.min(300, W * 0.26);
         const x = right ? a.x + 44 : a.x - 44 - cw;
         const y = Math.min(H - 150, Math.max(90, "link" in s.at ? a.y + 46 : a.y - 46));
-        e.style.width = `${cw}px`;
+        stepBox.set(s.id, { l: x, t: y + (1 - v) * 10, r: x + cw, b: y + (1 - v) * 10 + (stepH.get(s.id) ?? 80), v });
         e.style.opacity = String(v);
         e.style.textAlign = right ? "left" : "right";
         e.style.transform = `translate3d(${x.toFixed(1)}px, ${(y + (1 - v) * 10).toFixed(1)}px, 0)`;
         const ln = lineEls.current[STEPS.indexOf(s)];
         if (ln && v > 0.02) {
+          litNow.add(STEPS.indexOf(s));
           ln.setAttribute("x1", a.x.toFixed(1));
           ln.setAttribute("y1", a.y.toFixed(1));
           ln.setAttribute("x2", (right ? x - 6 : x + cw + 6).toFixed(1));
@@ -170,15 +202,18 @@ export function Walk() {
         const a = S.get(ins.from === "app" ? "app" : `node:${ins.from}`);
         e.style.opacity = String(v);
         if (!a) return;
+        insBox.set(i, { l: 0, t: 0, r: 0, b: 0, v: 0 });
         const ww = Math.min(440, W * 0.3);
         const right = a.x < W * 0.5;
         const x = right ? W - ww - Math.max(24, W * 0.04) : Math.max(24, W * 0.04);
         const y = H - ww * 0.625 - 64;
+        insBox.set(i, { l: x, t: y, r: x + ww, b: y + ww * 0.625, v });
         e.style.width = `${ww}px`;
         e.style.transformOrigin = right ? "0% 50%" : "100% 50%";
         e.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${(0.9 + 0.1 * v).toFixed(3)})`;
         const ln = lineEls.current[STEPS.length + i];
-        if (ln) {
+        if (ln && v > 0.02) {
+          litNow.add(STEPS.length + i);
           ln.setAttribute("x1", a.x.toFixed(1));
           ln.setAttribute("y1", a.y.toFixed(1));
           ln.setAttribute("x2", (right ? x : x + ww).toFixed(1));
@@ -186,9 +221,17 @@ export function Walk() {
           ln.setAttribute("opacity", String(v * 0.5));
         }
       });
-      // the hero's copy gives way to the first request
-      if (hero.current) {
-        const v = 1 - smooth(span(f, 0.035, 0.1));
+      lit.forEach((i) => {
+        if (!litNow.has(i)) lineEls.current[i]?.setAttribute("opacity", "0");
+      });
+      lit = litNow;
+    };
+
+    /** the hero's copy gives way to the first request: DOM only, so it follows the scroll before the scene exists */
+    const heroCue = (f: number) => {
+      const v = 1 - smooth(span(f, 0.035, 0.1));
+      if (hero.current && v !== heroV) {
+        heroV = v;
         hero.current.style.opacity = String(v);
         hero.current.style.transform = `translate3d(0, ${(-(1 - v) * 28).toFixed(1)}px, 0)`;
         hero.current.style.pointerEvents = v > 0.6 ? "auto" : "none";
@@ -201,15 +244,19 @@ export function Walk() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!visible || document.hidden) return;
-      const r = section.getBoundingClientRect();
-      const run = r.height - window.innerHeight;
-      const target = run > 0 ? gear(Math.min(1, Math.max(0, -r.top / run))) : 0;
-      // the camera and the text ease toward the scroll, frame-rate independent,
-      // so a flick and a crawl, up or down, both land without a step
-      fs += (target - fs) * (1 - Math.exp(-dt * 7));
-      if (Math.abs(target - fs) < 0.00004) fs = target;
-      scene?.setProgress(fs);
-      scene?.tick(dt);
+      // one clock: the scroll is read here (scrollY costs no layout; the section's box is cached), and the
+      // camera and the text follow it with a short critically damped step, so a flick and a crawl both
+      // track without lag. A jump (a reload, a back, a link) lands at once and never eases from zero.
+      const target = secRun > 0 ? gear(Math.min(1, Math.max(0, (window.scrollY - secTop) / secRun))) : 0;
+      if (fs < 0 || Math.abs(target - fs) > 0.1) fs = target;
+      else {
+        fs += (target - fs) * (1 - Math.exp(-dt * 26));
+        if (Math.abs(target - fs) < 0.00004) fs = target;
+      }
+      heroCue(fs);
+      if (!scene) return;
+      scene.setProgress(fs);
+      scene.tick(dt);
       place(fs);
     };
 
@@ -242,6 +289,7 @@ export function Walk() {
     const early = () => void boot();
     window.addEventListener("pointerdown", early, { once: true, passive: true });
     window.addEventListener("scroll", early, { once: true, passive: true });
+    void document.fonts?.ready.then(measure);
 
     const ro = new ResizeObserver(() => {
       fit();

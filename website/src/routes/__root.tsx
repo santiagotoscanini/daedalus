@@ -26,6 +26,14 @@ export const Route = createRootRoute({
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: `${SITE_URL}/og.png` },
     ],
+    scripts: [
+      {
+        // a reload or a back to a page that was left below the top: say so before the first paint, so the
+        // hero still never shows under a scene that is somewhere else
+        children:
+          'try{addEventListener("pagehide",function(){sessionStorage.setItem("dd-y",String(Math.round(scrollY)))});var n=performance.getEntriesByType("navigation")[0],t=n&&n.type,y=+sessionStorage.getItem("dd-y")||0;if(((t==="reload"||t==="back_forward")&&y>innerHeight*.35)||(location.hash&&location.hash!=="#walk"))document.documentElement.classList.add("deep")}catch(e){}',
+      },
+    ],
     links: [
       { rel: "stylesheet", href: stylesCss },
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },

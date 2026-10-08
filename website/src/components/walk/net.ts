@@ -670,7 +670,25 @@ export function createScene(o: Options) {
     }
   }
 
+  /** if frames run long, the canvas steps down in resolution (never below 1) and stays there */
+  let dprCap = mobile ? 1.5 : 1.75;
+  let slow = 0;
+  let nFrames = 0;
+  function adapt(dt: number) {
+    if (still || dt <= 0) return;
+    nFrames++;
+    if (nFrames < 30) return;
+    slow = slow * 0.9 + (dt > 0.026 ? 0.1 : 0);
+    if (slow > 0.6 && dprCap > 1) {
+      dprCap = Math.max(1, dprCap - 0.25);
+      slow = 0;
+      nFrames = 0;
+      resize(w, h);
+    }
+  }
+
   function frame(dt: number) {
+    adapt(dt);
     state.t += dt;
     GLOBAL.uTime.value = state.t;
     state.px += (state.ox - state.px) * (1 - Math.exp(-dt * 3));
@@ -717,7 +735,7 @@ export function createScene(o: Options) {
     // a short window leaves less room beside the headline: the graph rises and slides over a little
     const k = clamp01((900 - h) / 180);
     if (!mobile) POSES.hero.off = [0.18 + 0.04 * k, -0.05 - 0.02 * k];
-    const dpr = Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 1.75);
+    const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
     GLOBAL.uRes.value.set(w * dpr, h * dpr);
