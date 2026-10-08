@@ -103,13 +103,20 @@ function grafanaLogsFull(site: Site, source: LogSource, from = 'now-7d'): string
  * `app-db`), and also covers streams with no container at all — `kernel`, and
  * `lemonade`, which a bridge pushes into Loki from another machine. `unit` is
  * a systemd unit: native services (`pihole-ftl.service`, `ddclient.service`)
- * and the oneshots around a stack. A union rather than three optional fields,
- * so a caller cannot pass two and leave the query to guess.
+ * and the oneshots around a stack. `job` is a log FILE a stack ships beside its
+ * journal (alloy `job` label: an agent's own gateway/errors files). A union rather
+ * than optional fields, so a caller cannot pass two and leave the query to guess.
  */
-export type LogSource = { container: string } | { stack: string } | { unit: string }
+export type LogSource =
+  | { container: string }
+  | { stack: string }
+  | { unit: string }
+  | { job: string }
 
-const label = (s: LogSource) => ('container' in s ? 'container' : 'stack' in s ? 'stack' : 'unit')
-const value = (s: LogSource) => ('container' in s ? s.container : 'stack' in s ? s.stack : s.unit)
+const label = (s: LogSource) =>
+  'container' in s ? 'container' : 'stack' in s ? 'stack' : 'job' in s ? 'job' : 'unit'
+const value = (s: LogSource) =>
+  'container' in s ? s.container : 'stack' in s ? s.stack : 'job' in s ? s.job : s.unit
 
 /**
  * The ranges worth one click.
@@ -228,7 +235,7 @@ export type LogNeighbour = {
 
 /** A stable React key for a neighbour, whichever kind of source it is. */
 function sourceKey(s: LogSource): string {
-  return 'container' in s ? s.container : 'unit' in s ? s.unit : s.stack
+  return 'container' in s ? s.container : 'unit' in s ? s.unit : 'job' in s ? s.job : s.stack
 }
 
 /**

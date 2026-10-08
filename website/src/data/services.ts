@@ -80,6 +80,7 @@ export const SERVICES: Service[] = [
   s("lemonade", "Lemonade", "app"),
   s("wealthfolio", "Wealthfolio", "app"),
   s("getbased", "getbased", "app"),
+  s("hermes-agent", "Hermes Agent", "app"),
   s("gluetun", "Gluetun", "app"),
 
   // — outside services the control plane or the box's gateway talks to —

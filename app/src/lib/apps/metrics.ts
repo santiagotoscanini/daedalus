@@ -138,8 +138,13 @@ const NO_GAUGE: ResourceGauge = { used: null, limit: null, spark: [] }
  * unapplied, and a gauge captioned "512 MB" while the kernel is enforcing
  * something else would be a lie at the only moment it matters.
  */
-export async function appResources(ctx: Reads, name: string): Promise<AppResources> {
-  const c = `{name="app-${ctx.prom.escape(name)}"}`
+export function appResources(ctx: Reads, name: string): Promise<AppResources> {
+  return containerResources(ctx, `app-${name}`)
+}
+
+/** The same readings for a container by its own name — a stack's, not an app's `app-` one. */
+export async function containerResources(ctx: Reads, container: string): Promise<AppResources> {
+  const c = `{name="${ctx.prom.escape(container)}"}`
 
   const [cpu, cpuLimit, mem, memLimit, pids, pidsLimit, oom, cpuSpark, memSpark] =
     await Promise.all([

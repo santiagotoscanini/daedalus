@@ -11,6 +11,8 @@ export type ConsumersData = {
   openWebui: OpenWebUiData | null
   n8n: N8nData | null
   apps: { name: string }[]
+  /** Callers that are a page of this module rather than an app: Hermes Agent today. */
+  agents: { name: string; tab: string; credential: string }[]
 }
 
 export async function loadConsumers(ctx: Ctx): Promise<ConsumersData> {
@@ -19,5 +21,14 @@ export async function loadConsumers(ctx: Ctx): Promise<ConsumersData> {
     ctx.modules.enabled('n8n') ? loadN8n(ctx) : Promise.resolve(null),
     listAppsLight().catch(() => []),
   ])
-  return { openWebui, n8n, apps: apps.filter((a) => a.litellm).map((a) => ({ name: a.name })) }
+  return {
+    openWebui,
+    n8n,
+    apps: apps.filter((a) => a.litellm).map((a) => ({ name: a.name })),
+    // Its key is a virtual key aliased by its own id (see the Hermes Agent tab
+    // for what it may reach), not an injected variable like the apps'.
+    agents: ctx.modules.enabled('hermes-agent')
+      ? [{ name: 'Hermes Agent', tab: 'hermes-agent', credential: 'virtual key hermes-agent' }]
+      : [],
+  }
 }

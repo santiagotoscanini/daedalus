@@ -115,4 +115,41 @@ describe('versionGap', () => {
     const spoken = await versionGap('t/unknown-b', null, { notesWhenUnknown: true })
     expect(spoken.releases.map((r) => r.version)).toEqual(['3.1.0', '3.0.0'])
   })
+
+  describe('byName — tags that changed scheme mid-stream', () => {
+    // Hermes Agent: calendar tags with the engine number in the name, then a
+    // plain `v0.21.N` tag whose name has no calendar part.
+    const mixed: FakeRelease[] = [
+      { tag_name: 'v0.21.6', name: 'Hermes Agent v0.21.6', body: '- six' },
+      { tag_name: 'v2026.9.24', name: 'Hermes Agent v0.21.5 (v2026.9.24)', body: '- five' },
+      { tag_name: 'v2026.9.21', name: 'Hermes Agent v0.21.4 (v2026.9.21)', body: '- four' },
+    ]
+    const opts = { tag: /^v(\d{4}\.\d{1,2}\.\d+)$/, byName: /^Hermes Agent v(\d+\.\d+\.\d+)/ }
+
+    it('orders a calendar pin against a newer semver-tagged release', async () => {
+      stubReleases(mixed)
+      const gap = await versionGap('t/by-name-behind', '2026.9.24', opts)
+      expect(gap.installed).toBe('0.21.5')
+      expect(gap.latest).toBe('0.21.6')
+      expect(gap.behind).toEqual(['0.21.6'])
+      expect(gap.releases.map((r) => r.version)).toEqual(['0.21.6', '0.21.5'])
+      expect(gap.note).toBeNull()
+    })
+
+    it('accepts the pin with its v prefix and reads current on the newest', async () => {
+      stubReleases(mixed)
+      const gap = await versionGap('t/by-name-current', 'v0.21.6', opts)
+      expect(gap.installed).toBe('0.21.6')
+      expect(gap.behind).toEqual([])
+    })
+
+    it('says so when the running tag is in no release, instead of reading current', async () => {
+      stubReleases(mixed)
+      const gap = await versionGap('t/by-name-unplaced', '2026.1.1', opts)
+      expect(gap.installed).toBeNull()
+      expect(gap.behind).toEqual([])
+      expect(gap.latest).toBe('0.21.6')
+      expect(gap.note).toContain('not among')
+    })
+  })
 })

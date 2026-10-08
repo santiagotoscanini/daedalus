@@ -3,6 +3,7 @@ import type { Tabs } from '../data'
 import { manifest } from '../manifest'
 import { ConsumersView } from './consumers'
 import { GatewayView } from './gateway'
+import { HermesAgentView } from './hermes-agent'
 import { ProvidersView } from './providers'
 
 // The AI pages, one per link of the chain.
@@ -16,4 +17,5 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   providers: ({ data }) => <ProvidersView data={data} />,
   gateway: ({ data }) => <GatewayView data={data} />,
   consumers: ({ data }) => <ConsumersView data={data} />,
+  'hermes-agent': ({ data }) => <HermesAgentView data={data} />,
 })

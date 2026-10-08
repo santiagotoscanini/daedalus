@@ -1,4 +1,4 @@
-// The AI module's data half: the chain, as three tabs.
+// The AI module's data half: the chain, as three tabs, and the agent that rides it.
 //
 // A caller speaks the OpenAI API to LiteLLM; LiteLLM forwards to a model
 // server on some machine of this network; that machine holds the weights.
@@ -20,18 +20,21 @@ import { defineLoader } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'
 import { type ConsumersData, loadConsumers } from './consumers'
 import { type GatewayData, loadGateway } from './gateway'
+import { type HermesAgentData, loadHermesAgent } from './hermes-agent'
 import { loadProviders, type ProvidersData } from './providers'
 
 export type Tabs = {
   providers: ProvidersData
   gateway: GatewayData
   consumers: ConsumersData
+  'hermes-agent': HermesAgentData
 }
 
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   providers: loadProviders,
   gateway: loadGateway,
   consumers: loadConsumers,
+  'hermes-agent': loadHermesAgent,
 })
 
 export type { Neighbour } from './litellm'

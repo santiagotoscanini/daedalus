@@ -9,7 +9,7 @@ export const manifest = {
   // Shaped to Providers, the tab that opens by default: the chain across
   // the top, then the picked machine's Lemonade, its GPU and its model table.
   boardSpans: [12, 12, 12, 12],
-  // Three tabs in the order a prompt travels backwards: where the weights
+  // Tabs in the order a prompt travels backwards: where the weights
   // are, the gateway in front of them, the callers. Providers has no
   // ServiceHead — its subject is several machines, drawn from
   // its own picker; the other two are services on this box.
@@ -30,7 +30,7 @@ export const manifest = {
       boardSpans: [12, 12, 12, 12],
       nix: 'litellm',
     },
-    // Shown while either caller on this box is; the apps that hold a key
+    // Shown while any caller on this box is; the apps that hold a key
     // are listed regardless.
     {
       id: 'consumers',
@@ -39,7 +39,16 @@ export const manifest = {
       probe: 'open-webui',
       boardSpans: [12, 12, 12],
       head: false,
-      nix: ['open-webui', 'n8n'],
+      nix: ['open-webui', 'n8n', 'hermes-agent'],
+    },
+    // An agent that lives on this box and calls the gateway on its own key:
+    // a service of its own, so it opens with a ServiceHead like the gateway does.
+    {
+      id: 'hermes-agent',
+      label: 'Hermes Agent',
+      probe: 'hermes-agent',
+      boardSpans: [12, 12, 12, 12],
+      nix: 'hermes-agent',
     },
   ],
   // The four tabs this row replaced, for the links that named them.

@@ -195,6 +195,22 @@ export type GapOptions = {
    * The panel is responsible for saying that second part out loud.
    */
   notesWhenUnknown?: boolean
+  /**
+   * Order by the number in the release NAME, not the tag.
+   *
+   * For a project whose tags changed scheme mid-stream: Hermes Agent tagged
+   * `v2026.9.24` and titled it "Hermes Agent v0.21.5 (v2026.9.24)", then
+   * tagged the next one `v0.21.6`, titled "Hermes Agent v0.21.6". The image
+   * tag (what is running) is the calendar one; the tags cannot be ordered
+   * against each other, but every name carries the engine number.
+   *
+   * So the name pattern gives every release a comparable version, `tag` is
+   * kept only to FIND the running release (its tag, or a name containing the
+   * running string), and `installed` is translated to that release's name
+   * version. A running tag no release carries cannot be ordered at all, and
+   * the gap says so rather than reading "current".
+   */
+  byName?: RegExp
 }
 
 const DEFAULT_TAG = /^v?(\d+\.\d+\.\d+)$/
@@ -209,25 +225,48 @@ const DEFAULT_TAG = /^v?(\d+\.\d+\.\d+)$/
  */
 export async function versionGap(
   repo: string,
-  installed: string | null,
+  running: string | null,
   opts: GapOptions = {},
 ): Promise<VersionGap> {
   const list = await releases(repo)
   if (list === null) {
     return {
       ...EMPTY_GAP,
-      installed,
+      installed: running,
       note: 'GitHub did not answer — its unauthenticated rate limit is 60 requests an hour',
     }
   }
 
   const pattern = opts.tag ?? DEFAULT_TAG
+
+  // byName: the running string is a tag in another scheme; translate it to the
+  // name version of the release that carries it. Unfound → unorderable.
+  let installed = running
+  let unplaced = false
+  if (opts.byName !== undefined && running !== null) {
+    const bare = running.replace(/^v/, '')
+    const own = list.find(
+      (r) =>
+        r.draft !== true &&
+        (pattern.exec(r.tag_name ?? '')?.[1] === bare ||
+          r.tag_name === running ||
+          (r.name ?? '').includes(bare)),
+    )
+    const translated = opts.byName.exec(own?.name ?? '')?.[1]
+    if (translated === undefined) {
+      unplaced = true
+      installed = null
+    } else installed = translated
+  }
   const major = installed?.split('.')[0]
 
   const parsed = list
     .filter((r) => r.draft !== true)
     .map((r) => {
-      const version = pattern.exec(r.tag_name ?? '')?.[1]
+      const version =
+        opts.byName !== undefined
+          ? opts.byName.exec(r.name ?? '')?.[1]
+          : pattern.exec(r.tag_name ?? '')?.[1]
       return version === undefined ? null : { ...r, version }
     })
     .filter((r): r is GhRelease & { version: string } => r !== null)
@@ -277,7 +316,15 @@ export async function versionGap(
       }),
     )
 
-  return { installed, latest, behind, releases: releaseNotes, note: null }
+  return {
+    installed,
+    latest,
+    behind,
+    releases: releaseNotes,
+    note: unplaced
+      ? `${running} is not among ${repo}'s releases — cannot say how far behind`
+      : null,
+  }
 }
 
 /**

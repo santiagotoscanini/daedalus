@@ -31,6 +31,8 @@ type Caller = Volume & {
   models: string[]
   /** The last day it made a request, `YYYY-MM-DD`. */
   last: string
+  /** What the gateway priced these requests at, over the window. USD, as LiteLLM reports it. */
+  spend: number
   /**
    * Whether a key by this name still exists on the gateway.
    *
@@ -110,7 +112,12 @@ export type Neighbour = {
 
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
-type DayMetrics = { api_requests?: number; total_tokens?: number; failed_requests?: number }
+type DayMetrics = {
+  api_requests?: number
+  total_tokens?: number
+  failed_requests?: number
+  spend?: number
+}
 type Bucket = {
   metrics?: DayMetrics
   metadata?: { key_alias?: string | null }
@@ -428,6 +435,7 @@ function callersOf(
     latCount: number
     models: Set<string>
     last: string
+    spend: number
     live: boolean
   }
   const byName = new Map<string, Acc>()
@@ -447,6 +455,7 @@ function callersOf(
         latCount: 0,
         models: new Set<string>(),
         last: date,
+        spend: 0,
         // The two literals are litellm's own credentials rather than rows in
         // its key table, so they are never "missing" from it — and with no
         // key list to check against, nothing is called revoked at all.
@@ -469,6 +478,7 @@ function callersOf(
       at.requests += v.requests
       at.failed += v.failed
       at.tokens += v.tokens
+      at.spend += b.metrics?.spend ?? 0
       // The API returns newest first, so the first date a key appears on IS its
       // most recent — hence `>`, which does not depend on that staying true.
       if (date > at.last) at.last = date
@@ -491,6 +501,7 @@ function callersOf(
     latencyMs: a.latCount > 0 ? (a.latSum / a.latCount) * 1000 : null,
     models: [...a.models].sort(),
     last: a.last,
+    spend: a.spend,
     live: a.live,
     note: NOTES[name] ?? (a.live ? null : GONE),
   }))
