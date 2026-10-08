@@ -722,8 +722,9 @@ html {
   }
   .uv-wall {
     position: relative;
-    margin-top: 3.2rem;
-    padding: 0.5rem 0 5.2rem;
+    /* room above the first row for a lifted tile, its ring and its glow: the mask clips to this box */
+    margin-top: 0;
+    padding: 3.7rem 0 5.2rem;
     opacity: 0;
     transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
@@ -891,7 +892,8 @@ html {
   }
   @media (max-width: 767px) {
     .uv-wall {
-      margin-top: 2.2rem;
+      margin-top: 0;
+      padding-top: 3.7rem;
     }
     .uv-plane {
       gap: 2.5rem;
