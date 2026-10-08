@@ -34,6 +34,17 @@ function applied(p: NodePolicy, patch: Patch): NodePolicy {
 }
 
 /** One key set, or cleared when `value` is undefined. */
+/**
+ * The providers a save sends back: the kinds the engine knows. A kind the engine
+ * dropped stays in a stored policy, and the server refuses a save that carries it, so
+ * the first save from the page clears it.
+ */
+function knownKinds(p: NodePolicy['providers']): NodePolicy['providers'] {
+  return Object.fromEntries(
+    Object.entries(p ?? {}).filter(([k]) => (NODE_PROVIDER_KINDS as readonly string[]).includes(k)),
+  )
+}
+
 function only<K extends keyof NodePolicy>(key: K, value: NodePolicy[K] | undefined): Patch {
   return value === undefined ? { set: {}, unset: [key] } : { set: { [key]: value }, unset: [] }
 }
@@ -88,7 +99,7 @@ export function usePolicyEditor(n: NodeRow, opts: { askSantree?: boolean } = {})
     const models = base.current.providers?.[kind]?.models
     save(
       only('providers', {
-        ...base.current.providers,
+        ...knownKinds(base.current.providers),
         [kind]: models === undefined ? next : { ...next, models },
       }),
     )
@@ -108,7 +119,7 @@ export function usePolicyEditor(n: NodeRow, opts: { askSantree?: boolean } = {})
     const { models: _m, ...rest } = current
     save(
       only('providers', {
-        ...base.current.providers,
+        ...knownKinds(base.current.providers),
         [kind]: Object.keys(merged).length === 0 ? rest : { ...rest, models: merged },
       }),
     )
