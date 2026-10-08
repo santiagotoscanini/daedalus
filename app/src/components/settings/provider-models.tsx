@@ -54,18 +54,19 @@ function ModelRow({
     onChange({ alias: a === '' || a === m.defaultAlias ? undefined : a })
   }
   return (
-    <li className="grid grid-cols-[auto_minmax(0,1fr)_9rem_10rem] items-center gap-3 border-hairline border-t py-2 text-[0.8rem] first:border-t-0 max-[48rem]:grid-cols-[auto_minmax(0,1fr)] max-[48rem]:gap-y-1">
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-hairline border-t py-3 text-[0.8rem] first:border-t-0">
       <Switch
         checked={offer}
         disabled={busy || !m.downloaded}
         aria-label={`Offer ${m.id} to the gateway`}
+        className="row-span-2 mt-0.5"
         onCheckedChange={(v) => {
           showOffer(v)
           onChange({ offer: v })
         }}
       />
-      <span className="min-w-0">
-        <span className="block truncate">
+      <span className="col-span-2 min-w-0">
+        <span className="block break-all">
           <Mono>{m.id}</Mono>
         </span>
         <span className={ASIDE}>
@@ -81,7 +82,7 @@ function ModelRow({
         busy={busy}
         failed={failed}
         disabled={busy}
-        className={cn(CONTROL_H, 'w-full max-[48rem]:col-start-2')}
+        className={cn(CONTROL_H, 'w-full')}
         aria-label={`Mode of ${m.id}`}
         onChange={(v) => onChange({ mode: v as ModelPolicy['mode'] })}
       />
@@ -90,7 +91,7 @@ function ModelRow({
         disabled={busy}
         aria-label={`Alias of ${m.id}`}
         placeholder={m.defaultAlias}
-        className={cn(CONTROL_H, 'font-mono max-[48rem]:col-start-2 md:text-[0.78rem]')}
+        className={cn(CONTROL_H, 'font-mono md:text-[0.78rem]')}
         onChange={(e) => setAlias(e.target.value)}
         onBlur={saveAlias}
         onKeyDown={(e) => {
