@@ -225,8 +225,8 @@ function DocsPage() {
         <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-2">
           External setup
         </p>
-        <h1 className="mt-4 text-balance text-4xl font-semibold tracking-[-0.02em] sm:text-[3.25rem] sm:leading-[1.05]">
-          What stays <span className="text-gradient-ember">outside the repo.</span>
+        <h1 className="h-display mt-4 text-[clamp(2.6rem,5.5vw,4.2rem)]">
+          What stays <span className="text-muted">outside the repo.</span>
         </h1>
         <p className="mt-6 max-w-2xl text-pretty text-[16px] leading-relaxed text-muted">
           A daedalus-managed machine rebuilds from its config repo, except for these: the accounts,
@@ -261,7 +261,7 @@ function DocsPage() {
                 </h2>
                 <span className="h-px flex-1 bg-hairline" aria-hidden />
               </div>
-              <h3 className="mt-4 text-balance text-[1.6rem] font-semibold tracking-[-0.02em]">
+              <h3 className="h-section mt-4 text-[1.75rem]">
                 {s.title}
               </h3>
               <p className="mt-3 max-w-2xl text-pretty text-[14.5px] leading-relaxed text-muted">

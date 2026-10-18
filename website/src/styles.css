@@ -11,46 +11,38 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 
-/* Design tokens. Surfaces sit on a near-black page; depth comes from light
- * (the labyrinth's ember glow, blooms, grain) and hairline borders in
- * white-alpha, not from stacked grays. Accent + semantic colors are the
- * app's own. */
+/* Design tokens. A neutral dark page in the manner of the products it sits
+ * beside: one grey ladder, hairlines in white-alpha, no glows, colour only
+ * for the brand mark and for state. The page is drawn inside one framed
+ * column (.frame) whose sections meet at hairlines with a + at each corner.
+ *
+ * Every text tier clears WCAG AA (4.5:1) on --color-app, --color-panel and
+ * --color-surface; anything new goes through the same check before it lands. */
 @theme {
   --font-sans: "Geist Variable", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
-  /* Page + card surfaces */
-  --color-app: #08080a;
-  --color-panel: #0b0b0e;
-  --color-surface: #0d0d10;
+  --color-app: #0a0a0b;
+  --color-panel: #111113;
+  --color-surface: #161618;
 
-  /* Hairlines on black read best as white-alpha */
-  --color-hairline: rgba(255, 255, 255, 0.06);
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-line-2: rgba(255, 255, 255, 0.12);
+  --color-hairline: rgba(255, 255, 255, 0.07);
+  --color-line: rgba(255, 255, 255, 0.1);
+  --color-line-2: rgba(255, 255, 255, 0.16);
 
-  /* Text. Four steps down from the page's white, and the bottom two are
-   * where the ladder stops: every tier here clears WCAG AA (4.5:1) against
-   * both --color-app and --color-panel, because the quietest greys carry
-   * the smallest type — 10-11px mono kickers, the docs jump list, the
-   * footer rule. A darker `dim` reads better and fails: #5f5f68 measured
-   * 3.17:1. Anything new goes through the same check before it lands. */
-  --color-fg: #ededef; /* 17.11:1 */
-  --color-muted: #8b8b95; /* 5.93:1 */
-  --color-muted-2: #82828b; /* 5.26:1 */
-  --color-dim: #7a7a83; /* 4.71:1 */
+  --color-fg: #ededef; /* 16.93:1 */
+  --color-body: #b4b4bb; /* 9.60:1 */
+  --color-muted: #a1a1aa; /* 7.72:1 */
+  --color-muted-2: #8e8e96; /* 6.09:1, 5.56:1 on surface */
+  --color-dim: #8e8e96;
 
-  /* Status (the app's own semantics, reused as decoration) */
-  --color-status-ok: #4ea87a;
+  /* the mark's terracotta: the brand, and nothing else */
+  --color-accent: #e2795a; /* 6.71:1 */
+  --color-ember: #f09a80; /* 9.08:1 */
+
+  --color-status-ok: #3fb67a;
   --color-status-warn: #d9a441;
-  --color-status-bad: #e05252;
-  --color-status-blue: #4493f8;
-  --color-status-purple: #a78bfa;
-
-  /* Accent: ember — the labyrinth line burns in it */
-  --color-accent: #e2795a;
-  --color-accent-deep: #b8563a;
-  --color-accent-hi: #fdf3ef;
+  --color-status-bad: #e5534b;
 }
 
 :root {
@@ -72,7 +64,7 @@ html {
 }
 
 /* Geist Mono's `calt` merges symbol runs (`--`, `->`) into single wide
- * glyphs; keep code/terminal surfaces literal. */
+ * glyphs; keep code and label surfaces literal. */
 .font-mono {
   font-variant-ligatures: none;
   font-feature-settings:
@@ -82,649 +74,514 @@ html {
 
 /* Visible keyboard focus everywhere; never remove without replacing. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-fg);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: rgba(226, 121, 90, 0.28);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 /* Everything below is a COMPONENT class, and it has to live in the
  * components layer. Tailwind v4 puts its utilities in a `utilities` layer,
  * and an unlayered rule outranks every layered one no matter how specific:
  * `.btn { display: inline-flex }` written at the top level silently beat
- * `hidden` on `<a class="btn btn-primary hidden sm:inline-flex">`, and the
- * header's desktop-only button showed up on every phone. Declaring the
- * layer costs one line and makes `class=` win, which is what every caller
- * already assumes.
- *
- * What stays OUTSIDE the layer, above: the element and pseudo-class rules
- * (`html`, `:focus-visible`, `::selection`) — those are meant to be hard
- * to override, the focus ring especially. */
+ * `hidden` on a button, and the header's desktop-only button showed up on
+ * every phone. Declaring the layer makes `class=` win, which is what every
+ * caller already assumes. */
 @layer components {
-/* ---------------------------------------------------------------- *
- * Atmosphere
- * ---------------------------------------------------------------- */
+  /* ---------------------------------------------------------------- *
+   * Type
+   * ---------------------------------------------------------------- */
 
-/* Film grain: a tiny tiled noise SVG over the whole page. Texture, not
- * effect — barely perceptible, but it kills the "flat vector void" look. */
-.grain {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
-  opacity: 0.032;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* ---------------------------------------------------------------- *
- * The labyrinth — one unbroken line
- * ---------------------------------------------------------------- */
-
-/* Draw-on: the whole spiral is one path normalized to pathLength=1, so a
- * single dash covers it and the offset walks it in from the center. Pure
- * CSS — the prerendered page animates without waiting for hydration. */
-.labyrinth-draw {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  animation: labyrinth-draw 2.6s cubic-bezier(0.33, 1, 0.5, 1) both;
-}
-@keyframes labyrinth-draw {
-  from {
-    stroke-dashoffset: 1;
+  .h-display {
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 1;
+    text-wrap: balance;
   }
-  to {
-    stroke-dashoffset: 0;
+  .h-section {
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    line-height: 1.06;
+    text-wrap: balance;
   }
-}
-@media (prefers-reduced-motion: reduce) {
-  .labyrinth-draw {
-    animation: none;
+  .label {
+    font: 500 11.5px/1.2 var(--font-mono);
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
   }
-}
-
-/* ---------------------------------------------------------------- *
- * Buttons
- * ---------------------------------------------------------------- */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border-radius: 0.625rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.15s ease;
-}
-.btn:active {
-  transform: translateY(1px);
-}
-
-/* Primary: near-white, Apple-style — soft top sheen + ambient shadow. */
-.btn-primary {
-  background: linear-gradient(180deg, #ffffff 0%, #ebecee 100%);
-  color: #101114;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 8px 24px -8px rgba(0, 0, 0, 0.7);
-}
-.btn-primary:hover {
-  background: linear-gradient(180deg, #ffffff 0%, #f4f5f6 100%);
-}
-
-/* Ghost: quiet bordered surface. */
-.btn-ghost {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--color-fg);
-}
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.16);
-}
-
-/* ---------------------------------------------------------------- *
- * Cards
- * ---------------------------------------------------------------- */
-
-/* The one card treatment used everywhere: faint fill, hairline border, a
- * 1px light catch along the top edge. */
-.card {
-  position: relative;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background-clip: padding-box;
-}
-.card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 40%);
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-/* ---------------------------------------------------------------- *
- * Small pieces
- * ---------------------------------------------------------------- */
-
-/* Inline chip — sits in the text flow, never rotated, never absolutely
- * positioned. */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 0.1rem 0.45rem;
-  font-family: var(--font-mono);
-  font-size: 0.5625rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-muted);
-}
-.chip::before {
-  content: "";
-  width: 0.28rem;
-  height: 0.28rem;
-  border-radius: 9999px;
-  background: var(--color-accent);
-}
-
-/* A one-line command that scrolls inside its box: a thin scrollbar in the
- * ink of the hairlines, so the overflow shows without shouting. */
-.cmd-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-}
-.cmd-scroll::-webkit-scrollbar {
-  height: 6px;
-}
-.cmd-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 9999px;
-}
-
-/* Hero text sits ON the labyrinth — a soft dark halo keeps it legible where
- * the ember line passes underneath. */
-.hero-text {
-  text-shadow:
-    0 1px 2px rgba(5, 5, 7, 0.6),
-    0 6px 32px rgba(5, 5, 7, 0.55);
-}
-.hero-text .btn {
-  text-shadow: none;
-}
-
-/* Section divider: a hairline horizon with an ember heart. */
-.divider {
-  position: relative;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.07) 25%,
-    rgba(226, 121, 90, 0.35) 50%,
-    rgba(255, 255, 255, 0.07) 75%,
-    transparent
-  );
-}
-.divider::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -14px;
-  width: 220px;
-  height: 28px;
-  transform: translateX(-50%);
-  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(226, 121, 90, 0.18), transparent 70%);
-}
-
-/* The FAQ's disclosure marker is the + in the summary, not the browser's. */
-.faq summary::-webkit-details-marker {
-  display: none;
-}
-
-/* ---------------------------------------------------------------- *
- * Demo windows — hand-authored views of the app on a fixed 1280×800
- * canvas, scaled to fit. Stepped fallbacks keep the prerendered HTML
- * roughly right with no JS; the @supports branch is exact; a
- * ResizeObserver (use-fit-scale.ts) refines it live.
- * ---------------------------------------------------------------- */
-
-.demo-fit {
-  container-type: inline-size;
-  background: var(--color-panel);
-  --demo-scale: 0.27;
-}
-@media (min-width: 640px) {
-  .demo-fit {
-    --demo-scale: 0.4625;
+  .lede {
+    font-size: 1.125rem;
+    line-height: 1.6;
+    color: var(--color-muted);
+    text-wrap: pretty;
   }
-}
-@media (min-width: 768px) {
-  .demo-fit {
-    --demo-scale: 0.5625;
-  }
-}
-@media (min-width: 1024px) {
-  .demo-fit {
-    --demo-scale: 0.7625;
-  }
-}
-@media (min-width: 1152px) {
-  .demo-fit {
-    --demo-scale: 0.8625;
-  }
-}
-@supports (opacity: calc(100cqw / 1280px)) {
-  .demo-fit {
-    --demo-scale: calc(100cqw / 1280px);
-  }
-}
-.demo-canvas {
-  transform: translate(-50%, -50%) scale(var(--demo-scale));
-}
 
-/* Status dots inside the demo breathe — life signs, frozen under
- * reduced motion. */
-@keyframes demo-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-.demo-dot-pulse {
-  animation: demo-pulse 2.4s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .demo-dot-pulse {
-    animation: none;
-  }
-}
+  /* ---------------------------------------------------------------- *
+   * The frame: one column with hairline sides; sections meet at a rule
+   * with a + at each end
+   * ---------------------------------------------------------------- */
 
-/* Scroll reveal (progressive enhancement — see reveal.tsx). Elements are
- * visible in the static HTML; hydration adds .reveal-pre only to content
- * still below the fold, and .reveal-in transitions it in on scroll. */
-.reveal-pre {
-  opacity: 0;
-  transform: translateY(10px);
-  transition:
-    opacity 0.45s cubic-bezier(0.21, 0.47, 0.32, 0.98),
-    transform 0.45s cubic-bezier(0.21, 0.47, 0.32, 0.98);
-}
-.reveal-pre.reveal-in {
-  opacity: 1;
-  transform: none;
-}
+  .frame {
+    position: relative;
+    max-width: 75rem;
+    margin: 0 auto;
+    border-left: 1px solid var(--color-hairline);
+    border-right: 1px solid var(--color-hairline);
+  }
+  .cell {
+    position: relative;
+    border-top: 1px solid var(--color-hairline);
+  }
+  .cell::before,
+  .cell::after {
+    content: "";
+    position: absolute;
+    top: -6px;
+    width: 11px;
+    height: 11px;
+    background:
+      linear-gradient(var(--color-line-2), var(--color-line-2)) center / 11px 1px no-repeat,
+      linear-gradient(var(--color-line-2), var(--color-line-2)) center / 1px 11px no-repeat;
+    z-index: 1;
+  }
+  .cell::before {
+    left: -6px;
+  }
+  .cell::after {
+    right: -6px;
+  }
+  /* inner grids: cells divided by hairlines */
+  .grid-lines > * {
+    border-color: var(--color-hairline);
+  }
 
-/* Hero entrance: pure CSS so the prerendered HTML paints immediately —
- * no JS, no hydration wait, no opacity-0 baked into the static page. */
-@keyframes rise {
-  from {
+  /* ---------------------------------------------------------------- *
+   * Controls
+   * ---------------------------------------------------------------- */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding: 0 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .btn-primary {
+    background: #ededef;
+    color: #0a0a0b;
+  }
+  .btn-primary:hover {
+    background: #ffffff;
+  }
+  .btn-ghost {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--color-line);
+    color: var(--color-fg);
+  }
+  .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--color-line-2);
+  }
+  .btn-sm {
+    height: 2rem;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 1.9rem;
+    padding: 0 0.8rem 0 0.35rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 0.8125rem;
+    color: var(--color-body);
+    transition: border-color 0.15s ease;
+  }
+  .pill:hover {
+    border-color: var(--color-line-2);
+  }
+  .pill b {
+    display: inline-flex;
+    align-items: center;
+    height: 1.35rem;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    font: 500 11px/1 var(--font-mono);
+    color: var(--color-fg);
+  }
+
+  .card {
+    position: relative;
+    border-radius: 0.75rem;
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+  }
+
+  .faq summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* Scroll reveal (progressive enhancement — see reveal.tsx). */
+  .reveal-pre {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(8px);
+    transition:
+      opacity 0.6s cubic-bezier(0.21, 0.47, 0.32, 0.98),
+      transform 0.6s cubic-bezier(0.21, 0.47, 0.32, 0.98);
   }
-  to {
+  .reveal-pre.reveal-in {
     opacity: 1;
     transform: none;
   }
-}
-.rise {
-  animation: rise 0.7s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
-}
-.rise-1 {
-  animation-delay: 0.1s;
-}
-.rise-2 {
-  animation-delay: 0.2s;
-}
-.rise-3 {
-  animation-delay: 0.4s;
-}
-@media (prefers-reduced-motion: reduce) {
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
   .rise {
-    animation-duration: 0.001s;
-    animation-delay: 0s;
+    animation: rise 0.7s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
   }
-}
-
-/* Ember gradient text, from the labyrinth's own light: hot near-white at
- * the tip cooling into the deep terracotta of the mark. */
-.text-gradient-ember {
-  background: linear-gradient(100deg, #fdf3ef 0%, #f5b8a2 45%, #e88a6c 80%, #e2795a 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-}
-
-/* ---------------------------------------------------------------- *
- * The network: the hero and its pinned scroll (components/walk)
- * ---------------------------------------------------------------- */
-@layer components {
-  .net-stage {
-    position: relative;
-    height: 100svh;
-    overflow: hidden;
-    z-index: 0;
+  .rise-1 {
+    animation-delay: 0.08s;
   }
-  .net[data-mode="pinned"] .net-stage {
-    position: sticky;
-    top: 0;
+  .rise-2 {
+    animation-delay: 0.16s;
   }
-  /* The handoff: the poster is a still of the scene's first frame. The canvas stays at 0 until that frame
-   * is drawn (data-ready), eases in over it, and only then does the poster go. The labels follow. */
-  .net-canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .net[data-ready] .net-canvas {
-    opacity: 1;
-  }
-  .net-poster {
-    position: absolute;
-    inset: 0;
-    display: block;
-    transition: opacity 0s linear 1s;
-  }
-  .net-poster img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: 50% 50%;
-  }
-  .net[data-ready] .net-poster {
-    opacity: 0;
-  }
-  .net-vignette {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      linear-gradient(0deg, rgba(8, 8, 10, 0.78) 0%, rgba(8, 8, 10, 0.25) 24%, transparent 44%),
-      linear-gradient(90deg, rgba(8, 8, 10, 0.55) 0%, transparent 40%),
-      radial-gradient(ellipse 85% 80% at 50% 50%, transparent 55%, rgba(8, 8, 10, 0.7) 100%);
+  .rise-3 {
+    animation-delay: 0.3s;
   }
 
-  /* The text that lives in the graph */
-  .net-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    display: none;
-  }
-  .net[data-mode="pinned"] .net-layer {
-    display: block;
-    opacity: 0;
-  }
-  .net[data-mode="pinned"][data-ready] .net-layer {
-    opacity: 1;
-    transition: opacity 0.8s ease 0.7s;
-  }
-  .net-lines {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-  .net-lines line {
-    stroke: rgba(255, 255, 255, 0.5);
-    stroke-width: 1;
-  }
-  .net-node,
-  .net-step,
-  .net-inspector,
-  .net-card {
-    position: absolute;
-    left: 0;
-    top: 0;
-    opacity: 0;
-    will-change: transform, opacity;
-  }
-  .net-node {
-    display: grid;
-    gap: 2px;
-    justify-items: start;
-    margin: 28px 0 0 0;
-    translate: -50% 0;
-    padding: 6px 11px 7px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 8px;
-    background: rgba(9, 9, 12, 0.82);
-    backdrop-filter: blur(6px);
-    white-space: nowrap;
-    transition: border-color 0.4s ease, opacity 0.3s ease;
-  }
-  .net-node b {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    color: #f3f3f6;
-    font: 500 12px/1.3 var(--font-mono);
-    letter-spacing: 0.02em;
-  }
-  .net-node i {
-    padding-left: 20px;
-    color: #a9a9b3; /* 8.2:1 on the chip */
-    font: 400 10.5px/1.3 var(--font-mono);
-    font-style: normal;
-    letter-spacing: 0.03em;
-  }
-  .net-node:not(:has(svg)) i {
-    padding-left: 0;
-  }
-  .net-node[data-side="right"] {
-    margin: 0;
-    translate: 0 -50%;
-  }
-  .net-node[data-side="left"] {
-    margin: 0;
-    translate: -100% -50%;
-  }
-  .net-node[data-busy] {
-    border-color: rgba(226, 121, 90, 0.6);
-  }
-  .net-step {
-    padding: 12px 15px 13px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    background: rgba(9, 9, 12, 0.82);
-    backdrop-filter: blur(8px);
-    font-size: 14px;
-    line-height: 1.5;
-    color: #e4e4e9;
-    text-wrap: pretty;
-  }
-  .net-step em {
-    display: block;
-    margin-bottom: 7px;
-    font: 500 10.5px/1 var(--font-mono);
-    font-style: normal;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: #f09a80; /* 8.1:1 on the card */
-  }
-  .net-inspector {
-    transition: none;
-  }
-  .net-inspector .demo-fit {
-    box-shadow:
-      0 1px 1px rgba(0, 0, 0, 0.45),
-      0 24px 70px -20px rgba(0, 0, 0, 0.9),
-      0 0 90px -30px rgba(226, 121, 90, 0.4);
-  }
-  .net-card {
-    left: 1.5rem;
-    right: 1.5rem;
-    top: auto;
-    bottom: 1.6rem;
-    padding: 1rem 1.1rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.9rem;
-    background: rgba(12, 12, 16, 0.82);
-    backdrop-filter: blur(10px);
-    transition: opacity 0.35s ease;
-    display: none;
-  }
-  .net-card p:first-child {
-    font: 500 10.5px/1 var(--font-mono);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: #f09a80;
-  }
-  .net-card p:last-child {
-    margin-top: 8px;
-    font-size: 14px;
-    line-height: 1.5;
-    color: #e4e4e9;
-  }
+  /* ---------------------------------------------------------------- *
+   * Product pictures: the hand-built windows of the app (components/demo)
+   * ---------------------------------------------------------------- */
 
-  /* The hero's copy sits over the graph, bottom left */
-  .net-hero {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    align-items: flex-end;
-    min-height: 100svh;
-    padding: 6rem 0 5.5rem;
+  .demo-fit {
+    container-type: inline-size;
+    background: var(--color-panel);
+    --demo-scale: 0.27;
   }
-  .net[data-mode="pinned"] .net-hero {
-    position: absolute;
-    inset: 0;
-    will-change: opacity, transform;
-  }
-  .net-cue {
-    position: absolute;
-    left: max(1.5rem, calc((100vw - 72rem) / 2 + 1.5rem));
-    bottom: 1.6rem;
-    z-index: 2;
-    display: none;
-    align-items: center;
-    gap: 0.9rem;
-    font: 500 10.5px/1 var(--font-mono);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--color-dim);
-  }
-  .net-cue i {
-    display: block;
-    width: 38px;
-    height: 1px;
-    background: linear-gradient(90deg, var(--color-accent), transparent);
-    transform-origin: left;
-    animation: cue 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-  }
-  @keyframes cue {
-    0% {
-      transform: scaleX(0);
+  @media (min-width: 640px) {
+    .demo-fit {
+      --demo-scale: 0.45;
     }
-    55% {
-      transform: scaleX(1);
+  }
+  @media (min-width: 1024px) {
+    .demo-fit {
+      --demo-scale: 0.72;
     }
+  }
+  @supports (opacity: calc(100cqw / 1280px)) {
+    .demo-fit {
+      --demo-scale: calc(100cqw / 1280px);
+    }
+  }
+  .demo-canvas {
+    transform: translate(-50%, -50%) scale(var(--demo-scale));
+  }
+  @keyframes demo-pulse {
+    0%,
     100% {
-      transform: scaleX(1);
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+  .demo-dot-pulse {
+    animation: demo-pulse 1.6s ease-in-out infinite;
+  }
+
+  /* the story the hero tells once, in CSS so the prerendered page plays it
+   * without waiting for script: the request is sent, the app arrives at the
+   * top of the table building, then runs */
+  @keyframes seq-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes seq-out {
+    to {
       opacity: 0;
     }
   }
-  .net[data-mode="pinned"] .net-cue {
-    display: flex;
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      max-height: 0;
+    }
+    to {
+      opacity: 1;
+      max-height: 60px;
+    }
   }
-
-  /* The plain list: shown until the stage pins */
-  .net-list {
-    position: relative;
-    z-index: 1;
-    background: var(--color-app);
+  .seq {
+    animation: seq-in 0.5s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
+    animation-delay: var(--at, 0s);
   }
-  /* the list stays in the document for readers and crawlers; the pinned stage is what is seen */
-  .net[data-mode="pinned"] .net-list {
-    position: absolute;
-    width: 1px;
-    height: 1px;
+  .seq-out {
+    animation: seq-out 0.3s ease both;
+    animation-delay: var(--at, 0s);
+  }
+  .seq-row {
     overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+    animation: row-in 0.6s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
+    animation-delay: var(--at, 0s);
   }
-  /* a visit that starts below the top: no hero still, no staged entrance */
-  .deep .net-poster,
-  .net[data-deep] .net-poster {
-    display: none;
+  /* a status that changes: two words stacked, the second takes over */
+  .seq-swap {
+    display: inline-grid;
   }
-  .deep .net-canvas,
-  .net[data-deep] .net-canvas {
-    transition-duration: 0.2s;
+  .seq-swap > * {
+    grid-area: 1 / 1;
   }
-  .deep .net[data-mode="pinned"][data-ready] .net-layer,
-  .net[data-deep][data-ready] .net-layer {
-    transition: none;
-  }
-
-  @media (max-width: 767px) {
-    .net-vignette {
-      background:
-        linear-gradient(0deg, rgba(8, 8, 10, 0.92) 0%, rgba(8, 8, 10, 0.6) 40%, transparent 62%),
-        radial-gradient(ellipse 90% 60% at 50% 30%, transparent 50%, rgba(8, 8, 10, 0.6) 100%);
-    }
-    .net[data-mode="pinned"] .net-card {
-      display: block;
-    }
-    .net-hero {
-      padding-bottom: 3.8rem;
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .net-cue i {
+    .rise,
+    .seq,
+    .seq-row {
       animation: none;
     }
-    .net-canvas,
-    .net-poster {
-      transition: none;
+    .seq-out {
+      animation-duration: 0.001s;
+      animation-delay: 0s;
+    }
+    .demo-dot-pulse {
+      animation: none;
+    }
+  }
+
+  /* the phone the request is sent from */
+  .phone {
+    width: 17rem;
+    border-radius: 2.6rem;
+    padding: 0.5rem;
+    background: #1b1b1e;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+      0 0 0 1px #000,
+      0 30px 80px -20px rgba(0, 0, 0, 0.9);
+  }
+  .phone-screen {
+    position: relative;
+    border-radius: 2.15rem;
+    overflow: hidden;
+    background: #0d0d0f;
+    height: 31rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 2.4rem 1rem 0.8rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    background: #121214;
+  }
+  .phone-msgs {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 0.9rem 0.75rem;
+  }
+  .msg-wrap {
+    display: flex;
+    flex-direction: column;
+    margin-top: 0.45rem;
+  }
+  @keyframes grow-in {
+    from {
+      opacity: 0;
+      max-height: 0;
+      margin-top: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      max-height: 8rem;
+      margin-top: 0.45rem;
+      transform: none;
+    }
+  }
+  @keyframes life {
+    0% {
+      opacity: 0;
+      max-height: 0;
+      margin-top: 0;
+    }
+    15%,
+    85% {
+      opacity: 1;
+      max-height: 3rem;
+      margin-top: 0.45rem;
+    }
+    100% {
+      opacity: 0;
+      max-height: 0;
+      margin-top: 0;
+    }
+  }
+  .seq-grow {
+    overflow: hidden;
+    animation: grow-in 0.5s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
+    animation-delay: var(--at, 0s);
+  }
+  .seq-life {
+    overflow: hidden;
+    animation: life var(--for, 1s) ease both;
+    animation-delay: var(--at, 0s);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .seq-grow {
+      animation: none;
+    }
+    .seq-life {
+      display: none;
+    }
+  }
+  .bubble {
+    max-width: 85%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 1.1rem;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+  .bubble-you {
+    align-self: flex-end;
+    background: #ededef;
+    color: #0a0a0b;
+    border-bottom-right-radius: 0.3rem;
+  }
+  .bubble-house {
+    align-self: flex-start;
+    background: #1f1f23;
+    color: #e4e4e7;
+    border-bottom-left-radius: 0.3rem;
+  }
+  .phone-input {
+    margin: 0 0.7rem 0.9rem;
+    height: 2.2rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    padding: 0 0.9rem;
+    font-size: 0.8rem;
+    color: #8e8e96;
+  }
+  .typing {
+    display: inline-flex;
+    gap: 3px;
+    padding: 0.65rem 0.8rem;
+  }
+  .typing i {
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: #8e8e96;
+    animation: demo-pulse 1s ease-in-out infinite;
+  }
+  .typing i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .typing i:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+
+  /* the backdrop the hero's product sits on: a fine grid fading out */
+  .stage-grid {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 75% 70% at 50% 40%, #000 30%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 40%, #000 30%, transparent 100%);
+  }
+
+  /* feature tabs that advance by themselves: a progress line under the active one */
+  .tab-progress {
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    height: 1px;
+    background: var(--color-fg);
+    transform-origin: left;
+  }
+  @keyframes tab-fill {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes tab-grow {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  /* moving dots along the house's links */
+  @keyframes travel {
+    from {
+      offset-distance: 0%;
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    to {
+      offset-distance: 100%;
+      opacity: 0;
     }
   }
 }
 
-
 /* ---------------------------------------------------------------- *
- * The universe: everything it touches, as a wall of glass tiles (components/universe)
+ * The integrations wall (components/universe): glass tiles on the dark page
  * ---------------------------------------------------------------- */
 @layer components {
   .uv {
-    background: var(--color-app);
     overflow: hidden;
   }
   .uv-wall {
     position: relative;
-    /* room above the first row for a lifted tile, its ring and its glow: the mask clips to this box */
-    margin-top: 0;
-    padding: 3.7rem 0 5.2rem;
+    padding: 3.7rem 0 4.2rem;
     opacity: 0;
     transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
@@ -733,25 +590,17 @@ html {
   .uv-wall[data-ready] {
     opacity: 1;
   }
-  /* light for the glass to catch: two soft pools behind the rows */
   .uv-glow {
-    position: absolute;
-    inset: -10% 0;
-    pointer-events: none;
-    background:
-      radial-gradient(34rem 14rem at 28% 38%, rgba(226, 121, 90, 0.2), transparent 70%),
-      radial-gradient(38rem 16rem at 74% 66%, rgba(120, 150, 255, 0.13), transparent 70%);
+    display: none;
   }
   .uv-plane {
     position: relative;
     display: grid;
-    gap: 2.9rem;
-    transform: perspective(1800px) rotateX(7deg);
-    transform-origin: 50% 0;
+    gap: 2.6rem;
   }
   .uv-rowclip {
     position: relative;
-    height: 88px;
+    height: 84px;
     overflow: visible;
   }
   .uv-row {
@@ -766,8 +615,8 @@ html {
   .uv-t {
     position: relative;
     flex: none;
-    width: 88px;
-    height: 88px;
+    width: 84px;
+    height: 84px;
     margin-right: 22px;
     padding: 0;
     border: 0;
@@ -781,34 +630,17 @@ html {
     inset: 0;
     display: grid;
     place-items: center;
-    border-radius: 24px;
-    background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 38%, rgba(255, 255, 255, 0.025) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.28),
-      inset 0 -10px 18px -12px rgba(0, 0, 0, 0.5),
-      0 14px 30px -14px rgba(0, 0, 0, 0.8);
-    -webkit-backdrop-filter: blur(14px) saturate(1.5);
-    backdrop-filter: blur(14px) saturate(1.5);
+    border-radius: 20px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
     transition:
       transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
-      background 0.45s ease,
-      border-color 0.45s ease,
-      box-shadow 0.45s ease;
-  }
-  .uv-glass::after {
-    content: "";
-    position: absolute;
-    inset: 1px 1px 52% 1px;
-    border-radius: 23px 23px 40% 40% / 23px 23px 14px 14px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), transparent);
-    pointer-events: none;
+      border-color 0.45s ease;
   }
   .uv-glass img {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 42px;
+    height: 42px;
     object-fit: contain;
   }
   .uv-label {
@@ -817,15 +649,11 @@ html {
     top: 0;
     z-index: 6;
     padding: 5px 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    background: rgba(12, 12, 16, 0.9);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
+    border-radius: 6px;
+    background: var(--color-fg);
     font: 500 12px/1.2 var(--font-mono);
-    letter-spacing: 0.01em;
     white-space: nowrap;
-    color: #f1f1f4;
+    color: var(--color-app);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
@@ -837,40 +665,19 @@ html {
     z-index: 5;
   }
   .uv-t[data-on] .uv-glass {
-    transform: translateY(-7px) scale(1.14);
-    background: linear-gradient(155deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.09) 40%, rgba(255, 255, 255, 0.05) 100%);
-    border-color: rgba(255, 255, 255, 0.34);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      inset 0 -10px 18px -12px rgba(0, 0, 0, 0.45),
-      0 0 0 1px rgba(226, 121, 90, 0.35),
-      0 22px 40px -14px rgba(0, 0, 0, 0.9),
-      0 0 46px -8px rgba(226, 121, 90, 0.4);
+    transform: translateY(-5px) scale(1.08);
+    border-color: var(--color-line-2);
   }
   .uv-wall[data-sel] .uv-t:not([data-on]) {
-    opacity: 0.42;
+    opacity: 0.4;
   }
   .uv-t:focus-visible {
     outline: none;
   }
   .uv-t:focus-visible .uv-glass {
-    border-color: var(--color-accent);
-  }
-  .uv[data-mode="still"] .uv-row {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: center;
-    transform: none !important;
-    padding: 0 1.5rem;
-  }
-  .uv[data-mode="still"] .uv-copy {
-    flex: 0 1 auto;
-    max-width: 100%;
-    flex-wrap: wrap;
-    justify-content: center;
+    border-color: var(--color-fg);
   }
   .uv[data-mode="still"] .uv-plane {
-    transform: none;
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -884,38 +691,27 @@ html {
   .uv[data-mode="still"] .uv-copy {
     display: contents;
   }
-  .uv[data-mode="still"] .uv-rowclip {
-    height: auto;
-  }
   .uv[data-mode="still"] .uv-t {
-    margin: 0 11px 40px;
+    margin: 0 11px 36px;
   }
   @media (max-width: 767px) {
-    .uv-wall {
-      margin-top: 0;
-      padding-top: 3.7rem;
-    }
     .uv-plane {
-      gap: 2.5rem;
-      transform: none;
+      gap: 2.2rem;
     }
     .uv-rowclip {
-      height: 64px;
+      height: 62px;
     }
     .uv-t {
-      width: 64px;
-      height: 64px;
+      width: 62px;
+      height: 62px;
       margin-right: 16px;
     }
     .uv-glass {
-      border-radius: 18px;
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-      background: rgba(255, 255, 255, 0.07);
+      border-radius: 16px;
     }
     .uv-glass img {
-      width: 34px;
-      height: 34px;
+      width: 32px;
+      height: 32px;
     }
   }
 }

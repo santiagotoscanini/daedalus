@@ -3,11 +3,11 @@ import { iconUrl } from "~/data/icons";
 import { SHOWN, type Service } from "~/data/services";
 
 /** Everything it touches, as a wall: every integration and hosted app on one grid of glass tiles that
- * drifts, row against row. The wall is plain DOM in the prerender, so the icons are crisp vectors and
- * nothing swaps in after first paint; script only adds the motion and the fade-in once the icons have
- * decoded. One RAF clock drives it: the rows' ambient drift and the scroll's push are summed, never
- * traded, so scrolling cannot fight the drift; sizes are cached and the scroll is read as scrollY, so
- * a frame costs no layout.
+ * drifts, row against row, under the /integrations page's own heading. The wall is plain DOM in the
+ * prerender, so the icons are crisp vectors and nothing swaps in after first paint; script only adds
+ * the motion and the fade-in once the icons have decoded. One RAF clock drives it: the rows' ambient
+ * drift and the scroll's push are summed, never traded, so scrolling cannot fight the drift; sizes
+ * are cached and the scroll is read as scrollY, so a frame costs no layout.
  *
  * Holding a tile (hover, focus, a tap) lifts it, freezes the wall, dims the rest, and shows its name
  * in ONE label that lives outside the wall's clipping and masking, placed from the tile's own box and
@@ -182,14 +182,7 @@ export function Universe() {
   const rows = rowsOf(SHOWN, rowsN);
 
   return (
-    <section ref={sec} id="universe" data-mode={mode} aria-labelledby="universe-title" className="uv relative">
-      <div className="mx-auto max-w-6xl px-6 pt-24 sm:pt-32">
-        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">What is in it</p>
-        <h2 id="universe-title" className="mt-4 max-w-2xl text-balance text-[clamp(1.9rem,4vw,3rem)] font-semibold leading-[1.05] tracking-[-0.04em]">
-          Everything it touches.
-        </h2>
-        <p className="mt-4 max-w-md text-pretty text-[15px] leading-relaxed text-muted">What it runs, and what it connects to.</p>
-      </div>
+    <section ref={sec} id="universe" data-mode={mode} aria-label="Every service, as a wall of marks" className="uv relative">
       <div ref={wall} className="uv-wall" data-ready={ready ? "" : undefined} data-sel={sel ? "" : undefined}>
         <div className="uv-glow" aria-hidden />
         <div className="uv-plane">

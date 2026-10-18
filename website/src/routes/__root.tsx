@@ -18,21 +18,13 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { name: "theme-color", content: "#08080a" },
+      { name: "theme-color", content: "#0a0a0b" },
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "daedalus" },
       { property: "og:image", content: `${SITE_URL}/og.png` },
-      { property: "og:image:alt", content: "The daedalus mark: a square labyrinth drawn in ember." },
+      { property: "og:image:alt", content: "daedalus. Software, made for one: a cloud you can talk to, on the computers you already own." },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: `${SITE_URL}/og.png` },
-    ],
-    scripts: [
-      {
-        // a reload or a back to a page that was left below the top: say so before the first paint, so the
-        // hero still never shows under a scene that is somewhere else
-        children:
-          'try{addEventListener("pagehide",function(){sessionStorage.setItem("dd-y",String(Math.round(scrollY)))});var n=performance.getEntriesByType("navigation")[0],t=n&&n.type,y=+sessionStorage.getItem("dd-y")||0;if(((t==="reload"||t==="back_forward")&&y>innerHeight*.35)||(location.hash&&location.hash!=="#walk"))document.documentElement.classList.add("deep")}catch(e){}',
-      },
     ],
     links: [
       { rel: "stylesheet", href: stylesCss },
@@ -57,7 +49,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         >
           Skip to content
         </a>
-        <div className="grain" aria-hidden />
         <Nav />
         {children}
         <Footer />

@@ -11,8 +11,8 @@ import type { ReactNode } from "react";
  * Hand-copied from each app's own icon, like the rest of `demo/` — the
  * landing is a static build with no network, so it cannot fetch what the
  * real UI fetches. Sources: `stacks/pocket-id/assets/logos/<name>.svg` for
- * six of them, `public/icon.svg` in the chismed and lintel repos for the rest. Resync
- * by hand if a mark is redrawn.
+ * six of them, `public/icon.svg` in the chismed, lintel and sankofa repos for the rest (sankofa's
+ * `<style>` moved onto its elements). Resync by hand if a mark is redrawn.
  *
  * Three deliberate departures from the source files:
  *
@@ -210,6 +210,29 @@ const MARKS: Record<string, MarkSpec> = {
           <rect x="22.75" y="10.5" width="4.5" height="15.75" strokeWidth="1.5" />
           <path d="M11.5 18.5h9" strokeWidth="1.25" />
           <path d="M13.5 16.5l-2 2 2 2M18.5 16.5l2 2-2 2" strokeWidth="1.25" />
+        </g>
+      </>
+    ),
+  },
+  sankofa: {
+    viewBox: "0 0 64 64",
+    body: (
+      <>
+        <rect width="64" height="64" rx="12" fill="#A51C30" />
+        <g
+          fill="none"
+          stroke="#FBF7F0"
+          strokeWidth="3.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          transform="translate(32 32.5) scale(.56) translate(-55 -49.5)"
+        >
+          <path d="M22 54C34 46 50 42 64 40 76 38 82 30 82 24 82 16 76 13 68 14 60 15 52 20 46 26L36 36 44 18C52 6 80 2 94 10 106 18 106 36 100 50 94 66 82 78 64 80 48 82 34 76 26 68L8 76 18 64 4 66 22 54" />
+          <path d="M40 60C52 52 70 52 84 60 74 70 56 72 42 66" />
+          <path d="M50 63C60 61 68 62 76 64M10 68 24 62" />
+          <path d="M56 81 54 97M50 97H62M70 80 72 97M68 97H80" />
+          <ellipse cx="34" cy="42.5" rx="4.4" ry="5.6" />
+          <circle cx="57" cy="14" r="1.4" fill="#FBF7F0" stroke="none" />
         </g>
       </>
     ),

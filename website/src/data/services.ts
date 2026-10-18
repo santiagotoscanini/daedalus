@@ -19,82 +19,90 @@
 
 export type IconSource = "app" | "di" | "si" | "sso";
 
+export type Group = "catalog" | "beside" | "outside";
+
 export interface Service {
   id: string;
   name: string;
   src: IconSource;
+  group: Group;
   module?: string;
   /** passes through the middle of the frame first */
   focus?: true;
   hidden?: true;
 }
 
-const s = (id: string, name: string, src: IconSource, rest: Partial<Service> = {}): Service => ({ id, name, src, ...rest });
+const g =
+  (group: Group) =>
+  (id: string, name: string, src: IconSource, rest: Partial<Service> = {}): Service => ({ id, name, src, group, ...rest });
+const cat = g("catalog");
+const bes = g("beside");
+const out = g("outside");
 
 export const SERVICES: Service[] = [
   // — engine catalog, nix/modules/<id> (nix/README.md "The catalog") —
-  s("traefik", "Traefik", "app", { module: "traefik", focus: true }),
-  s("postgres", "PostgreSQL", "app", { module: "app-db", focus: true }),
-  s("pocket-id", "Pocket ID", "app", { module: "pocket-id", focus: true }),
-  s("prometheus", "Prometheus", "app", { module: "monitoring" }),
-  s("grafana", "Grafana", "app", { module: "monitoring", focus: true }),
-  s("pihole", "Pi-hole", "app", { module: "pihole" }),
-  s("zot", "zot", "app", { module: "registry" }),
-  s("loki", "Loki", "app", { module: "logging" }),
-  s("alloy", "Alloy", "di", { module: "logging" }),
-  s("verdaccio", "Verdaccio", "app", { module: "verdaccio" }),
-  s("gatus", "Gatus", "app", { module: "gatus" }),
-  s("healthchecks", "Healthchecks", "app", { module: "healthchecks" }),
-  s("wg-easy", "wg-easy", "sso", { module: "wg-easy" }),
-  s("factorio", "Factorio", "app", { module: "factorio" }),
-  s("grocy", "Grocy", "app", { module: "grocy" }),
-  s("metube", "MeTube", "app", { module: "metube" }),
-  s("myspeed", "MySpeed", "sso", { module: "myspeed" }),
-  s("stirling-pdf", "Stirling PDF", "app", { module: "stirling-pdf" }),
-  s("intel-gpu", "Intel GPU exporter", "si", { module: "intel-gpu-exporter" }),
-  s("apps", "Apps platform", "app", { module: "apps", hidden: true }),
-  s("cloudflared", "cloudflared", "app", { module: "cloudflared", hidden: true }),
+  cat("traefik", "Traefik", "app", { module: "traefik", focus: true }),
+  cat("postgres", "PostgreSQL", "app", { module: "app-db", focus: true }),
+  cat("pocket-id", "Pocket ID", "app", { module: "pocket-id", focus: true }),
+  cat("prometheus", "Prometheus", "app", { module: "monitoring" }),
+  cat("grafana", "Grafana", "app", { module: "monitoring", focus: true }),
+  cat("pihole", "Pi-hole", "app", { module: "pihole" }),
+  cat("zot", "zot", "app", { module: "registry" }),
+  cat("loki", "Loki", "app", { module: "logging" }),
+  cat("alloy", "Alloy", "di", { module: "logging" }),
+  cat("verdaccio", "Verdaccio", "app", { module: "verdaccio" }),
+  cat("gatus", "Gatus", "app", { module: "gatus" }),
+  cat("healthchecks", "Healthchecks", "app", { module: "healthchecks" }),
+  cat("wg-easy", "wg-easy", "sso", { module: "wg-easy" }),
+  cat("factorio", "Factorio", "app", { module: "factorio" }),
+  cat("grocy", "Grocy", "app", { module: "grocy" }),
+  cat("metube", "MeTube", "app", { module: "metube" }),
+  cat("myspeed", "MySpeed", "sso", { module: "myspeed" }),
+  cat("stirling-pdf", "Stirling PDF", "app", { module: "stirling-pdf" }),
+  cat("intel-gpu", "Intel GPU exporter", "si", { module: "intel-gpu-exporter" }),
+  cat("apps", "Apps platform", "app", { module: "apps", hidden: true }),
+  cat("cloudflared", "cloudflared", "app", { module: "cloudflared", hidden: true }),
 
   // — run on the reference box beside the engine: stacks/* in /etc/nixos, most read by an app page —
-  s("nextcloud", "Nextcloud", "app", { focus: true }),
-  s("immich", "Immich", "app"),
-  s("jellyfin", "Jellyfin", "app", { focus: true }),
-  s("home-assistant", "Home Assistant", "app"),
-  s("minecraft", "Minecraft", "app"),
-  s("sonarr", "Sonarr", "app"),
-  s("radarr", "Radarr", "app"),
-  s("prowlarr", "Prowlarr", "app"),
-  s("bazarr", "Bazarr", "app"),
-  s("qbittorrent", "qBittorrent", "app"),
-  s("nzbget", "NZBGet", "app"),
-  s("seerr", "Seerr", "app"),
-  s("calibre-web", "Calibre-Web", "app"),
-  s("shelfmark", "Shelfmark", "app"),
-  s("cleanuparr", "Cleanuparr", "app"),
-  s("janitorr", "Janitorr", "app"),
-  s("recyclarr", "Recyclarr", "app"),
-  s("n8n", "n8n", "app"),
-  s("open-webui", "Open WebUI", "app"),
-  s("litellm", "LiteLLM", "app"),
-  s("searxng", "SearXNG", "di"),
-  s("lemonade", "Lemonade", "app"),
-  s("wealthfolio", "Wealthfolio", "app"),
-  s("getbased", "getbased", "app"),
-  s("hermes-agent", "Hermes Agent", "app"),
-  s("gluetun", "Gluetun", "app"),
+  bes("nextcloud", "Nextcloud", "app", { focus: true }),
+  bes("immich", "Immich", "app"),
+  bes("jellyfin", "Jellyfin", "app", { focus: true }),
+  bes("home-assistant", "Home Assistant", "app"),
+  bes("minecraft", "Minecraft", "app"),
+  bes("sonarr", "Sonarr", "app"),
+  bes("radarr", "Radarr", "app"),
+  bes("prowlarr", "Prowlarr", "app"),
+  bes("bazarr", "Bazarr", "app"),
+  bes("qbittorrent", "qBittorrent", "app"),
+  bes("nzbget", "NZBGet", "app"),
+  bes("seerr", "Seerr", "app"),
+  bes("calibre-web", "Calibre-Web", "app"),
+  bes("shelfmark", "Shelfmark", "app"),
+  bes("cleanuparr", "Cleanuparr", "app"),
+  bes("janitorr", "Janitorr", "app"),
+  bes("recyclarr", "Recyclarr", "app"),
+  bes("n8n", "n8n", "app"),
+  bes("open-webui", "Open WebUI", "app"),
+  bes("litellm", "LiteLLM", "app"),
+  bes("searxng", "SearXNG", "di"),
+  bes("lemonade", "Lemonade", "app"),
+  bes("wealthfolio", "Wealthfolio", "app"),
+  bes("getbased", "getbased", "app"),
+  bes("hermes-agent", "Hermes Agent", "app"),
+  bes("gluetun", "Gluetun", "app"),
 
   // — outside services the control plane or the box's gateway talks to —
-  s("cloudflare", "Cloudflare", "app", { focus: true }),
-  s("github", "GitHub", "app", { focus: true }),
-  s("github-actions", "GitHub Actions", "si"),
-  s("vercel", "Vercel", "di"),
-  s("letsencrypt", "Let's Encrypt", "di"),
-  s("npm", "npm", "di"),
-  s("claude-code", "Claude Code", "app"),
-  s("protonvpn", "Proton VPN", "app"),
-  s("ticktick", "TickTick", "si"),
-  s("hevy", "Hevy", "app"),
-  s("yazio", "Yazio", "app"),
+  out("cloudflare", "Cloudflare", "app", { focus: true }),
+  out("github", "GitHub", "app", { focus: true }),
+  out("github-actions", "GitHub Actions", "si"),
+  out("vercel", "Vercel", "di"),
+  out("letsencrypt", "Let's Encrypt", "di"),
+  out("npm", "npm", "di"),
+  out("claude-code", "Claude Code", "app"),
+  out("protonvpn", "Proton VPN", "app"),
+  out("ticktick", "TickTick", "si"),
+  out("hevy", "Hevy", "app"),
+  out("yazio", "Yazio", "app"),
 ];
 
 /** What the field shows. */

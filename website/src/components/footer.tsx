@@ -6,19 +6,19 @@ const REPO = "https://github.com/santiagotoscanini/daedalus";
 export function Footer() {
   return (
     <footer className="border-t border-hairline">
-      <div className="mx-auto grid max-w-5xl gap-12 px-6 py-16 sm:grid-cols-[1fr_auto_auto] sm:gap-24">
+      <div className="mx-auto grid max-w-[75rem] gap-12 px-6 py-16 sm:grid-cols-[1fr_auto_auto] sm:gap-24 sm:px-12">
         <div>
           <div className="flex items-center gap-2.5 font-semibold">
             <Logo size={18} />
-            <span className="text-[15px] tracking-tight">daedalus</span>
+            <span className="text-[15px] font-semibold tracking-[-0.02em]">daedalus</span>
           </div>
-          <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-muted">
-            A cloud of your own, on one machine. NixOS keeps it reproducible.
+          <p className="mt-4 max-w-xs text-[14px] leading-relaxed text-muted">
+            Software, made for one, on the computers you already own.
           </p>
         </div>
         <nav aria-label="Project">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">Project</p>
-          <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
+          <ul className="mt-4 space-y-2.5 text-[14px] text-muted">
             <li>
               <a href={REPO} className="transition-colors hover:text-fg">
                 GitHub
@@ -27,6 +27,11 @@ export function Footer() {
             <li>
               <Link to="/docs" className="transition-colors hover:text-fg">
                 Docs
+              </Link>
+            </li>
+            <li>
+              <Link to="/integrations" className="transition-colors hover:text-fg">
+                Integrations
               </Link>
             </li>
             {/* Every link in this list must resolve in the PUBLIC repo. The
@@ -63,10 +68,20 @@ export function Footer() {
         </nav>
         <nav aria-label="Site">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">Site</p>
-          <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
+          <ul className="mt-4 space-y-2.5 text-[14px] text-muted">
             <li>
-              <Link to="/" hash="walk" className="transition-colors hover:text-fg">
-                The network
+              <Link to="/" hash="how" className="transition-colors hover:text-fg">
+                How it works
+              </Link>
+            </li>
+            <li>
+              <Link to="/" hash="made" className="transition-colors hover:text-fg">
+                Made on it
+              </Link>
+            </li>
+            <li>
+              <Link to="/" hash="home" className="transition-colors hover:text-fg">
+                Why at home
               </Link>
             </li>
             <li>
@@ -83,9 +98,15 @@ export function Footer() {
         </nav>
       </div>
       <div className="border-t border-hairline">
-        <p className="mx-auto max-w-5xl px-6 py-6 font-mono text-[11px] text-dim">
-          © 2026 daedalus
-        </p>
+        <div className="mx-auto flex max-w-[75rem] flex-wrap justify-between sm:px-12 gap-3 px-6 py-6 font-mono text-[11px] text-dim">
+          <p>© 2026 daedalus</p>
+          <p>
+            Made at home by{" "}
+            <a href="https://toscanini.me" className="text-muted transition-colors hover:text-fg">
+              Santiago Toscanini
+            </a>
+          </p>
+        </div>
       </div>
     </footer>
   );

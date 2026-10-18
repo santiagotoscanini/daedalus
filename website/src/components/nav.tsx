@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Logo } from "~/components/logo";
-import { Mark } from "~/components/walk/marks";
+import { Mark } from "~/components/marks";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 
@@ -9,9 +9,9 @@ const REPO = "https://github.com/santiagotoscanini/daedalus";
 // from ANY page a future route might add — a bare hash elsewhere points at
 // nothing and goes nowhere.
 const links = [
-  { label: "The network", hash: "walk" },
+  { label: "How it works", hash: "talk" },
+  { label: "Made on it", hash: "made" },
   { label: "Get it", hash: "get" },
-  { label: "Questions", hash: "faq" },
 ];
 
 /** Slim full-width header: invisible over the hero, gaining a hairline
@@ -30,45 +30,44 @@ export function Nav() {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-40 border-b transition-colors duration-300 ${
-        scrolled ? "border-hairline bg-app/75 backdrop-blur-xl" : "border-transparent"
+        scrolled ? "border-hairline bg-app/80 backdrop-blur-md" : "border-transparent"
       }`}
     >
-      <nav className="mx-auto flex h-14 max-w-6xl items-center px-6">
-        <Link to="/" className="flex items-center gap-2 font-medium">
-          <Logo size={19} />
-          <span className="text-[15px] tracking-tight">daedalus</span>
+      <nav className="mx-auto flex h-16 max-w-[75rem] items-center px-6">
+        <Link to="/" className="flex items-center gap-2.5">
+          <Logo size={20} />
+          <span className="text-[15px] font-semibold tracking-[-0.02em]">daedalus</span>
         </Link>
 
-        <div className="ml-auto hidden items-center gap-0.5 md:flex">
+        <div className="ml-8 hidden items-center md:flex">
           {links.map((l) => (
             <Link
               key={l.hash}
               to="/"
               hash={l.hash}
-              className="rounded-md px-2.5 py-1.5 text-[13.5px] text-muted transition-colors hover:text-fg"
+              className="rounded-md px-3 py-1.5 text-[14px] text-muted transition-colors hover:text-fg"
             >
               {l.label}
             </Link>
           ))}
+          <Link to="/docs" className="rounded-md px-3 py-1.5 text-[14px] text-muted transition-colors hover:text-fg">
+            Docs
+          </Link>
         </div>
 
-        {/* Docs is the one nav link that survives to phone widths, and it has
-            to: the section links above are hidden below md, so without it
-            the mobile header offers no navigation within the site and the site's other page is reachable only from
-            the hero and the footer. `ml-auto` here, dropped at md where the
-            section links already took it. */}
-        <Link
-          to="/docs"
-          className="ml-auto rounded-md px-2.5 py-1.5 text-[13.5px] text-muted transition-colors hover:text-fg md:ml-0"
-        >
-          Docs
-        </Link>
-
-        <div className="ml-2 flex items-center gap-1.5 md:ml-4">
-          <a href={REPO} className="btn btn-primary h-9 px-3.5 text-[13px]">
-            <Mark id="github" size={15} />
-            View on GitHub
+        <div className="ml-auto flex items-center gap-2">
+          {/* Docs survives to phone widths: the section links are hidden there, and without it the
+              header would offer no way to the site's other page. */}
+          <Link to="/docs" className="rounded-md px-2 py-1.5 text-[14px] text-muted transition-colors hover:text-fg md:hidden">
+            Docs
+          </Link>
+          <a href={REPO} className="btn btn-ghost btn-sm hidden sm:inline-flex">
+            <Mark id="github" size={14} />
+            GitHub
           </a>
+          <Link to="/" hash="get" className="btn btn-primary btn-sm">
+            Get started
+          </Link>
         </div>
       </nav>
     </header>

@@ -1,10 +1,8 @@
 import { APP, AppTile, Btn, PageHead, Shell, Spark, Table, Tabs, Tr, alpha } from "../chrome";
 
-/** The flagship screen: Apps as the app now draws it, one table of every
- * app on the box with its address, exposure (Off, Lab, Public), traffic and
- * last deploy, the control plane in its own row group, and the Apply bar
- * floating over the foot with one change queued. Mirrors
- * app/src/routes/apps.index.tsx. */
+/** The flagship screen: Apps as the app draws it, one table of every app on the box with its
+ * address, exposure (Off, Lab, Public), traffic and last deploy, and the control plane in its own
+ * row group. Mirrors app/src/routes/apps.index.tsx. */
 
 const COLS = "minmax(0,2.1fr) minmax(0,1.45fr) 78px 104px 74px 70px";
 
@@ -74,6 +72,15 @@ const ROWS: AppRow[] = [
     deployed: "8h ago",
   },
   {
+    name: "sankofa",
+    desc: "Transcribe, correct and organize handwritten archival documents",
+    sub: "sankofa",
+    stage: "Public",
+    rpm: "9.1",
+    spark: [0, 0, 0, 0, 0, 0, 0, 0, 4, 1],
+    deployed: "8h ago",
+  },
+  {
     name: "voyra",
     desc: "Trips, shared and remembered",
     sub: "voyra",
@@ -99,49 +106,80 @@ function Flask() {
   );
 }
 
-function Row({ row, first }: { row: AppRow; first?: boolean }) {
+/** When the hero's request arrives: the new app's row slides in, building, then runs. */
+export const ARRIVE = 2.9;
+export const RUNS = 5.6;
+
+function Row({ row, first, fresh = false }: { row: AppRow; first?: boolean; fresh?: boolean }) {
+  const at = (s: number) => ({ ["--at" as string]: `${s}s` });
   return (
-    <Tr cols={COLS} first={first}>
-      <span className="flex min-w-0 items-center gap-[12px]">
-        <AppTile name={row.name} size={28} />
-        <span className="flex min-w-0 flex-col">
-          <span className="text-[13.5px] font-semibold" style={{ color: APP.text }}>
-            {row.name}
-          </span>
-          <span className="truncate text-[12px]" style={{ color: APP.subdued }}>
-            {row.desc}
+    <div className={fresh ? "seq-row" : undefined} style={fresh ? { ...at(ARRIVE), background: alpha(APP.text, 3.5) } : undefined}>
+      <Tr cols={COLS} first={first}>
+        <span className="flex min-w-0 items-center gap-[12px]">
+          <AppTile name={row.name} size={28} />
+          <span className="flex min-w-0 flex-col">
+            <span className="text-[13.5px] font-semibold" style={{ color: APP.text }}>
+              {row.name}
+            </span>
+            <span className="truncate text-[12px]" style={{ color: APP.subdued }}>
+              {row.desc}
+            </span>
           </span>
         </span>
-      </span>
-      <code className="truncate font-mono text-[11.5px]" style={{ color: APP.text }}>
-        {row.sub}
-        <span style={{ color: APP.muted }}>.toscanini.me</span>
-      </code>
-      <span className="flex items-center gap-[6px] text-[12.5px]" style={{ color: APP.subdued }}>
-        {row.stage === "Lab" ? <Flask /> : null}
-        {row.stage}
-      </span>
-      <span className="flex items-center gap-[8px] text-[12.5px]" style={{ color: APP.text }}>
-        <span className="w-[30px] text-right">{row.rpm}</span>
-        <Spark pts={row.spark} />
-      </span>
-      <span className="text-[12.5px]" style={{ color: APP.subdued }}>
-        {row.deployed}
-      </span>
-      <span className="text-[12.5px]" style={{ color: APP.subdued }}>
-        Running
-      </span>
-    </Tr>
+        <code className="truncate font-mono text-[11.5px]" style={{ color: APP.text }}>
+          {row.sub}
+          <span style={{ color: APP.muted }}>.toscanini.me</span>
+        </code>
+        <span className="flex items-center gap-[6px] text-[12.5px]" style={{ color: APP.subdued }}>
+          {row.stage === "Lab" ? <Flask /> : null}
+          {row.stage}
+        </span>
+        <span className="flex items-center gap-[8px] text-[12.5px]" style={{ color: APP.text }}>
+          <span className="w-[30px] text-right">{row.rpm}</span>
+          <Spark pts={row.spark} />
+        </span>
+        <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+          {row.deployed}
+        </span>
+        {fresh ? (
+          <span className="seq-swap text-[12.5px] font-medium">
+            <span className="seq-out flex items-center gap-[7px]" style={{ ...at(RUNS), color: APP.accent }}>
+              <span className="demo-dot-pulse h-[7px] w-[7px] rounded-full" style={{ background: APP.accent }} />
+              Building
+            </span>
+            <span className="seq flex items-center gap-[7px]" style={{ ...at(RUNS), color: APP.ok }}>
+              <span className="h-[7px] w-[7px] rounded-full" style={{ background: APP.ok }} />
+              Running
+            </span>
+          </span>
+        ) : (
+          <span className="text-[12.5px]" style={{ color: APP.subdued }}>
+            Running
+          </span>
+        )}
+      </Tr>
+    </div>
   );
 }
 
+/** The store's page, just asked for, with no icon of its own yet. */
+const FRESH: AppRow = {
+  name: "almacen",
+  desc: "The store's hours, for mom",
+  sub: "almacen",
+  stage: "Public",
+  rpm: "–",
+  spark: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  deployed: "just now",
+};
+
+/** Apps as the store's page arrives at the top of the table, above the apps the box already runs. */
 export function AppsView() {
   return (
     <Shell active="apps">
       <PageHead title="Apps" action={<Btn>Add an app</Btn>} />
       <Tabs items={["Overview", "Container registry", "npm packages", "Builder"]} active="Overview" />
 
-      {/* Filters */}
       <div className="mt-[16px] flex items-center gap-[8px] text-[12.5px]">
         <span
           className="flex w-[250px] items-center gap-[8px] rounded-[8px] border px-[11px] py-[6px]"
@@ -157,20 +195,18 @@ export function AppsView() {
           className="rounded-[8px] border px-[10px] py-[6px] font-semibold"
           style={{ borderColor: APP.border, background: APP.panel2, color: APP.text }}
         >
-          All <span style={{ color: APP.subdued, fontWeight: 400 }}>&ensp;8</span>
+          All <span style={{ color: APP.subdued, fontWeight: 400 }}>&ensp;{ROWS.length + 1}</span>
         </span>
-        <span
-          className="rounded-[8px] border px-[11px] py-[6px]"
-          style={{ borderColor: APP.hairline, color: APP.subdued }}
-        >
+        <span className="rounded-[8px] border px-[11px] py-[6px]" style={{ borderColor: APP.hairline, color: APP.subdued }}>
           Any exposure&ensp;⌄
         </span>
       </div>
 
       <div className="mt-[14px]">
         <Table cols={COLS} head={["App", "Address", "Exposure", "Req/min", "Deployed", "Status"]}>
-          {ROWS.map((r, i) => (
-            <Row key={r.name} row={r} first={i === 0} />
+          <Row row={FRESH} first fresh />
+          {ROWS.map((r) => (
+            <Row key={r.name} row={r} />
           ))}
           <div
             className="flex items-baseline gap-[10px] border-t px-[18px] py-[7px] text-[12px]"
@@ -193,25 +229,6 @@ export function AppsView() {
             }}
           />
         </Table>
-      </div>
-
-      {/* The Apply bar: a glass dock over the page's foot, its edge in the
-          brand because something is waiting (app/src/components/apply-bar.tsx). */}
-      <div
-        className="absolute inset-x-[22px] bottom-[16px] flex items-center gap-[12px] rounded-[16px] border px-[18px] py-[11px] text-[13px]"
-        style={{
-          background: alpha("oklch(0.245 0.004 270)", 88),
-          borderColor: alpha(APP.accent, 35),
-          boxShadow: `0 18px 50px -12px rgba(0,0,0,0.7), 0 0 40px -14px ${APP.accent}`,
-          backdropFilter: "blur(20px)",
-        }}
-      >
-        <b style={{ color: APP.text, fontWeight: 600 }}>1 app changed</b>
-        <span style={{ color: APP.muted }}>lintel (stage)</span>
-        <span className="ml-auto flex gap-[8px]">
-          <Btn ghost>Discard</Btn>
-          <Btn>Apply</Btn>
-        </span>
       </div>
     </Shell>
   );

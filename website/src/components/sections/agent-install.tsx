@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { Command } from "~/components/ui/command";
-import { Mark, type MarkId } from "~/components/walk/marks";
+import { Mark, type MarkId } from "~/components/marks";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 /** The newest release's disk image, by the fixed name every release gives
@@ -85,7 +85,7 @@ export function AgentInstall() {
       <div
         role="tablist"
         aria-label="Operating system"
-        className="flex h-9 w-fit max-w-full items-center gap-0.5 rounded-full border border-hairline bg-black/30 p-0.5"
+        className="flex h-9 w-fit max-w-full items-center gap-0.5 rounded-lg border border-line bg-app p-0.5"
       >
         {OSES.map((o, i) => {
           const active = o.id === selected;
@@ -104,7 +104,7 @@ export function AgentInstall() {
               tabIndex={active ? 0 : -1}
               onClick={() => select(o.id)}
               onKeyDown={onTabKey(i)}
-              className={`inline-flex h-8 items-center justify-center gap-2 rounded-full px-3 text-[12.5px] font-medium transition-colors ${
+              className={`inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-[13px] transition-colors ${
                 active ? "bg-white/[0.09] text-fg" : "text-muted hover:text-fg"
               }`}
             >
@@ -115,16 +115,16 @@ export function AgentInstall() {
         })}
       </div>
 
-      <h3 className="mt-6 text-[1.45rem] font-semibold leading-snug tracking-[-0.015em]">The agent</h3>
-      <p className="mt-1.5 text-[14.5px] leading-relaxed text-muted">For Windows, macOS and Linux.</p>
+      <h3 className="mt-6 text-[20px] font-semibold tracking-[-0.02em]">The agent</h3>
+      <p className="mt-1.5 text-[15px] leading-relaxed text-muted">For Windows, macOS and Linux. One connection to the box, approved by you.</p>
 
       {selected === "macos" ? (
-        <a href={MAC_DMG} className="btn btn-primary mt-7 h-11 self-start px-5">
+        <a href={MAC_DMG} className="btn btn-primary mt-7 self-start">
           <Mark id="apple" size={17} />
           Download for Mac
         </a>
       ) : (
-        <a href={AGENT_RELEASES} className="btn btn-primary mt-7 h-11 self-start px-5">
+        <a href={AGENT_RELEASES} className="btn btn-primary mt-7 self-start">
           <Mark id="github" size={17} />
           Releases on GitHub
         </a>

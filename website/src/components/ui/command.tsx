@@ -42,11 +42,11 @@ export function Command({
 
   return (
     <div>
-      <div className="flex min-w-0 items-start gap-2 rounded-xl border border-hairline bg-black/35 py-2.5 pl-4 pr-2">
+      <div className="flex min-w-0 items-start gap-2 rounded-lg border border-line bg-app py-2.5 pl-4 pr-2">
         <code
           ref={code}
           aria-label={label}
-          className="min-w-0 flex-1 select-all break-words py-0.5 font-mono text-[12.5px] leading-[1.7] text-[#c9c9d2]"
+          className="min-w-0 flex-1 select-all break-words py-0.5 font-mono text-[12.5px] leading-[1.7] text-body"
         >
           {text}
         </code>
@@ -55,7 +55,7 @@ export function Command({
           onClick={copy}
           tabIndex={active ? 0 : -1}
           aria-label={`Copy: ${label}`}
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-white/[0.06] hover:text-fg"
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-fg/[0.06] hover:text-fg"
         >
           {state === "copied" ? (
             <CheckIcon size={15} className="text-status-ok" />

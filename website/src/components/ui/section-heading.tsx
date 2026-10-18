@@ -1,28 +1,33 @@
+import type { ReactNode } from "react";
 import { Reveal } from "~/components/reveal";
 
-/** Standard section header: a quiet mono kicker, a tight headline, an
- * optional one-line sub. Centered by default. */
+/** Every section's header: a quiet label with the brand's dot, a headline, an optional line under it. */
 export function SectionHeading({
-  kicker,
+  label,
   title,
   sub,
-  align = "center",
+  align = "left",
+  id,
 }: {
-  kicker: string;
-  title: string;
-  sub?: string;
+  label?: string;
+  title: ReactNode;
+  sub?: ReactNode;
   align?: "center" | "left";
+  id?: string;
 }) {
-  const alignCls = align === "center" ? "mx-auto text-center" : "text-left";
+  const center = align === "center";
   return (
-    <Reveal className={`max-w-2xl ${alignCls}`}>
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-2">{kicker}</p>
-      <h2 className="mt-4 text-balance text-4xl font-semibold tracking-[-0.02em] sm:text-[2.75rem] sm:leading-[1.1]">
+    <Reveal className={center ? "mx-auto max-w-[46rem] text-center" : "max-w-[50rem]"}>
+      {label ? (
+        <p className={`label flex items-center gap-2 ${center ? "justify-center" : ""}`}>
+          <span className="size-1.5 rounded-full bg-accent" aria-hidden />
+          {label}
+        </p>
+      ) : null}
+      <h2 id={id} className="h-section mt-4 text-[clamp(2rem,4.2vw,3.1rem)]">
         {title}
       </h2>
-      {sub ? (
-        <p className="mt-5 text-pretty text-[15px] leading-relaxed text-muted">{sub}</p>
-      ) : null}
+      {sub ? <p className={`lede mt-5 ${center ? "mx-auto" : ""} max-w-[38rem]`}>{sub}</p> : null}
     </Reveal>
   );
 }
