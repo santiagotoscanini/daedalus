@@ -1,50 +1,50 @@
-import { Reveal } from "~/components/reveal";
-import { AgentInstall } from "~/components/sections/agent-install";
-import { Command } from "~/components/ui/command";
-import { SectionHeading } from "~/components/ui/section-heading";
 import { Mark } from "~/components/marks";
+import { AgentInstall, InstallCard } from "~/components/sections/agent-install";
+import { Command } from "~/components/ui/command";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 const INIT = "nix flake init -t github:santiagotoscanini/daedalus#config";
 
-/** The two pieces, each a button and one command. What either one does next
- * is the setup's to say, not the landing's: this is only the first step. */
+/** The close, on the band the footer continues: the line, then the two pieces, each one command and
+ * one button. What either one does next is the setup's to say, not the landing's: this is only the
+ * first step, and the docs are a link away in the FAQ and the footer. The engine's "View on GitHub"
+ * is the close's one filled button; the agent's is secondary. From 1024px the cards hold columns 1–6
+ * and 7–12 at one height; below, they stack. */
 export function GetIt() {
   return (
-    <section id="get" aria-labelledby="get-title" className="cell scroll-mt-16 px-6 py-24 sm:px-12 sm:py-32">
-      <div>
-        <SectionHeading
-          id="get-title"
-          label="Get started"
-          title={
-            <>
-              Two pieces. <span className="text-muted">Both open source.</span>
-            </>
-          }
-          sub="The engine runs the box. The agent joins your other machines to it."
-        />
-        <div className="mt-14 grid gap-5 md:grid-cols-2">
-          <Reveal className="min-w-0">
-            <div className="card flex h-full flex-col p-6 sm:p-8">
-              <div className="flex h-9 items-center gap-2 text-muted">
-                <Mark id="nixos" size={22} />
+    <section id="get" aria-labelledby="get-title" className="groove band pb-18 pt-20 sm:pb-24 sm:pt-28 lg:pb-28 lg:pt-32">
+      <div className="wrap">
+        <h2 id="get-title" className="t-display-xl max-w-[900px]">
+          Start with the computer you already have.
+        </h2>
+        {/* balanced, so "to it." is never split across the turn */}
+        <p className="t-lead mt-6 max-w-[588px] text-balance">
+          The engine runs the box. The agent joins your other machines to it. Both are open source, MIT licensed.
+        </p>
+        <div className="grid-12 mt-16 max-lg:grid max-lg:gap-4">
+          <InstallCard
+            title="The engine"
+            control={
+              // the one system the engine runs on, in the same switch the agent's card carries, with its
+              // only position selected, so both headers hold the same object. It does nothing, and the
+              // description says the same in words, so it is hidden from assistive technology.
+              <div className="seg" aria-hidden>
+                <span className="seg-item" aria-selected="true">
+                  <Mark id="nixos" size={14} />
+                  NixOS
+                </span>
               </div>
-              <h3 className="mt-6 text-[20px] font-semibold tracking-[-0.02em]">The engine</h3>
-              <p className="mt-1.5 text-[15px] leading-relaxed text-muted">For NixOS. Start a house from the template.</p>
-              <a href={REPO} className="btn btn-primary mt-7 self-start">
+            }
+            description="For NixOS. Start a house from the template."
+            command={<Command text={INIT} label="Start from the template" />}
+            action={
+              <a href={REPO} className="btn btn-primary">
                 <Mark id="github" size={16} />
                 View on GitHub
               </a>
-              <div className="mt-auto pt-6">
-                <Command text={INIT} label="Start from the template" />
-              </div>
-            </div>
-          </Reveal>
-          <Reveal delay={0.08} className="min-w-0">
-            <div className="card flex h-full flex-col p-6 sm:p-8">
-              <AgentInstall />
-            </div>
-          </Reveal>
+            }
+          />
+          <AgentInstall />
         </div>
       </div>
     </section>

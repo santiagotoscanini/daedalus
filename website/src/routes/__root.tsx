@@ -18,7 +18,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { name: "theme-color", content: "#0a0a0b" },
+      { name: "theme-color", content: "#08090a" },
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "daedalus" },
       { property: "og:image", content: `${SITE_URL}/og.png` },
@@ -38,14 +38,14 @@ export const Route = createRootRoute({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="bg-app">
+    <html lang="en" className="bg-page">
       <head>
         <HeadContent />
       </head>
-      <body className="bg-app text-fg antialiased">
+      <body className="bg-page text-ink-1 antialiased">
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-panel focus:px-3 focus:py-2"
+          className="t-small sr-only text-ink-1 focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-control focus:bg-raise-2 focus:px-3 focus:py-2"
         >
           Skip to content
         </a>

@@ -13,7 +13,7 @@ export const Route = createFileRoute("/integrations")({
   head: () =>
     pageHead({
       path: "/integrations",
-      title: "Daedalus integrations. Everything it runs and talks to.",
+      title: "daedalus integrations: everything it runs and talks to",
       description:
         "The services the daedalus engine can switch on, what the reference box runs beside them, and the outside services it talks to.",
     }),
@@ -40,12 +40,12 @@ const GROUPS: Array<{ id: Group; title: string; note: string }> = [
 function IntegrationsPage() {
   return (
     <main id="main">
-      <header className="mx-auto max-w-6xl px-6 pb-4 pt-36 sm:pt-44">
-        <p className="label flex items-center gap-2"><span className="size-1.5 rounded-full bg-accent" aria-hidden />Integrations</p>
-        <h1 id="integrations-title" className="h-display mt-5 max-w-3xl text-[clamp(2.6rem,6vw,4.4rem)]">
+      <header className="wrap pb-4 pt-28 lg:pt-40">
+        <p className="t-small text-ink-4">Integrations</p>
+        <h1 id="integrations-title" className="t-display mt-4 max-w-[792px]">
           Everything it touches.
         </h1>
-        <p className="mt-7 max-w-[36rem] text-pretty text-[17px] leading-relaxed text-muted">
+        <p className="t-lead mt-6 max-w-[588px]">
           What the engine runs, what one house runs beside it, and what it connects to. Hold a mark to see its
           name.
         </p>
@@ -53,18 +53,18 @@ function IntegrationsPage() {
 
       <Universe />
 
-      <div className="mx-auto grid max-w-6xl gap-14 px-6 pb-32 md:grid-cols-3 md:gap-10">
+      <div className="wrap grid gap-14 pb-32 md:grid-cols-3 md:gap-6">
         {GROUPS.map((g) => {
           const list = SHOWN.filter((s) => s.group === g.id);
           return (
             <section key={g.id} aria-labelledby={`int-${g.id}`}>
-              <h2 id={`int-${g.id}`} className="text-[15px] font-medium text-fg">
+              <h2 id={`int-${g.id}`} className="t-body font-medium text-ink-1">
                 {g.title}
               </h2>
-              <p className="mt-2 text-pretty text-[13.5px] leading-relaxed text-muted">{g.note}</p>
-              <ul className="mt-5 border-t border-hairline">
+              <p className="t-body mt-2">{g.note}</p>
+              <ul className="mt-5 border-t border-edge-1">
                 {list.map((s) => (
-                  <li key={s.id} className="flex items-center gap-3 border-b border-hairline py-2.5 text-[14px] text-body">
+                  <li key={s.id} className="t-body flex min-h-11 items-center gap-3 border-b border-edge-1 py-2 text-ink-2">
                     <img src={iconUrl(s.id)} alt="" width={18} height={18} className="size-[18px] object-contain" loading="lazy" />
                     {s.name}
                   </li>

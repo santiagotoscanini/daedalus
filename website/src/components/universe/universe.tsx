@@ -217,7 +217,7 @@ export function Universe() {
       <noscript>
         <style>{".uv-wall{opacity:1!important}"}</style>
       </noscript>
-      <p className="mx-auto max-w-6xl px-6 pb-20 pt-6 text-[12px] leading-relaxed text-dim sm:pb-28">
+      <p className="wrap t-small pb-20 pt-6 text-ink-4 sm:pb-28">
         Logos are trademarks of their owners, shown only to say which service is meant.
       </p>
     </section>

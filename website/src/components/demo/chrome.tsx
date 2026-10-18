@@ -73,15 +73,18 @@ export function Chip({ tone, children }: { tone: Tone; children: ReactNode }) {
   );
 }
 
-/** The table's req/min trace: a flat baseline with the last minutes'
- * movement, stroke only, as the app draws it. */
+/** The table's req/min trace over the last two hours, stroke only, as the
+ * app draws it (app/src/components/viz/charts.tsx): scaled from the series'
+ * own low to its high, a flat series as a midline. The table leaves out a
+ * series that never moved (`varies`), as the app does. */
 export function Spark({ pts, w = 52, h = 16 }: { pts: number[]; w?: number; h?: number }) {
-  const max = Math.max(...pts) || 1;
+  const lo = Math.min(...pts);
+  const hi = Math.max(...pts);
   const d = pts
-    .map(
-      (p, i) =>
-        `${((i / (pts.length - 1)) * w).toFixed(1)},${(h - 1.5 - (p / max) * (h - 3)).toFixed(1)}`,
-    )
+    .map((p, i) => {
+      const y = hi === lo ? h / 2 : h - 1.5 - ((p - lo) / (hi - lo)) * (h - 3);
+      return `${((i / (pts.length - 1)) * w).toFixed(1)},${y.toFixed(1)}`;
+    })
     .join(" ");
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0" aria-hidden>
@@ -96,6 +99,9 @@ export function Spark({ pts, w = 52, h = 16 }: { pts: number[]; w?: number; h?: 
     </svg>
   );
 }
+
+/** Whether a trace moved at all; one that did not is a ruler, not a reading. */
+export const varies = (pts: number[]) => pts.length > 1 && Math.max(...pts) - Math.min(...pts) > 0.01;
 
 /** An app's icon: its own mark when it ships one, the monogram otherwise,
  * in the same order daedalus resolves them. */
@@ -359,7 +365,7 @@ function Rail({ active, app }: { active: string; app?: string }) {
         </svg>
         <span className="flex-1">Search</span>
         <span
-          className="rounded-[4px] border px-[5px] text-[10.5px]"
+          className="rounded-[4px] border px-[5px] text-[11px]"
           style={{ borderColor: APP.hairline }}
         >
           ⌘K
@@ -409,8 +415,11 @@ function Rail({ active, app }: { active: string; app?: string }) {
  * The window shell
  * ---------------------------------------------------------------- */
 
-/** Title bar + the rail + the content panel inset into the canvas, which is
- * how the app's grey ladder separates them. Every demo view renders inside. */
+/** The rail + the content panel inset into the canvas, which is how the
+ * app's grey ladder separates them. Every demo view renders inside. No title
+ * bar, dots or URL: the page's frame holds the canvas, and its fill is the
+ * rail's, so the panel's 8px inset and 12px radius sit concentric with the
+ * frame's 20. */
 export function Shell({
   active,
   app,
@@ -421,47 +430,32 @@ export function Shell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex size-full flex-col" style={{ background: APP.rail, color: APP.text }}>
-      <div className="relative flex h-[34px] shrink-0 items-center px-[16px]">
-        <span className="flex gap-[7px]">
-          <span className="size-[10px] rounded-full" style={{ background: APP.raise }} />
-          <span className="size-[10px] rounded-full" style={{ background: APP.raise }} />
-          <span className="size-[10px] rounded-full" style={{ background: APP.raise }} />
-        </span>
-        <span
-          className="absolute inset-x-0 text-center font-mono text-[11px]"
-          style={{ color: APP.muted }}
-        >
-          daedalus-app.toscanini.me
-        </span>
-      </div>
-      <div className="flex min-h-0 flex-1">
-        <Rail active={active} app={app} />
-        <div
-          className="relative mb-[8px] mr-[8px] flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border px-[36px] pt-[28px]"
-          style={{ background: APP.bg, borderColor: APP.hairline }}
-        >
-          {children}
-        </div>
+    <div className="flex size-full" style={{ background: APP.rail, color: APP.text }}>
+      <Rail active={active} app={app} />
+      <div
+        className="relative mb-[8px] mr-[8px] mt-[8px] flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border px-[36px] pt-[28px]"
+        style={{ background: APP.bg, borderColor: APP.hairline }}
+      >
+        {children}
       </div>
     </div>
   );
 }
 
 /** The page title as the app sets it, with the info glyph beside it, and an
- * optional action on the right. */
+ * optional action on the right. The glyph is drawn, not a 9px letter: zoomed
+ * to 0.775 a letter that small would fall under the 8.5px floor. */
 export function PageHead({ title, action }: { title: string; action?: ReactNode }) {
   return (
     <div className="flex items-center gap-[10px]">
       <p className="text-[25px] font-semibold tracking-[-0.02em]" style={{ color: APP.text }}>
         {title}
       </p>
-      <span
-        className="flex size-[15px] items-center justify-center rounded-full border text-[9px]"
-        style={{ borderColor: APP.muted, color: APP.muted }}
-      >
-        i
-      </span>
+      <svg width={15} height={15} viewBox="0 0 16 16" className="shrink-0" style={{ color: APP.muted }} aria-hidden>
+        <circle cx="8" cy="8" r="7.25" fill="none" stroke="currentColor" strokeWidth="1" />
+        <circle cx="8" cy="5" r="0.9" fill="currentColor" />
+        <path d="M8 7.25v4.25" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
       {action ? <span className="ml-auto">{action}</span> : null}
     </div>
   );

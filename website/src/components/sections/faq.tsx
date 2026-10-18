@@ -1,14 +1,16 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Reveal } from "~/components/reveal";
-import { SectionHeading } from "~/components/ui/section-heading";
+import { ArrowRight, ChevronDown } from "~/components/icons";
 
 /** The questions a careful reader asks before cloning, answered plainly.
  * An FAQ, not a confession: the page speaks as the product. Each answer is
  * checked against the repository (README, ARCHITECTURE.md, nix/README.md's
  * "What is NOT done yet"); keep it that way when the facts move.
  *
- * Native <details>, so it works before hydration and with no script. */
+ * From 1024px the heading holds columns 1–4 and stays in view while the list
+ * (columns 6–12) scrolls past it; below that the list follows the heading.
+ * Native <details>, so it works before hydration and with no script; only the
+ * chevron moves, and the answer opens without a height animation. */
 
 const QUESTIONS: Array<{ q: string; a: ReactNode }> = [
   {
@@ -21,14 +23,18 @@ const QUESTIONS: Array<{ q: string; a: ReactNode }> = [
   },
   {
     q: "Is there a release?",
-    a: "Not yet. There is no tagged release, so a clone follows main. Everything a box needs to log in to its control plane is in the catalog of modules; many of the stacks it was built beside are still being moved in.",
+    a: "Not for the engine yet: there is no tagged release, so a clone follows main. The agent ships tagged releases. Everything a box needs to log in to its control plane is in the catalog of modules; many of the stacks it was built beside are still being moved in.",
   },
   {
     q: "What does it run?",
     a: (
       <>
         The apps you build, a catalog of services the engine can switch on, and the outside services it talks
-        to. <Link to="/integrations" className="text-fg underline decoration-line-2 underline-offset-4 hover:decoration-fg">The integrations page</Link> shows every one.
+        to.{" "}
+        <Link to="/integrations" className="link">
+          The integrations page
+        </Link>{" "}
+        shows every one.
       </>
     ),
   },
@@ -48,27 +54,35 @@ const QUESTIONS: Array<{ q: string; a: ReactNode }> = [
 
 export function Faq() {
   return (
-    <section id="faq" aria-labelledby="faq-title" className="cell scroll-mt-16 px-6 py-24 sm:px-12 sm:py-32">
-      <div className="grid gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)]">
-        <SectionHeading id="faq-title" label="Questions" title="Before you clone it." />
-        <Reveal delay={0.06}>
-          <div className="border-t border-line">
-            {QUESTIONS.map((item, i) => (
-              <details key={item.q} open={i === 0} className="faq group border-b border-hairline">
-                <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 text-[16px] font-medium text-fg transition-colors hover:text-white">
-                  {item.q}
-                  <span
-                    aria-hidden
-                    className="font-mono text-[14px] text-dim transition-transform duration-300 group-open:rotate-45"
-                  >
-                    +
-                  </span>
-                </summary>
-                <p className="-mt-1 max-w-2xl pb-6 text-pretty text-[15px] leading-relaxed text-muted">{item.a}</p>
-              </details>
-            ))}
-          </div>
-        </Reveal>
+    <section id="faq" aria-labelledby="faq-title" className="groove pb-18 pt-18 sm:pb-24 sm:pt-24 lg:pb-28 lg:pt-28">
+      <div className="wrap grid-12 items-start">
+        {/* sticky on the column, not the heading: a sticky element only travels inside its parent */}
+        <div className="lg:sticky lg:top-28 lg:col-span-4 lg:self-start">
+          <h2 id="faq-title" className="t-title-l">
+            Before you clone it.
+          </h2>
+          <Link
+            to="/docs"
+            className="t-body mt-4 flex w-fit items-center gap-1.5 font-medium text-ink-1 decoration-white/60 underline-offset-4 hover:underline"
+          >
+            Read the docs
+            <ArrowRight />
+          </Link>
+        </div>
+        <div className="mt-8 border-t border-edge-1 lg:col-span-7 lg:col-start-6 lg:mt-0">
+          {QUESTIONS.map((item, i) => (
+            <details key={item.q} open={i === 0} className="faq group border-b border-edge-1">
+              <summary className="t-body flex min-h-14 cursor-pointer items-center justify-between gap-6 py-4 font-medium text-ink-1">
+                {item.q}
+                <ChevronDown
+                  size={16}
+                  className="text-ink-4 transition-transform duration-(--d-2) ease-out group-open:rotate-180"
+                />
+              </summary>
+              <p className="t-body max-w-[600px] pb-5">{item.a}</p>
+            </details>
+          ))}
+        </div>
       </div>
     </section>
   );

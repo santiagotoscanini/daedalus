@@ -10,7 +10,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && node scripts/check-anchors.mjs",
     "generate-routes": "tsr generate",
     "typecheck": "tsr generate && tsc --noEmit",
     "preview": "vite preview"

@@ -1,6 +1,7 @@
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
-import { Command } from "~/components/ui/command";
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { DownloadIcon } from "~/components/icons";
 import { Mark, type MarkId } from "~/components/marks";
+import { Command } from "~/components/ui/command";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 /** The newest release's disk image, by the fixed name every release gives
@@ -26,6 +27,57 @@ const OSES: { id: OsId; label: string; mark: MarkId; command: string }[] = [
   { id: "linux", label: "Linux", mark: "linux", command: INSTALL_UNIX },
 ];
 
+/** The tab a key moves to in a tablist of `count`, from tab `i`: the arrows step and wrap, Home and
+ * End jump to the ends (the WAI-ARIA tabs pattern). null for every other key, which the caller lets
+ * through. Shared with Anywhere's switch, so the page's two tablists answer the same keys. */
+export function tabKeyTarget(key: string, i: number, count: number): number | null {
+  switch (key) {
+    case "ArrowRight":
+      return (i + 1) % count;
+    case "ArrowLeft":
+      return (i - 1 + count) % count;
+    case "Home":
+      return 0;
+    case "End":
+      return count - 1;
+    default:
+      return null;
+  }
+}
+
+/** One of the close's two cards, so both share every measure: the title with its control on one
+ * 36px row, the description held to two lines, the command 24px under it, then the button at the
+ * foot. The button row takes the slack (mt-auto), so in two cards of one height the commands start
+ * level and the buttons land on the same y; a shorter command leaves its space above the button, not
+ * under the description. The header row wraps, so a control that asks for a row of its own gets one
+ * under the title. From 1024px the sides are 24px, not 32: the 16px it gives back is what sets the
+ * engine's command on one line at 1280 and up. */
+export function InstallCard({
+  title,
+  control,
+  description,
+  command,
+  action,
+}: {
+  title: string;
+  control: ReactNode;
+  description: ReactNode;
+  command: ReactNode;
+  action: ReactNode;
+}) {
+  return (
+    <div className="card card-on-band @container flex min-w-0 flex-col p-5 sm:p-8 lg:col-span-6 lg:px-6">
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <h3 className="t-title">{title}</h3>
+        {control}
+      </div>
+      <p className="t-body mt-2 min-h-[48px] text-balance">{description}</p>
+      <div className="mt-6">{command}</div>
+      <div className="mt-auto pt-4">{action}</div>
+    </div>
+  );
+}
+
 /** Which entry the visitor's own machine is. Phones and tablets keep the
  * default: none of them runs the agent, and a guess would only be wrong. */
 function detectOs(): OsId | null {
@@ -42,13 +94,16 @@ function detectOs(): OsId | null {
   return null;
 }
 
-/** The agent: a switch of three systems, one button, one command. A Mac has
- * an app to download; Windows and Linux install from the line, so their
- * button opens the releases. The three commands are stacked in one grid cell
- * and the two not shown are only made invisible, so the card is as tall as
- * its tallest line from the first paint and the switch moves nothing.
- * Prerender has no navigator, so the static page shows Windows; after
- * hydration the visitor's own system is selected. */
+/** The agent's card: a switch of three systems, one command, one button. A Mac has an app to
+ * download; Windows and Linux install from the line, so their button opens the releases. The three
+ * commands are stacked in one grid area, each at its top, and the two not shown are only made
+ * invisible, so the card is as tall as its tallest line from the first paint and the switch moves
+ * nothing. From 1024px the description sets a sentence per line: balanced alone it strands "One" at
+ * the end of the first. Below 640px the switch takes its own row under the title, so every system
+ * keeps its name; only a card narrower than the whole switch (under 296px inside, a phone narrower
+ * than 390) names just the selected system, and the others keep their mark. Prerender has no
+ * navigator, so the static page shows Windows; after hydration the visitor's own system is
+ * selected. */
 export function AgentInstall() {
   const [selected, setSelected] = useState<OsId>("windows");
   const tabs = useRef<Record<OsId, HTMLButtonElement | null>>({ windows: null, macos: null, linux: null });
@@ -65,28 +120,17 @@ export function AgentInstall() {
   };
 
   const onTabKey = (i: number) => (e: KeyboardEvent<HTMLButtonElement>) => {
-    const next =
-      e.key === "ArrowRight"
-        ? (i + 1) % OSES.length
-        : e.key === "ArrowLeft"
-          ? (i - 1 + OSES.length) % OSES.length
-          : e.key === "Home"
-            ? 0
-            : e.key === "End"
-              ? OSES.length - 1
-              : null;
+    const next = tabKeyTarget(e.key, i, OSES.length);
     if (next === null) return;
     e.preventDefault();
     select(OSES[next]!.id, true);
   };
 
-  return (
-    <>
-      <div
-        role="tablist"
-        aria-label="Operating system"
-        className="flex h-9 w-fit max-w-full items-center gap-0.5 rounded-lg border border-line bg-app p-0.5"
-      >
+  const control = (
+    // the full-width wrapper is what sends the switch to its own row below 640px; the switch inside
+    // keeps its own width
+    <div className="max-sm:basis-full">
+      <div role="tablist" aria-label="Operating system" className="seg max-w-full">
         {OSES.map((o, i) => {
           const active = o.id === selected;
           return (
@@ -104,48 +148,61 @@ export function AgentInstall() {
               tabIndex={active ? 0 : -1}
               onClick={() => select(o.id)}
               onKeyDown={onTabKey(i)}
-              className={`inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-[13px] transition-colors ${
-                active ? "bg-white/[0.09] text-fg" : "text-muted hover:text-fg"
-              }`}
+              className="seg-item hover:text-ink-1"
             >
               <Mark id={o.mark} size={14} />
-              <span className={active ? "" : "max-sm:sr-only"}>{o.label}</span>
+              <span className={active ? "" : "@max-[18.5rem]:sr-only"}>{o.label}</span>
             </button>
           );
         })}
       </div>
+    </div>
+  );
 
-      <h3 className="mt-6 text-[20px] font-semibold tracking-[-0.02em]">The agent</h3>
-      <p className="mt-1.5 text-[15px] leading-relaxed text-muted">For Windows, macOS and Linux. One connection to the box, approved by you.</p>
+  const command = (
+    <div className="grid">
+      {OSES.map((o) => {
+        const active = o.id === selected;
+        return (
+          <div
+            key={o.id}
+            role="tabpanel"
+            id={`${baseId}-panel-${o.id}`}
+            aria-labelledby={`${baseId}-tab-${o.id}`}
+            className={`col-start-1 row-start-1 min-w-0 self-start ${active ? "" : "invisible"}`}
+          >
+            <Command text={o.command} label={`${o.label} install command`} active={active} />
+          </div>
+        );
+      })}
+    </div>
+  );
 
-      {selected === "macos" ? (
-        <a href={MAC_DMG} className="btn btn-primary mt-7 self-start">
-          <Mark id="apple" size={17} />
-          Download for Mac
-        </a>
-      ) : (
-        <a href={AGENT_RELEASES} className="btn btn-primary mt-7 self-start">
-          <Mark id="github" size={17} />
-          Releases on GitHub
-        </a>
-      )}
+  const action =
+    selected === "macos" ? (
+      <a href={MAC_DMG} className="btn btn-secondary">
+        <DownloadIcon />
+        Download for macOS
+      </a>
+    ) : (
+      <a href={AGENT_RELEASES} className="btn btn-secondary">
+        <Mark id="github" size={16} />
+        Releases on GitHub
+      </a>
+    );
 
-      <div className="mt-auto grid pt-6">
-        {OSES.map((o) => {
-          const active = o.id === selected;
-          return (
-            <div
-              key={o.id}
-              role="tabpanel"
-              id={`${baseId}-panel-${o.id}`}
-              aria-labelledby={`${baseId}-tab-${o.id}`}
-              className={`col-start-1 row-start-1 min-w-0 self-end ${active ? "" : "invisible"}`}
-            >
-              <Command text={o.command} label={`${o.label} install command`} active={active} />
-            </div>
-          );
-        })}
-      </div>
-    </>
+  return (
+    <InstallCard
+      title="The agent"
+      control={control}
+      description={
+        <>
+          For Windows, macOS and Linux. <br className="max-lg:hidden" />
+          One connection to the box, approved by you.
+        </>
+      }
+      command={command}
+      action={action}
+    />
   );
 }

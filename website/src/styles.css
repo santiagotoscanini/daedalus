@@ -11,56 +11,116 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 
-/* Design tokens. A neutral dark page in the manner of the products it sits
- * beside: one grey ladder, hairlines in white-alpha, no glows, colour only
- * for the brand mark and for state. The page is drawn inside one framed
- * column (.frame) whose sections meet at hairlines with a + at each corner.
+/* Design tokens. Every neutral shares the product's hue (oklch 270, chroma
+ * about 0.004), so the page and the pictures of the app read as one material:
+ * five surfaces, four inks, three edge alphas. Colour is for state only: one
+ * green, and the terracotta of the logo mark.
  *
- * Every text tier clears WCAG AA (4.5:1) on --color-app, --color-panel and
- * --color-surface; anything new goes through the same check before it lands. */
+ * The two resets are the enforcement. With `--text-*` and `--radius-*`
+ * cleared, `text-sm` and `rounded-lg` do not exist: marketing type comes only
+ * from the .t-* classes below, and corners only from the four radii.
+ *
+ * Every ink clears WCAG AA (4.5:1) on page and on raise-2; anything new goes
+ * through the same check before it lands. */
 @theme {
+  --text-*: initial;
+  --radius-*: initial;
+
   --font-sans: "Geist Variable", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
-  --color-app: #0a0a0b;
-  --color-panel: #111113;
-  --color-surface: #161618;
+  --color-page: #08090a;
+  --color-raise-1: #0f1012; /* page cards, the closing band, the hero frame */
+  --color-raise-2: #16171a; /* the Messages window, cards on the band */
+  --color-raise-3: #1c1d20; /* user bubble, active segment */
+  --color-product: #151618; /* product fragments outside the hero */
 
-  --color-hairline: rgba(255, 255, 255, 0.07);
-  --color-line: rgba(255, 255, 255, 0.1);
-  --color-line-2: rgba(255, 255, 255, 0.16);
+  --color-ink-1: #f5f6f7; /* 18.4:1 on page */
+  --color-ink-2: #c8cacf; /* 12.2:1 */
+  --color-ink-3: #9b9da4; /* 7.4:1 */
+  --color-ink-4: #808389; /* 5.2:1 on page, 4.7:1 on raise-2 */
 
-  --color-fg: #ededef; /* 16.93:1 */
-  --color-body: #b4b4bb; /* 9.60:1 */
-  --color-muted: #a1a1aa; /* 7.72:1 */
-  --color-muted-2: #8e8e96; /* 6.09:1, 5.56:1 on surface */
-  --color-dim: #8e8e96;
+  --color-edge-1: rgba(255, 255, 255, 0.06); /* dividers inside things */
+  --color-edge-2: rgba(255, 255, 255, 0.08); /* every card and frame border */
+  --color-edge-3: rgba(255, 255, 255, 0.12); /* the Messages window */
 
-  /* the mark's terracotta: the brand, and nothing else */
-  --color-accent: #e2795a; /* 6.71:1 */
-  --color-ember: #f09a80; /* 9.08:1 */
+  --color-ok: #4ea87a; /* the only green */
+  --color-accent: #e2795a; /* the logo mark only */
 
-  --color-status-ok: #3fb67a;
-  --color-status-warn: #d9a441;
-  --color-status-bad: #e5534b;
+  --radius-chip: 4px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-frame: 20px; /* the hero frame only: 20 - 8 inset = the panel's 12 */
+
+  --ease-ui: cubic-bezier(0.25, 0.46, 0.45, 0.94); /* hover, colour */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, state */
 }
 
 :root {
   color-scheme: dark;
+  --d-1: 120ms;
+  --d-2: 240ms;
+  --d-3: 400ms;
+  --d-wash: 1600ms;
 }
 
 html {
-  background: var(--color-app);
-  color: var(--color-fg);
+  background: var(--color-page);
+  color: var(--color-ink-1);
   font-family: var(--font-sans);
-  scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
+}
+
+/* In the base layer, so a utility on the element still wins. */
+@layer base {
+  h1,
+  h2,
+  h3,
+  blockquote {
+    text-wrap: balance;
+  }
+  p,
+  li,
+  dd,
+  figcaption {
+    text-wrap: pretty;
+  }
+  /* the fixed nav is 64px; every anchor lands clear of it */
+  [id] {
+    scroll-margin-top: 80px;
+  }
+  /* A grooved section's heading sits its top padding (72 / 96 / 112px) below the groove, so
+   * landing the section 80px down left up to 128px of nothing under the bar. These land the
+   * heading 48px under the bar at every width (the close, which opens deeper, a little lower; the
+   * questions' sticky heading stops at 112 anyway). Decisions and Anywhere open at 64 / 48 / 40
+   * and keep the 80. */
+  main > section.groove[id] {
+    scroll-margin-top: 40px;
+  }
+  @media (min-width: 640px) {
+    main > section.groove[id] {
+      scroll-margin-top: 16px;
+    }
+  }
+  @media (min-width: 1024px) {
+    main > section.groove[id] {
+      scroll-margin-top: 0;
+    }
+  }
+}
+
+/* A utility, so it outranks the `font` shorthand of a .t-* class on the same
+ * element (the shorthand resets font-variant-numeric). */
+@utility tnum {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Geist Mono's `calt` merges symbol runs (`--`, `->`) into single wide
@@ -74,12 +134,12 @@ html {
 
 /* Visible keyboard focus everywhere; never remove without replacing. */
 :focus-visible {
-  outline: 2px solid var(--color-fg);
+  outline: 2px solid var(--color-ink-1);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 /* Everything below is a COMPONENT class, and it has to live in the
@@ -91,236 +151,396 @@ html {
  * caller already assumes. */
 @layer components {
   /* ---------------------------------------------------------------- *
-   * Type
+   * Type: the marketing layer is set only through these. Weight 500 is
+   * the ceiling; 600 belongs to product UI. The `font` shorthand resets
+   * font-variant-numeric, so the mono pair declares it after `font`.
    * ---------------------------------------------------------------- */
 
-  .h-display {
-    font-weight: 600;
-    letter-spacing: -0.045em;
-    line-height: 1;
-    text-wrap: balance;
+  .t-display-xl {
+    font: 500 40px/44px var(--font-sans);
+    letter-spacing: -0.032em;
+    color: var(--color-ink-1);
   }
-  .h-section {
-    font-weight: 600;
-    letter-spacing: -0.035em;
-    line-height: 1.06;
-    text-wrap: balance;
+  .t-display {
+    font: 500 32px/36px var(--font-sans);
+    letter-spacing: -0.025em;
+    color: var(--color-ink-1);
   }
-  .label {
-    font: 500 11.5px/1.2 var(--font-mono);
-    letter-spacing: 0.02em;
-    color: var(--color-muted);
+  .t-title-l {
+    font: 500 28px/34px var(--font-sans);
+    letter-spacing: -0.022em;
+    color: var(--color-ink-1);
   }
-  .lede {
-    font-size: 1.125rem;
-    line-height: 1.6;
-    color: var(--color-muted);
-    text-wrap: pretty;
+  .t-quote {
+    font: 400 20px/30px var(--font-sans);
+    letter-spacing: -0.01em;
+    color: var(--color-ink-3);
+  }
+  .t-lead {
+    font: 400 18px/28px var(--font-sans);
+    letter-spacing: -0.005em;
+    color: var(--color-ink-3);
+  }
+  .t-title {
+    font: 500 18px/26px var(--font-sans);
+    letter-spacing: -0.01em;
+    color: var(--color-ink-1);
+  }
+  .t-body {
+    font: 400 15px/24px var(--font-sans);
+    color: var(--color-ink-3);
+  }
+  .t-small {
+    font: 400 13px/20px var(--font-sans);
+    color: var(--color-ink-3);
+  }
+  .t-mono {
+    font: 400 12px/20px var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
+    color: var(--color-ink-2);
+  }
+  .t-mono-s {
+    font: 400 12px/16px var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
+    color: var(--color-ink-4);
+  }
+  @media (min-width: 640px) {
+    .t-display-xl {
+      font-size: 56px;
+      line-height: 60px;
+      letter-spacing: -0.038em;
+    }
+    .t-display {
+      font-size: 40px;
+      line-height: 44px;
+      letter-spacing: -0.028em;
+    }
+    .t-title-l {
+      font-size: 32px;
+      line-height: 40px;
+      letter-spacing: -0.025em;
+    }
+    .t-quote {
+      font-size: 24px;
+      line-height: 34px;
+      letter-spacing: -0.012em;
+    }
+    .t-lead {
+      font-size: 20px;
+      line-height: 30px;
+      letter-spacing: -0.01em;
+    }
+    .t-title {
+      font-size: 20px;
+      line-height: 28px;
+      letter-spacing: -0.012em;
+    }
+    .t-mono {
+      font-size: 13px;
+      line-height: 22px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .t-display-xl {
+      font-size: 72px;
+      line-height: 72px;
+      letter-spacing: -0.04em;
+    }
+    .t-display {
+      font-size: 48px;
+      line-height: 52px;
+      letter-spacing: -0.03em;
+    }
+  }
+
+  /* the name beside the mark in the nav and the footer: a one-off */
+  .wordmark {
+    font: 500 15px/20px var(--font-sans);
+    letter-spacing: -0.01em;
+    color: var(--color-ink-1);
+  }
+
+  /* a link inside running text */
+  .link {
+    color: var(--color-ink-1);
+    text-decoration-line: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.3);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+    transition: text-decoration-color var(--d-1) var(--ease-ui);
+  }
+  .link:hover {
+    text-decoration-color: rgba(255, 255, 255, 0.6);
   }
 
   /* ---------------------------------------------------------------- *
-   * The frame: one column with hairline sides; sections meet at a rule
-   * with a + at each end
+   * The column: 1200px of content on a 12-column grid (x=120 to 1320 at
+   * 1440). The grid exists only from 1024px; below it, blocks stack.
    * ---------------------------------------------------------------- */
 
-  .frame {
-    position: relative;
-    max-width: 75rem;
-    margin: 0 auto;
-    border-left: 1px solid var(--color-hairline);
-    border-right: 1px solid var(--color-hairline);
+  .wrap {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 1296px;
+    padding-inline: 24px;
   }
-  .cell {
-    position: relative;
-    border-top: 1px solid var(--color-hairline);
+  .grid-12 {
+    display: block;
   }
-  .cell::before,
-  .cell::after {
+  @media (min-width: 640px) {
+    .wrap {
+      padding-inline: 40px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .wrap {
+      padding-inline: 48px;
+    }
+    .grid-12 {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      column-gap: 24px;
+    }
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Surfaces. No ambient light: depth is the fill ladder, a flat 1px top
+   * highlight on product objects, and one drop shadow (.window).
+   * ---------------------------------------------------------------- */
+
+  .card {
+    position: relative;
+    border-radius: 12px;
+    background: var(--color-raise-1);
+    border: 1px solid var(--color-edge-2);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  }
+  .card-on-band {
+    background: var(--color-raise-2);
+  }
+  .fragment {
+    position: relative;
+    border-radius: 12px;
+    background: var(--color-product);
+    border: 1px solid var(--color-edge-2);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  }
+  /* the top highlight is drawn ABOVE the children: an inset shadow on the
+   * box itself would sit under their fills */
+  .fragment::after,
+  .hero-frame::after {
     content: "";
     position: absolute;
-    top: -6px;
-    width: 11px;
-    height: 11px;
-    background:
-      linear-gradient(var(--color-line-2), var(--color-line-2)) center / 11px 1px no-repeat,
-      linear-gradient(var(--color-line-2), var(--color-line-2)) center / 1px 11px no-repeat;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    pointer-events: none;
     z-index: 1;
   }
-  .cell::before {
-    left: -6px;
+  /* no outer ring: the mask would clip it */
+  .hero-frame {
+    position: relative;
+    overflow: hidden;
+    border-radius: 20px;
+    background: var(--color-raise-1);
+    border: 1px solid var(--color-edge-2);
+    -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
+    mask-image: linear-gradient(to bottom, #000 72%, transparent);
   }
-  .cell::after {
-    right: -6px;
+  .window {
+    border-radius: 12px;
+    background: var(--color-raise-2);
+    border: 1px solid var(--color-edge-3);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.7),
+      0 24px 48px -12px rgba(0, 0, 0, 0.72),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
-  /* inner grids: cells divided by hairlines */
-  .grid-lines > * {
-    border-color: var(--color-hairline);
+  .well {
+    border-radius: 8px;
+    background: var(--color-page);
+    border: 1px solid var(--color-edge-2);
   }
 
   /* ---------------------------------------------------------------- *
-   * Controls
+   * Controls. No button carries elevation; the micro-shadows are part of
+   * the recipe. Hover is a fill step, never a lift.
    * ---------------------------------------------------------------- */
 
   .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    height: 2.5rem;
-    padding: 0 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    line-height: 1;
+    gap: 8px;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 9999px;
+    font: 500 15px/20px var(--font-sans);
     white-space: nowrap;
+    /* colour too: the nav's button changes variant in the close, and the text has to cross with
+     * the fill, or it shows light on light for a frame */
     transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease,
-      color 0.15s ease;
-  }
-  .btn-primary {
-    background: #ededef;
-    color: #0a0a0b;
-  }
-  .btn-primary:hover {
-    background: #ffffff;
-  }
-  .btn-ghost {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--color-line);
-    color: var(--color-fg);
-  }
-  .btn-ghost:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: var(--color-line-2);
+      background-color var(--d-1) var(--ease-ui),
+      box-shadow var(--d-1) var(--ease-ui),
+      color var(--d-1) var(--ease-ui);
   }
   .btn-sm {
-    height: 2rem;
-    padding: 0 0.75rem;
-    font-size: 0.8125rem;
+    height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
   }
-
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    height: 1.9rem;
-    padding: 0 0.8rem 0 0.35rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-line);
-    background: rgba(255, 255, 255, 0.03);
-    font-size: 0.8125rem;
-    color: var(--color-body);
-    transition: border-color 0.15s ease;
+  .btn-primary {
+    background: var(--color-ink-1);
+    color: #08090a;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.6),
+      0 1px 2px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.1);
   }
-  .pill:hover {
-    border-color: var(--color-line-2);
+  .btn-primary:hover {
+    background: #fff;
   }
-  .pill b {
-    display: inline-flex;
-    align-items: center;
-    height: 1.35rem;
-    padding: 0 0.5rem;
-    border-radius: 999px;
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-ink-1);
+    box-shadow:
+      inset 0 0 0 1px var(--color-edge-2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 0 0 1px rgba(0, 0, 0, 0.6);
+  }
+  .btn-secondary:hover {
     background: rgba(255, 255, 255, 0.08);
-    font: 500 11px/1 var(--font-mono);
-    color: var(--color-fg);
   }
 
-  .card {
-    position: relative;
-    border-radius: 0.75rem;
-    background: var(--color-panel);
-    border: 1px solid var(--color-line);
+  /* a segmented control: the active segment fills, nothing slides */
+  .seg {
+    display: inline-flex;
+    height: 36px;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: inset 0 0 0 1px var(--color-edge-2);
+  }
+  .seg-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 14px;
+    border-radius: 9999px;
+    font: 500 13px/20px var(--font-sans);
+    color: var(--color-ink-3);
+    transition:
+      background-color var(--d-2) var(--ease-out),
+      color var(--d-1) var(--ease-ui);
+  }
+  .seg-item[aria-selected="true"] {
+    background: var(--color-raise-3);
+    color: var(--color-ink-1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 0 0 1px var(--color-edge-2),
+      0 1px 2px rgba(0, 0, 0, 0.4);
   }
 
+  .faq summary {
+    list-style: none;
+  }
   .faq summary::-webkit-details-marker {
     display: none;
   }
-
-  /* Scroll reveal (progressive enhancement — see reveal.tsx). */
-  .reveal-pre {
-    opacity: 0;
-    transform: translateY(8px);
-    transition:
-      opacity 0.6s cubic-bezier(0.21, 0.47, 0.32, 0.98),
-      transform 0.6s cubic-bezier(0.21, 0.47, 0.32, 0.98);
-  }
-  .reveal-pre.reveal-in {
-    opacity: 1;
-    transform: none;
-  }
-
-  @keyframes rise {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-  .rise {
-    animation: rise 0.7s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
-  }
-  .rise-1 {
-    animation-delay: 0.08s;
-  }
-  .rise-2 {
-    animation-delay: 0.16s;
-  }
-  .rise-3 {
-    animation-delay: 0.3s;
+  /* The answers run two to six lines, and `pretty` in Chromium only rescues a one-word last line:
+   * "you keep them." still set at 13% of the measure. Balanced, an answer's lines run at about one
+   * length. Only here: every other paragraph keeps the global `pretty`. */
+  .faq > p {
+    text-wrap: balance;
   }
 
   /* ---------------------------------------------------------------- *
-   * Product pictures: the hand-built windows of the app (components/demo)
+   * Section dividers: a full-bleed groove (1px black over 1px white at
+   * 6%), and the one contrasting band the page ends on
    * ---------------------------------------------------------------- */
 
-  .demo-fit {
-    container-type: inline-size;
-    background: var(--color-panel);
-    --demo-scale: 0.27;
+  .groove {
+    position: relative;
   }
-  @media (min-width: 640px) {
-    .demo-fit {
-      --demo-scale: 0.45;
+  .groove::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    background: #000;
+  }
+  .groove::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 1px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .band {
+    background: var(--color-raise-1);
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The hero's product: the Apps page on a fixed 1280x800 canvas, zoomed
+   * to the frame (components/demo). Script writes --demo-scale on
+   * .hero-shot from the frame's measured width; the values here are what
+   * the canvas renders at before that, and without script.
+   * ---------------------------------------------------------------- */
+
+  .hero-shot {
+    --demo-scale: 0.775;
+  }
+  @media (min-width: 1280px) {
+    .hero-shot {
+      --demo-scale: 0.975;
     }
   }
-  @media (min-width: 1024px) {
-    .demo-fit {
-      --demo-scale: 0.72;
+  @media (min-width: 1312px) {
+    .hero-shot {
+      --demo-scale: 1;
     }
   }
-  @supports (opacity: calc(100cqw / 1280px)) {
-    .demo-fit {
-      --demo-scale: calc(100cqw / 1280px);
+  @supports (opacity: calc(100vw / 1280px)) {
+    .hero-shot {
+      --demo-scale: min(1, calc((100vw - 32px) / 1280px));
     }
   }
   .demo-canvas {
-    transform: translate(-50%, -50%) scale(var(--demo-scale));
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1280px;
+    height: 800px;
+    zoom: var(--demo-scale);
   }
-  @keyframes demo-pulse {
-    0%,
-    100% {
-      opacity: 1;
+  @supports not (zoom: 1) {
+    .demo-canvas {
+      zoom: normal;
+      transform: scale(var(--demo-scale));
+      transform-origin: 0 0;
     }
-    50% {
-      opacity: 0.4;
-    }
-  }
-  .demo-dot-pulse {
-    animation: demo-pulse 1.6s ease-in-out infinite;
   }
 
-  /* the story the hero tells once, in CSS so the prerendered page plays it
-   * without waiting for script: the request is sent, the app arrives at the
-   * top of the table building, then runs */
+  /* The story the hero tells once: the request is sent, the app arrives at
+   * the top of the table building, then runs. CSS with delays (--at, and
+   * --for for the typing dots), paused until Hero sets data-play on
+   * .hero-shot. Reduced motion, and the <noscript> copy of the same rule in
+   * the hero, jump every piece to its last frame. */
   @keyframes seq-in {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
@@ -342,92 +562,15 @@ html {
       max-height: 60px;
     }
   }
-  .seq {
-    animation: seq-in 0.5s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
-    animation-delay: var(--at, 0s);
-  }
-  .seq-out {
-    animation: seq-out 0.3s ease both;
-    animation-delay: var(--at, 0s);
-  }
-  .seq-row {
-    overflow: hidden;
-    animation: row-in 0.6s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
-    animation-delay: var(--at, 0s);
-  }
-  /* a status that changes: two words stacked, the second takes over */
-  .seq-swap {
-    display: inline-grid;
-  }
-  .seq-swap > * {
-    grid-area: 1 / 1;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .rise,
-    .seq,
-    .seq-row {
-      animation: none;
-    }
-    .seq-out {
-      animation-duration: 0.001s;
-      animation-delay: 0s;
-    }
-    .demo-dot-pulse {
-      animation: none;
-    }
-  }
-
-  /* the phone the request is sent from */
-  .phone {
-    width: 17rem;
-    border-radius: 2.6rem;
-    padding: 0.5rem;
-    background: #1b1b1e;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow:
-      0 0 0 1px #000,
-      0 30px 80px -20px rgba(0, 0, 0, 0.9);
-  }
-  .phone-screen {
-    position: relative;
-    border-radius: 2.15rem;
-    overflow: hidden;
-    background: #0d0d0f;
-    height: 31rem;
-    display: flex;
-    flex-direction: column;
-  }
-  .phone-head {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 2.4rem 1rem 0.8rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-    background: #121214;
-  }
-  .phone-msgs {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    padding: 0.9rem 0.75rem;
-  }
-  .msg-wrap {
-    display: flex;
-    flex-direction: column;
-    margin-top: 0.45rem;
-  }
   @keyframes grow-in {
     from {
       opacity: 0;
       max-height: 0;
-      margin-top: 0;
-      transform: translateY(6px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
-      max-height: 8rem;
-      margin-top: 0.45rem;
+      max-height: 4rem;
       transform: none;
     }
   }
@@ -435,23 +578,50 @@ html {
     0% {
       opacity: 0;
       max-height: 0;
-      margin-top: 0;
     }
     15%,
     85% {
       opacity: 1;
-      max-height: 3rem;
-      margin-top: 0.45rem;
+      max-height: 2rem;
     }
     100% {
       opacity: 0;
       max-height: 0;
-      margin-top: 0;
     }
+  }
+  @keyframes wash {
+    from {
+      background-color: var(--wash);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+  @keyframes demo-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  .seq {
+    animation: seq-in var(--d-2) var(--ease-out) both;
+    animation-delay: var(--at, 0s);
+  }
+  .seq-out {
+    animation: seq-out 160ms var(--ease-ui) both;
+    animation-delay: var(--at, 0s);
+  }
+  .seq-row {
+    overflow: hidden;
+    animation: row-in var(--d-3) var(--ease-out) both;
+    animation-delay: var(--at, 0s);
   }
   .seq-grow {
     overflow: hidden;
-    animation: grow-in 0.5s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
+    animation: grow-in var(--d-2) var(--ease-out) both;
     animation-delay: var(--at, 0s);
   }
   .seq-life {
@@ -459,115 +629,34 @@ html {
     animation: life var(--for, 1s) ease both;
     animation-delay: var(--at, 0s);
   }
+  .seq-wash {
+    --wash: color-mix(in oklch, oklch(0.94 0.002 270) 8%, transparent);
+    animation: wash var(--d-wash) var(--ease-out) both;
+    animation-delay: var(--at, 0s);
+  }
+  /* the Building dot: exactly two cycles, never infinite */
+  .seq-pulse {
+    animation: demo-pulse 1s ease-in-out 2 both;
+    animation-delay: var(--at, 0s);
+  }
+  /* a value that changes: both stacked in one grid area, the second takes over */
+  .seq-swap {
+    display: inline-grid;
+  }
+  .seq-swap > * {
+    grid-area: 1 / 1;
+  }
+  .hero-shot:not([data-play]) :is(.seq, .seq-out, .seq-row, .seq-grow, .seq-life, .seq-wash, .seq-pulse) {
+    animation-play-state: paused;
+  }
+  /* running as well as instant: a paused 1ms animation holds its FIRST
+   * frame, and the play gate may not have fired yet */
   @media (prefers-reduced-motion: reduce) {
-    .seq-grow {
-      animation: none;
-    }
-    .seq-life {
-      display: none;
-    }
-  }
-  .bubble {
-    max-width: 85%;
-    padding: 0.5rem 0.75rem;
-    border-radius: 1.1rem;
-    font-size: 0.82rem;
-    line-height: 1.35;
-  }
-  .bubble-you {
-    align-self: flex-end;
-    background: #ededef;
-    color: #0a0a0b;
-    border-bottom-right-radius: 0.3rem;
-  }
-  .bubble-house {
-    align-self: flex-start;
-    background: #1f1f23;
-    color: #e4e4e7;
-    border-bottom-left-radius: 0.3rem;
-  }
-  .phone-input {
-    margin: 0 0.7rem 0.9rem;
-    height: 2.2rem;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    align-items: center;
-    padding: 0 0.9rem;
-    font-size: 0.8rem;
-    color: #8e8e96;
-  }
-  .typing {
-    display: inline-flex;
-    gap: 3px;
-    padding: 0.65rem 0.8rem;
-  }
-  .typing i {
-    width: 5px;
-    height: 5px;
-    border-radius: 999px;
-    background: #8e8e96;
-    animation: demo-pulse 1s ease-in-out infinite;
-  }
-  .typing i:nth-child(2) {
-    animation-delay: 0.15s;
-  }
-  .typing i:nth-child(3) {
-    animation-delay: 0.3s;
-  }
-
-  /* the backdrop the hero's product sits on: a fine grid fading out */
-  .stage-grid {
-    background-image:
-      linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-    background-size: 56px 56px;
-    mask-image: radial-gradient(ellipse 75% 70% at 50% 40%, #000 30%, transparent 100%);
-    -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 40%, #000 30%, transparent 100%);
-  }
-
-  /* feature tabs that advance by themselves: a progress line under the active one */
-  .tab-progress {
-    position: absolute;
-    left: 0;
-    bottom: -1px;
-    height: 1px;
-    background: var(--color-fg);
-    transform-origin: left;
-  }
-  @keyframes tab-fill {
-    from {
-      transform: scaleX(0);
-    }
-    to {
-      transform: scaleX(1);
-    }
-  }
-
-  @keyframes tab-grow {
-    from {
-      transform: scaleY(0);
-    }
-    to {
-      transform: scaleY(1);
-    }
-  }
-
-  /* moving dots along the house's links */
-  @keyframes travel {
-    from {
-      offset-distance: 0%;
-      opacity: 0;
-    }
-    10% {
-      opacity: 1;
-    }
-    90% {
-      opacity: 1;
-    }
-    to {
-      offset-distance: 100%;
-      opacity: 0;
+    .hero-shot :is(.seq, .seq-out, .seq-row, .seq-grow, .seq-life, .seq-wash, .seq-pulse) {
+      animation-duration: 1ms !important;
+      animation-delay: 0s !important;
+      animation-iteration-count: 1 !important;
+      animation-play-state: running !important;
     }
   }
 }
@@ -631,8 +720,8 @@ html {
     display: grid;
     place-items: center;
     border-radius: 20px;
-    background: var(--color-panel);
-    border: 1px solid var(--color-line);
+    background: var(--color-raise-1);
+    border: 1px solid var(--color-edge-2);
     transition:
       transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
       border-color 0.45s ease;
@@ -643,17 +732,18 @@ html {
     height: 42px;
     object-fit: contain;
   }
+  /* a name is a label, so it is sans */
   .uv-label {
     position: absolute;
     left: 0;
     top: 0;
     z-index: 6;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: var(--color-fg);
-    font: 500 12px/1.2 var(--font-mono);
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--color-ink-1);
+    font: 500 13px/20px var(--font-sans);
     white-space: nowrap;
-    color: var(--color-app);
+    color: var(--color-page);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
@@ -666,7 +756,7 @@ html {
   }
   .uv-t[data-on] .uv-glass {
     transform: translateY(-5px) scale(1.08);
-    border-color: var(--color-line-2);
+    border-color: var(--color-edge-3);
   }
   .uv-wall[data-sel] .uv-t:not([data-on]) {
     opacity: 0.4;
@@ -675,7 +765,7 @@ html {
     outline: none;
   }
   .uv-t:focus-visible .uv-glass {
-    border-color: var(--color-fg);
+    border-color: var(--color-ink-1);
   }
   .uv[data-mode="still"] .uv-plane {
     display: flex;

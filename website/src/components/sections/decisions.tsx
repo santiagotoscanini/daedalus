@@ -1,226 +1,125 @@
-import type { ReactNode } from "react";
-import { Logo } from "~/components/logo";
-import { SectionHeading } from "~/components/ui/section-heading";
+import type { ComponentType } from "react";
 
-/** The tree, already cut: the six choices every app would otherwise make for itself, each answered
- * once by the platform and drawn as the small piece of UI it becomes.
+import { Databases, Models, Reach, SignIn } from "~/components/demo/fragments";
+import { SectionHeader } from "~/components/ui/section-header";
+
+/** The tree, already cut, as a ledger: four choices every app would otherwise make for itself, the
+ * usual alternatives struck through, and the answer the platform gives once, with the piece of the
+ * app it becomes beside it (demo/fragments.tsx).
  *
  * Each answer is what the engine does today (ARCHITECTURE.md, the apps registry): Pocket ID's
  * passkeys as one sign-in for the house; a database per app on the shared Postgres, inside the
  * snapshotted state; one LiteLLM key per app in front of the house's model server and the frontier;
- * the box's own build on a push; the three exposure rungs with the wildcard certificate and DNS;
- * every change a commit, with a failed rebuild putting the previous bytes back. */
+ * the three exposure rungs with the wildcard certificate and DNS. How the box builds and how a
+ * change is undone are How's to show. The struck alternatives are generic categories and name no
+ * vendor.
+ *
+ * A real table. From 1024px it keeps table layout, so its semantics are never in doubt: four equal
+ * columns whose padding (COL) puts each column's content on a three-column span of the page grid at
+ * any width. Below 1024px the rows stack and the head row is left to screen readers. */
 
 interface Decision {
   q: string;
+  usual: string[];
   title: string;
   text: string;
-  art: ReactNode;
+  Piece: ComponentType<{ className?: string }>;
 }
 
 const DECISIONS: Decision[] = [
   {
     q: "How do people sign in?",
+    usual: ["A users table in every app", "A hosted sign-in service", "Magic links by email"],
     title: "One sign-in for the house",
     text: "Passkeys, through the house’s own identity provider. Every app gets it without writing a login.",
-    art: <SignIn />,
+    Piece: SignIn,
   },
   {
     q: "Where does the data live?",
+    usual: ["A managed database in the cloud", "SQLite in a volume", "Files on disk"],
     title: "Postgres, on the box",
     text: "A database for each app on one cluster, snapshotted every hour with the rest of the house.",
-    art: <Databases />,
+    Piece: Databases,
   },
   {
     q: "How does it reach a model?",
+    usual: ["A provider key in every app", "One provider, hard-coded", "A model baked into the image"],
     title: "One key for every model",
     text: "A gateway in front of the models on your own GPU and the frontier ones, so an app never chooses a provider.",
-    art: <Models />,
-  },
-  {
-    q: "How does it ship?",
-    title: "Push to main",
-    text: "The box builds the image itself, keeps it in its own registry and deploys it. There is no CI to set up.",
-    art: <Builds />,
+    Piece: Models,
   },
   {
     q: "Who can reach it?",
-    title: "A switch, not a project",
+    usual: ["Port forwarding on the router", "A VPN for every guest", "A second host for the public part"],
+    title: "A switch",
     text: "Off, the house, or the internet. The address, the certificate and the DNS follow the switch.",
-    art: <Reach />,
-  },
-  {
-    q: "What if it’s wrong?",
-    title: "Every change is a commit",
-    text: "A change that fails to build puts the machine back by itself. One that builds can be reverted in one step.",
-    art: <Commits />,
+    Piece: Reach,
   },
 ];
 
+const HEAD = ["Question", "Every app would otherwise choose from", "Decided once", "In the app"];
+
+/** Each column is a quarter of the width W, and a three-column span of the page grid is W/4 − 18px
+ * wide with 24px gutters. Padding of 18 / 6+12 / 12+6 / 18 lands every content box on its span. */
+const COL = ["lg:pr-4.5", "lg:pl-1.5 lg:pr-3", "lg:pl-3 lg:pr-1.5", "lg:pl-4.5"];
+/** Row padding and alignment, on the table's own boxes from 1024px; below, the row carries it. */
+const AT_LG = "lg:py-6 lg:align-top";
+/** The fragment's top edge sits on the cap line of the row's first text line, 6px into its 24px
+ * line box, so it does not ride high against the question and answer beside it. */
+const AT_LG_PIECE = "lg:pb-6 lg:pt-[30px] lg:align-top";
+
 export function Decisions() {
   return (
-    <section id="platform" aria-labelledby="platform-title" className="cell scroll-mt-16">
-      <div className="px-6 pb-14 pt-24 sm:px-12 sm:pt-32">
-        <SectionHeading
+    <section id="platform" aria-labelledby="platform-title" className="pb-18 pt-10 sm:pb-24 sm:pt-12 lg:pb-28 lg:pt-16">
+      <div className="wrap">
+        <SectionHeader
           id="platform-title"
-          label="The platform"
-          title={
-            <>
-              Every decision, <span className="text-muted">made before the first prompt.</span>
-            </>
-          }
-          sub="Before writing anything that matters, an engineer walks a tree of choices. daedalus makes them once, for every app, so all that’s left to talk about is what you want."
+          title="Every decision, made before the first prompt."
+          lead="Before writing anything that matters, an engineer walks a tree of choices. daedalus makes them once, for every app, so all that’s left to talk about is what you want."
         />
-      </div>
-      <div className="grid border-t border-hairline sm:grid-cols-2 lg:grid-cols-3">
-        {DECISIONS.map((d, i) => (
-          <article
-            key={d.title}
-            className={`flex flex-col border-hairline p-6 sm:p-8 ${i % 3 !== 2 ? "lg:border-r" : ""} ${i % 2 === 0 ? "sm:max-lg:border-r" : ""} ${i < 3 ? "lg:border-b" : ""} ${i < 4 ? "max-lg:border-b" : ""} max-sm:border-b`}
-          >
-            <div className="grid h-44 place-items-center rounded-lg border border-hairline bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.035),transparent_70%)]">
-              {d.art}
-            </div>
-            <p className="mt-6 font-mono text-[11.5px] text-muted-2">{d.q}</p>
-            <h3 className="mt-2 text-[17px] font-medium tracking-[-0.01em]">{d.title}</h3>
-            <p className="mt-2 text-[14.5px] leading-relaxed text-muted">{d.text}</p>
-          </article>
-        ))}
+
+        <table aria-labelledby="platform-title" className="mt-10 w-full table-fixed text-left max-lg:block lg:mt-16">
+          <thead className="max-lg:sr-only">
+            <tr className="border-b border-edge-2">
+              {HEAD.map((h, i) => (
+                <th key={h} scope="col" className={`t-small h-10 text-left font-medium text-ink-4 ${COL[i]}`}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="max-lg:block">
+            {DECISIONS.map((d) => (
+              <tr key={d.q} className="border-b border-edge-1 max-lg:block max-lg:py-6">
+                {/* stacked, the question is the row's small label and the decided title its one
+                    head; at body size the two competed. The type classes take no breakpoint
+                    variants, so each size is its own span and the other is display:none */}
+                <th scope="row" className={`text-left max-lg:block ${COL[0]} ${AT_LG}`}>
+                  <span className="t-small block font-medium text-ink-4 lg:hidden">{d.q}</span>
+                  <span className="t-body block font-medium text-ink-2 max-lg:hidden">{d.q}</span>
+                </th>
+                <td className={`max-lg:mt-3 max-lg:block ${COL[1]} ${AT_LG}`}>
+                  <ul className="flex flex-wrap gap-x-5 gap-y-1 lg:block">
+                    {d.usual.map((u) => (
+                      <li key={u} className="t-body text-ink-4">
+                        <s className="decoration-white/28 decoration-1">{u}</s>
+                      </li>
+                    ))}
+                  </ul>
+                </td>
+                <td className={`max-lg:mt-4 max-lg:block ${COL[2]} ${AT_LG}`}>
+                  <p className="t-body font-medium text-ink-1">{d.title}</p>
+                  <p className="t-body mt-1">{d.text}</p>
+                </td>
+                {/* the product needs the room: from 640px only */}
+                <td className={`max-sm:hidden sm:max-lg:mt-5 sm:max-lg:block ${COL[3]} ${AT_LG_PIECE}`}>
+                  <d.Piece className="w-full max-w-[282px]" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
-  );
-}
-
-/* ---------------------------------------------------------------- *
- * The small pictures
- * ---------------------------------------------------------------- */
-
-function SignIn() {
-  return (
-    <div className="w-[13.5rem] rounded-lg border border-line bg-panel p-4 text-center">
-      <div className="flex justify-center">
-        <Logo size={22} />
-      </div>
-      <p className="mt-2 text-[13px] font-medium">Sign in to almacen</p>
-      <p className="mt-3 flex h-8 items-center justify-center gap-2 rounded-md bg-fg text-[12px] font-medium text-app">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <circle cx="9" cy="8" r="4" />
-          <path d="M2 21c0-4 3-6 7-6M17 11v10M17 11a3 3 0 1 1 0 .01M15 17h4" />
-        </svg>
-        Continue with a passkey
-      </p>
-      <p className="mt-2.5 text-[11px] text-muted-2">id.toscanini.me</p>
-    </div>
-  );
-}
-
-function Databases() {
-  const rows: Array<[string, string]> = [
-    ["almacen", "12 MB"],
-    ["hermes", "1.4 GB"],
-    ["sankofa", "380 MB"],
-    ["voyra", "96 MB"],
-  ];
-  return (
-    <div className="w-[15rem] overflow-hidden rounded-lg border border-line bg-panel font-mono text-[11.5px]">
-      <p className="flex justify-between border-b border-line px-3 py-2 text-muted-2">
-        <span>database</span>
-        <span>size</span>
-      </p>
-      {rows.map(([n, s], i) => (
-        <p key={n} className={`flex items-center justify-between px-3 py-[0.42rem] ${i === 0 ? "bg-white/[0.04] text-fg" : "text-muted"}`}>
-          <span className="flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-status-ok" aria-hidden />
-            {n}
-          </span>
-          <span>{s}</span>
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function Models() {
-  return (
-    <div className="w-[15.5rem] font-mono text-[11.5px]">
-      <p className="rounded-t-lg border border-line bg-panel px-3 py-2 text-muted">
-        <span className="text-muted-2">LITELLM_API_KEY=</span>sk-••••••••
-      </p>
-      <div className="rounded-b-lg border border-t-0 border-line">
-        {[
-          ["smart", "gaming PC"],
-          ["voice", "gaming PC"],
-          ["frontier", "the cloud"],
-        ].map(([m, where]) => (
-          <p key={m} className="flex items-center justify-between px-3 py-[0.45rem] text-muted">
-            <span className="text-fg">{m}</span>
-            <span className="flex items-center gap-1.5">
-              <span className={`size-1.5 rounded-full ${where === "the cloud" ? "bg-muted-2" : "bg-status-ok"}`} aria-hidden />
-              {where}
-            </span>
-          </p>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Builds() {
-  return (
-    <div className="w-[15rem] space-y-1.5 font-mono text-[11.5px]">
-      {[
-        ["build", "38s"],
-        ["checks", "13s"],
-        ["push", "1s"],
-        ["deploy", "6s"],
-      ].map(([s, t]) => (
-        <p key={s} className="flex items-center justify-between rounded-md border border-line bg-panel px-3 py-1.5">
-          <span className="flex items-center gap-2">
-            <span className="text-status-ok">✓</span>
-            <span className="text-fg">{s}</span>
-          </span>
-          <span className="text-muted-2">{t}</span>
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function Reach() {
-  return (
-    <div className="w-[15rem]">
-      <div className="grid grid-cols-3 rounded-lg border border-line bg-panel p-1 text-center text-[12px]">
-        <span className="rounded-md py-1.5 text-muted">Off</span>
-        <span className="rounded-md py-1.5 text-muted">House</span>
-        <span className="rounded-md bg-white/[0.09] py-1.5 font-medium text-fg">Internet</span>
-      </div>
-      <p className="mt-3 flex items-center justify-center gap-1.5 font-mono text-[11.5px] text-muted">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" aria-hidden>
-          <rect x="5" y="11" width="14" height="10" rx="2" />
-          <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-        </svg>
-        almacen.toscanini.me
-      </p>
-    </div>
-  );
-}
-
-function Commits() {
-  return (
-    <div className="w-[15.5rem] font-mono text-[11.5px]">
-      {[
-        ["e81d4c0", "Revert: the store’s page", true],
-        ["4f2a91c", "A page with the store’s hours", false],
-        ["a77c013", "hermes gets storage", false],
-      ].map(([sha, msg, hot]) => (
-        <p
-          key={sha as string}
-          className={`flex items-center gap-2.5 border-l px-3 py-[0.45rem] ${hot ? "border-fg text-fg" : "border-line text-muted"}`}
-        >
-          <span className="text-muted-2">{sha}</span>
-          <span className="truncate">{msg}</span>
-        </p>
-      ))}
-    </div>
   );
 }

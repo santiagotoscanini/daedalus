@@ -1,20 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Reveal } from "~/components/reveal";
 import { pageHead } from "~/site-head";
 
 /** /docs — the boundary document. A daedalus-managed machine rebuilds from
  * its config repo; this page inventories what every install still needs
  * OUTSIDE it: provider accounts, a router, two keys, and the steps that stay
- * steps. Same ledger register as the landing — hairline rows, mono labels,
- * no cards. The operator's own ledger (this box's ports, tokens, tunnels)
- * lives in the private config repo, not here. */
+ * steps. Same register as the landing's ledger: hairline rows, sans labels,
+ * no cards, on the landing's column. The operator's own ledger (this box's
+ * ports, tokens, tunnels) lives in the private config repo, not here. */
 
 export const Route = createFileRoute("/docs")({
   component: DocsPage,
   head: () =>
     pageHead({
       path: "/docs",
-      title: "Daedalus docs. What stays outside the repo.",
+      title: "daedalus docs: what stays outside the repo",
       description:
         "What a daedalus install still needs outside its config repo: a Cloudflare zone and tunnel, a router, GitHub, a mail relay, and two keys you cannot lose.",
     }),
@@ -25,12 +24,6 @@ export const Route = createFileRoute("/docs")({
  * ---------------------------------------------------------------- */
 
 type Tag = "re-issuable" | "keep safe" | "hand-made";
-
-const TAG_COLOR: Record<Tag, string> = {
-  "re-issuable": "#4ea87a",
-  "keep safe": "#e05252",
-  "hand-made": "#d9a441",
-};
 
 interface Row {
   name: string;
@@ -218,105 +211,84 @@ const SECTIONS: DocSection[] = [
  * Page
  * ---------------------------------------------------------------- */
 
+/** The custody tags carry no colour: colour on this site is for live state. "keep safe" is the one
+ * that costs data when ignored, so it takes the body emphasis (weight 500, one ink brighter). */
+function TagChip({ tag }: { tag: Tag }) {
+  return (
+    <span
+      className={`t-small mt-2 inline-flex h-6 items-center rounded-chip border border-edge-2 px-2 ${
+        tag === "keep safe" ? "font-medium text-ink-2" : ""
+      }`}
+    >
+      {tag}
+    </span>
+  );
+}
+
 function DocsPage() {
   return (
-    <main id="main" className="mx-auto max-w-4xl px-6 pb-32 pt-40">
-      <Reveal>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-2">
-          External setup
-        </p>
-        <h1 className="h-display mt-4 text-[clamp(2.6rem,5.5vw,4.2rem)]">
-          What stays <span className="text-muted">outside the repo.</span>
-        </h1>
-        <p className="mt-6 max-w-2xl text-pretty text-[16px] leading-relaxed text-muted">
+    <main id="main" className="wrap pb-32 pt-28 lg:pt-40">
+      <div className="max-w-[792px]">
+        <p className="t-small text-ink-4">External setup</p>
+        <h1 className="t-display mt-4">What stays outside the repo.</h1>
+        <p className="t-lead mt-6 max-w-[690px]">
           A daedalus-managed machine rebuilds from its config repo, except for these: the accounts,
           dashboards, two keys and one router that live outside git. Each is configured once, by
           hand. This page is what every install still needs.
         </p>
-      </Reveal>
 
-      {/* Jump list */}
-      <Reveal delay={0.1}>
-        <nav aria-label="Sections" className="mt-10 flex flex-wrap gap-x-5 gap-y-1.5">
+        {/* Jump list */}
+        <nav aria-label="Sections" className="mt-10 flex flex-wrap gap-x-5 gap-y-2">
           {SECTIONS.map((s) => (
-            <a
-              key={s.id}
-              href={`#${s.id}`}
-              className="font-mono text-[11px] uppercase tracking-[0.14em] text-dim transition-colors hover:text-accent"
-            >
+            <a key={s.id} href={`#${s.id}`} className="t-small link">
               {s.provider}
             </a>
           ))}
         </nav>
-      </Reveal>
 
-      {/* The ledger */}
-      <div className="mt-20 flex flex-col gap-20">
-        {SECTIONS.map((s) => (
-          <section key={s.id} id={s.id} className="scroll-mt-28">
-            <Reveal>
+        {/* The ledger */}
+        <div className="mt-24 flex flex-col gap-24">
+          {SECTIONS.map((s) => (
+            <section key={s.id} id={s.id}>
               <div className="flex items-baseline gap-4">
-                <h2 className="font-mono text-[13px] uppercase tracking-[0.16em] text-accent">
-                  {s.provider}
-                </h2>
-                <span className="h-px flex-1 bg-hairline" aria-hidden />
+                <h2 className="t-small text-ink-4">{s.provider}</h2>
+                <span className="h-px flex-1 bg-edge-1" aria-hidden />
               </div>
-              <h3 className="h-section mt-4 text-[1.75rem]">
-                {s.title}
-              </h3>
-              <p className="mt-3 max-w-2xl text-pretty text-[14.5px] leading-relaxed text-muted">
-                {s.blurb}
-              </p>
-            </Reveal>
+              <h3 className="t-title-l mt-4">{s.title}</h3>
+              <p className="t-body mt-3 max-w-[690px]">{s.blurb}</p>
 
-            <div className="mt-8">
-              {s.rows.map((row) => (
-                <Reveal key={row.name}>
-                  <div className="grid gap-2 border-t border-hairline py-5 sm:grid-cols-[13rem_1fr] sm:gap-8">
+              <div className="mt-8">
+                {s.rows.map((row) => (
+                  <div
+                    key={row.name}
+                    className="grid gap-2 border-t border-edge-1 py-5 sm:grid-cols-[13rem_1fr] sm:gap-8"
+                  >
                     <div>
-                      <p className="font-mono text-[13px] text-fg">{row.name}</p>
-                      {row.tag ? (
-                        <span
-                          className="mt-2 inline-flex rounded-full border px-2 py-px font-mono text-[9.5px] uppercase tracking-[0.1em]"
-                          style={{
-                            color: TAG_COLOR[row.tag],
-                            borderColor: `${TAG_COLOR[row.tag]}59`,
-                          }}
-                        >
-                          {row.tag}
-                        </span>
-                      ) : null}
+                      <p className="t-body font-medium text-ink-1">{row.name}</p>
+                      {row.tag ? <TagChip tag={row.tag} /> : null}
                     </div>
                     <div>
-                      <p className="text-pretty text-[14px] leading-relaxed text-fg/85">
-                        {row.body}
-                      </p>
-                      {row.via ? (
-                        <p className="mt-2 font-mono text-[11px] text-dim">↳ {row.via}</p>
-                      ) : null}
+                      <p className="t-body text-ink-2">{row.body}</p>
+                      {row.via ? <p className="t-mono-s mt-2">{row.via}</p> : null}
                     </div>
                   </div>
-                </Reveal>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
 
-      {/* Closing */}
-      <Reveal>
-        <div className="mt-24 border-t border-line-2 pt-8">
-          <p className="max-w-2xl text-pretty text-[14.5px] leading-relaxed text-muted">
+        {/* Closing */}
+        <div className="mt-24 border-t border-edge-3 pt-8">
+          <p className="t-body max-w-[690px]">
             The pattern, if you're building your own: when something can't be declared, declare
             <em> that it exists</em> — beside the stack that needs it, in the place a reader would
             look. A port forward lives in a registry no rebuild consumes; your config repo should
             carry its own copy of this page, filled in.
           </p>
-          <p className="mt-6 font-mono text-[11px] tracking-wide text-dim">
-            declared where possible, written down where not
-          </p>
+          <p className="t-small mt-6 text-ink-4">declared where possible, written down where not</p>
         </div>
-      </Reveal>
+      </div>
     </main>
   );
 }
