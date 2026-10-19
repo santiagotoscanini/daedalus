@@ -1,0 +1,397 @@
+/* ---------------------------------------------------------------- *
+ * Vercel, next (components/sections/vercel.tsx, vercel/drawing.tsx).
+ * FIG. 3, the one control under it, Pinch's card, then the note and
+ * the page's statement. The house state is the static frame;
+ * `data-at="vercel"` on .vc-fig moves the lights, `data-moved` on the
+ * card swaps the two rows that change, `data-back` shortens every fade
+ * for "Move it home".
+ * ---------------------------------------------------------------- */
+
+/* the intro's two sentences break only inside themselves: a line never ends one and starts the
+ * other (it used to balance into "…one family. Then a / cousin asks…") */
+.vc-sentence {
+  display: inline-block;
+}
+
+/* The drawing keeps a 16px gutter of its own rather than the wrap's. The wide one shows only where
+ * it fits at 1:1 (a 960 column, from a 992px viewport), so its hairlines always land on whole
+ * pixels; below that the narrow one runs as wide as Pinch's card under it (1:1 on a 390 phone),
+ * with strokes that keep their width wherever it scales. */
+.vc-draw {
+  container-type: inline-size;
+  padding-inline: 16px;
+}
+.vc-svg {
+  display: block;
+  margin-inline: auto;
+  width: 100%;
+  overflow: visible;
+}
+/* Heights rounded to a whole pixel wherever a drawing scales (the SVG letterboxes by under a pixel),
+ * so the card and every section below stay on the pixel grid. */
+.vc-wide {
+  display: none;
+  max-width: 960px;
+  height: 296px;
+}
+.vc-narrow {
+  max-width: 520px;
+  height: round(calc(min(100cqi, 520px) * 186 / 358), 1px);
+}
+/* the drawing's own strokes only: Pinch's icon inside it is drawn in 1024 units, and its strokes must scale
+ * with it (the mask's stroke, measured in path length, too) */
+.vc-narrow > :is(path, rect, circle),
+.vc-narrow > :is(.vc-s, .vc-f, .vc-slot) > * {
+  vector-effect: non-scaling-stroke;
+}
+/* the labels render at about 13px whatever the drawing's scale: 13 units at 1:1, fewer as it grows,
+ * more on the narrowest phones */
+.vc-narrow .fig-label {
+  font-size: 13px;
+}
+@container (max-width: 340px) {
+  .vc-narrow .fig-label {
+    font-size: 15.5px;
+  }
+}
+@container (min-width: 420px) {
+  .vc-narrow .fig-label {
+    font-size: 11px;
+  }
+}
+@container (min-width: 470px) {
+  .vc-narrow .fig-label {
+    font-size: 9.5px;
+  }
+}
+@container (min-width: 960px) {
+  .vc-wide {
+    display: block;
+  }
+  .vc-narrow {
+    display: none;
+  }
+}
+
+/* the inks: S structure, F faint; the box is the one subject stroke while Pinch runs on it */
+.vc-s {
+  stroke: var(--ink-stroke);
+}
+.vc-f,
+.vc-f-line {
+  stroke: var(--ink-faint);
+}
+/* the route's dashes are attributes (drawing.tsx), fitted to each drawing's crossings */
+.vc-route {
+  stroke: var(--ink-faint);
+}
+.vc-trail {
+  stroke: rgba(255, 255, 255, 0.4);
+}
+.vc-chevron {
+  stroke: var(--ink-label);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.vc-tri {
+  fill: var(--color-ink-1);
+}
+.vc-box-sub {
+  stroke: var(--ink-subject);
+  stroke-width: 1.5;
+}
+.vc-box-off {
+  stroke: var(--ink-stroke);
+  opacity: 0;
+}
+.vc-light-home {
+  fill: var(--color-ok);
+  stroke: var(--ink-faint);
+  stroke-opacity: 0;
+}
+/* the slot's phantom line: its dashes are set per side, in the drawing */
+.vc-slot {
+  stroke: var(--ink-label);
+}
+.vc-slot-taken {
+  stroke: var(--ink-subject);
+  stroke-width: 1.5;
+  opacity: 0;
+}
+.vc-light-rack {
+  fill: var(--color-ok);
+  opacity: 0;
+}
+.vc-box-sub,
+.vc-box-off,
+.vc-slot,
+.vc-slot-taken,
+.vc-light-rack {
+  transition: opacity var(--d-2) var(--ease-ui);
+}
+.vc-light-home {
+  transition:
+    fill-opacity var(--d-2) var(--ease-ui),
+    stroke-opacity var(--d-2) var(--ease-ui);
+}
+.vc-fig[data-at="vercel"] :is(.vc-box-sub, .vc-slot) {
+  opacity: 0;
+}
+.vc-fig[data-at="vercel"] :is(.vc-box-off, .vc-slot-taken, .vc-light-rack) {
+  opacity: 1;
+}
+.vc-fig[data-at="vercel"] .vc-light-home {
+  fill-opacity: 0;
+  stroke-opacity: 1;
+}
+.vc-fig[data-back] :is(.vc-box-sub, .vc-box-off, .vc-slot, .vc-slot-taken, .vc-light-rack, .vc-light-home) {
+  transition-duration: var(--d-1);
+}
+
+/* ---- the one control, 24 under the drawing: a page button, not Vercel's, that plays a preview
+ * of a move not built yet. It keeps one even width whatever it says (132, wider than both
+ * phrases), so its 1px ring lands on whole pixels when centred on the axis. Without script it
+ * could do nothing, so it is not shown (the head script sets data-js, and takes it away again if
+ * the app never hydrates). ---- */
+
+.vc-act {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+html:not([data-js]) .vc-act {
+  display: none;
+}
+.btn.vc-play {
+  min-width: 132px;
+  gap: 0;
+}
+/* the mark is the caveat's colour, not the label's, so it reads as a mark rather than a letter */
+.vc-play .coming {
+  color: var(--color-ink-4);
+}
+/* the two phrases share one cell, centred in it; one fades out, then the other in */
+.vc-labels {
+  display: grid;
+  justify-items: center;
+}
+.vc-labels > span {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  transition: opacity 100ms var(--ease-ui) 100ms;
+}
+.vc-labels > span:not([data-on]) {
+  opacity: 0;
+  transition-delay: 0ms;
+}
+.vc-fig[data-back] .vc-labels > span {
+  transition-duration: 60ms;
+  transition-delay: 60ms;
+}
+.vc-fig[data-back] .vc-labels > span:not([data-on]) {
+  transition-delay: 0ms;
+}
+
+/* ---- Pinch's card: product UI, 32 under the control (32 under the drawing without it) ---- */
+
+.vc-card {
+  max-width: 520px;
+  margin: 32px auto 0;
+  padding: 24px;
+  text-align: left;
+}
+.vc-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.vc-name {
+  font: 600 16px/22px var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--color-ink-1);
+}
+.vc-sub {
+  font: 400 13px/18px var(--font-sans);
+  color: var(--color-ink-3);
+}
+.vc-rows {
+  margin-top: 16px;
+}
+/* 44 under the hairline, the line of text 12 down, on whole pixels. Label and value share a
+ * baseline: in a 20px line a 13px face sits a pixel higher than a 14px one, so the 13px cells
+ * (the label, the mono address) start a pixel lower. */
+.vc-row {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: start;
+  height: 45px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-edge-1);
+}
+.vc-row > dt {
+  padding-top: 1px;
+  font: 400 13px/20px var(--font-sans);
+  color: var(--color-ink-4);
+}
+.vc-row > dd {
+  min-width: 0;
+  font: 400 14px/20px var(--font-sans);
+  color: var(--color-ink-1);
+}
+.vc-row > dd.vc-mono {
+  padding-top: 1px;
+  font: 400 13px/20px var(--font-mono);
+  font-variant-ligatures: none;
+}
+/* the last row ends where its line does, so the card's bottom inset is its 24, like the top */
+.vc-row:last-child {
+  height: 33px;
+}
+
+/* a value that changes: the old one out in 200, then the new one in 200 */
+.vc-swap {
+  display: grid;
+}
+.vc-swap > span {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 200ms var(--ease-ui);
+}
+.vc-swap > [data-on] {
+  opacity: 1;
+  transition-delay: 200ms;
+}
+.vc-fig[data-back] .vc-swap > span {
+  transition-duration: 100ms;
+}
+.vc-fig[data-back] .vc-swap > [data-on] {
+  transition-delay: 100ms;
+}
+
+/* each changed row is washed once, edge to edge of the card */
+.vc-wash {
+  position: absolute;
+  inset: -1px -24px 0;
+  z-index: -1;
+  background: var(--light-wash);
+  pointer-events: none;
+  animation: vc-wash var(--d-wash) var(--ease-fill) both;
+}
+@keyframes vc-wash {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.vc-note {
+  margin-top: 16px;
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* The page's last word before the steps: heading size and ink, a section's air above it and more
+ * below (64 at 1024 and up), so the statement closes this section and Start opens a new one rather
+ * than reading as its preface. Each sentence is its own block and balances on its own, so a line
+ * never ends one and starts the other. */
+.vc-close {
+  margin-top: 96px;
+  margin-bottom: 32px;
+  /* on a phone a heading-size line would break the second sentence mid-phrase ("all of / them"):
+   * at 24 its first clause ("None of them made by a human,", 352 wide) is the longest unbreakable run,
+   * so the size follows the column (a 16px gutter each side) until 24 fits, with about 2% to spare
+   * for glyph advances that round to whole pixels, and each sentence breaks only at its comma */
+  font-size: min(24px, calc((100vw - 32px) * 0.065));
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.vc-close > span {
+  display: block;
+}
+/* the second sentence's two halves break at the comma first, and inside themselves only if they must */
+.vc-clause {
+  display: inline-block;
+}
+@media (min-width: 640px) {
+  .vc-close {
+    margin-top: 128px;
+    margin-bottom: 48px;
+    font-size: 32px;
+    line-height: 36px;
+    letter-spacing: -0.025em;
+  }
+}
+@media (min-width: 768px) {
+  .vc-close {
+    font-size: 40px;
+    line-height: 44px;
+    letter-spacing: -0.03em;
+  }
+}
+@media (min-width: 1024px) {
+  .vc-close {
+    margin-top: 160px;
+    margin-bottom: 64px;
+    font-size: 48px;
+    line-height: 52px;
+    letter-spacing: -0.035em;
+  }
+}
+
+@media (max-width: 639px) {
+  .vc-card {
+    padding: 20px;
+  }
+  .vc-wash {
+    inset: -1px -20px 0;
+  }
+  /* each label over its value, so the longest value keeps one line */
+  .vc-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+    height: auto;
+    padding-block: 12px;
+  }
+  .vc-row > :is(dt, dd.vc-mono) {
+    padding-top: 0;
+  }
+  .vc-row:last-child {
+    height: auto;
+    padding-bottom: 0;
+  }
+}
+@media (max-width: 359px) {
+  .vc-card {
+    padding: 16px;
+  }
+  .vc-wash {
+    inset: -1px -16px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-swap > span,
+  .vc-swap > [data-on],
+  .vc-labels > span {
+    transition-duration: var(--d-1);
+    transition-delay: 0s;
+  }
+  .vc-box-sub,
+  .vc-box-off,
+  .vc-slot,
+  .vc-slot-taken,
+  .vc-light-rack,
+  .vc-light-home {
+    transition-duration: var(--d-1);
+  }
+}

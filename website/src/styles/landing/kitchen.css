@@ -1,0 +1,324 @@
+/* The kitchen (#kitchen, components/sections/kitchen.tsx and kitchen/*): the cutaway drawing, its
+ * readout, the phone list and the prose under them.
+ *
+ * The figure is its own container: from 880px of column it shows the whole house (1000 units, at
+ * most 1000px, so at 1440 the box's centre is the page's centre); under that, the kitchen alone and
+ * a list of the machines.
+ *
+ * The drawing's inks are the page's tokens (--ink-stroke .45, --ink-faint .14, --ink-run .30, the
+ * label's .50) mixed opaque against the page colour. On the page they are the same colours, but a
+ * desk under a laptop, a leg on the ground or a run behind the attic floor never paints a brighter
+ * knot where two translucent strokes overlap. */
+
+.k-fig {
+  container-type: inline-size;
+}
+.k-wide {
+  display: none;
+}
+@container (min-width: 880px) {
+  .k-wide {
+    display: block;
+  }
+  .k-narrow {
+    display: none;
+  }
+}
+
+.k-svg {
+  --k-s: color-mix(in srgb, #fff 45%, var(--color-page));
+  --k-f: color-mix(in srgb, #fff 14%, var(--color-page));
+  --k-run: color-mix(in srgb, #fff 30%, var(--color-page));
+  --k-label: color-mix(in srgb, #fff 50%, var(--color-page));
+  --k-lit: color-mix(in srgb, #fff 60%, var(--color-page)); /* a run, pointed at */
+  --k-hot: color-mix(in srgb, #fff 70%, var(--color-page)); /* a machine, pointed at */
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
+/* Heights rounded to the nearest whole pixel (the drawing letterboxes by under a pixel), so the readout, the
+ * list's hairlines and every section after this one stay on the pixel grid. */
+.k-svg-wide {
+  max-width: 1000px;
+  height: round(calc(min(100cqi, 1000px) * 524 / 1000), 1px);
+}
+.k-svg-narrow {
+  max-width: 380px;
+  height: round(calc(min(100cqi, 380px) * 260 / 300), 1px);
+}
+/* The close-up is shown at 0.96 to 1.27 a unit, so a label drawn in units would swing between 11 and
+ * 14.6px. These sizes keep it at 13 to 14px rendered from a 320 phone to the widest the close-up
+ * goes (a 360 phone, the commonest Android width, was 12.6px). */
+.k-svg-narrow .fig-label {
+  font-size: 12px;
+}
+@container (max-width: 299.98px) {
+  .k-svg-narrow .fig-label {
+    font-size: 13px;
+  }
+}
+@container (min-width: 375px) {
+  .k-svg-narrow .fig-label {
+    font-size: 11px;
+  }
+}
+/* On a tablet column the close-up grows to 456 (1.52 a unit) and its labels shrink to 9 units, so
+ * they still render at the phone's 13.7px and their halo at its 3px. */
+@container (min-width: 560px) {
+  .k-svg-narrow {
+    max-width: 456px;
+    height: round(calc(min(100cqi, 456px) * 260 / 300), 1px);
+  }
+  .k-svg-narrow .fig-label {
+    font-size: 9px;
+    stroke-width: 2px;
+  }
+}
+/* the close-up is shown larger than it is drawn: its lines keep the page's 1px, and the runs' dashes
+ * their 4/3 (a non-scaling stroke dashes in screen pixels) */
+.k-svg-narrow :is(path, rect, circle):not(.k-reveal) {
+  vector-effect: non-scaling-stroke;
+}
+/* Between 880 and 1000 the whole house is shown a little smaller than it is drawn (.928 at 1024),
+ * which would thin every hairline to under a pixel and grey it. Its solid lines keep their 1px. The
+ * runs keep scaling: their dashes are written out to fit each run's length in drawing units. */
+@container (min-width: 880px) and (max-width: 999.98px) {
+  .k-svg-wide :is(path, rect, circle):not(.k-reveal, .k-body, .k-run) {
+    vector-effect: non-scaling-stroke;
+  }
+}
+
+.k-s {
+  stroke: var(--k-s);
+}
+.k-f {
+  stroke: var(--k-f);
+}
+.k-dots {
+  fill: var(--k-f);
+}
+.k-run {
+  stroke: var(--k-run);
+  transition: stroke var(--d-1) var(--ease-ui);
+}
+/* the wide drawing writes each run's dashes out (drawing.tsx); the close-up's drops are plain 4/3 */
+.k-svg-narrow .k-run {
+  stroke-dasharray: 4 3;
+}
+.k-run[data-on] {
+  stroke: var(--k-lit);
+  stroke-dasharray: none;
+}
+/* the collector and the one drop into the box: solid, in the runs' ink */
+.k-trunk {
+  stroke: var(--k-run);
+}
+/* a machine's way on from its run to the box, over the collector: lit with its run */
+.k-tail {
+  stroke: var(--k-lit);
+  opacity: 0;
+  transition: opacity var(--d-1) var(--ease-ui);
+}
+.k-tail[data-on] {
+  opacity: 1;
+}
+/* the subject: the one 1.5px stroke, filled with the page so every run ends under it */
+.k-body {
+  fill: var(--color-page);
+  stroke: var(--ink-subject);
+  stroke-width: 1.5;
+}
+/* mask paint: the solid copy that reveals a dashed run, wide enough to cover it whole */
+.k-reveal {
+  stroke: #fff;
+  stroke-width: 4;
+}
+.k-still {
+  fill: rgba(255, 255, 255, 0.75);
+}
+/* labels, and the box's drawing over its own button: the pointer passes through to the hit areas */
+.k-svg text,
+.k-box {
+  pointer-events: none;
+}
+
+/* ---- the machines (wide only) ---- */
+
+.k-mach {
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+/* The page's focus outline (base layer) would trace the group's whole box, hit areas included; the
+ * ring below is drawn round the machine's mark instead. */
+.k-mach:focus-visible {
+  outline: none;
+}
+.k-hit {
+  fill: transparent;
+}
+.k-ms {
+  stroke: var(--k-s);
+  transition: stroke var(--d-1) var(--ease-ui);
+}
+.k-mf {
+  stroke: var(--k-f);
+  transition: stroke var(--d-1) var(--ease-ui);
+}
+.k-disc {
+  fill: var(--color-page);
+  stroke: var(--k-f);
+}
+.k-mark {
+  fill: var(--k-label);
+  transition: fill var(--d-1) var(--ease-ui);
+}
+.k-mach[data-on] .k-ms {
+  stroke: var(--k-hot);
+}
+/* the gaming PC's graphics card comes out of hiding when it is the one pointed at */
+.k-mach[data-on] .k-mf {
+  stroke: var(--k-s);
+}
+.k-mach[data-on] .k-mark {
+  fill: var(--color-ink-1);
+}
+.k-ring {
+  fill: none;
+  stroke: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.k-mach:focus-visible .k-ring {
+  stroke: rgba(245, 246, 247, 0.7);
+}
+
+/* ---- the readout: every machine's line stacked in one cell, the shown one opaque ---- */
+
+.k-readout {
+  position: relative;
+  display: grid;
+  min-height: 24px;
+  margin-top: 24px;
+  font: 400 15px/24px var(--font-sans);
+  color: var(--color-ink-3);
+}
+.k-read {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 90ms var(--ease-ui);
+}
+.k-read[data-on] {
+  opacity: 1;
+  transition: opacity 150ms var(--ease-ui) 60ms;
+}
+.k-read > .k-os {
+  flex: none;
+  color: var(--color-ink-3);
+}
+.k-read-lead {
+  font-weight: 500;
+  color: var(--color-ink-1);
+}
+/* the MacBook's "next" line hangs under the readout, in the air above the prose, so pointing at it
+ * never moves the page */
+.k-read-next {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--color-ink-4);
+}
+
+/* ---- the phone list ---- */
+
+.k-list {
+  max-width: 620px;
+  margin: 24px auto 0;
+  border-bottom: 1px solid var(--color-edge-1);
+}
+.k-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--color-edge-1);
+}
+.k-row > .k-os {
+  margin-top: 3px;
+  color: var(--color-ink-3);
+}
+.k-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.k-row-name {
+  font: 500 15px/22px var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--color-ink-1);
+}
+.k-row-room {
+  flex: none;
+  font: 400 13px/22px var(--font-sans);
+  color: var(--color-ink-4);
+}
+/* on the narrowest phones a role takes two lines; balanced, it never leaves "the box." alone */
+.k-row-role {
+  text-wrap: balance;
+  font: 400 14px/20px var(--font-sans);
+  color: var(--color-ink-3);
+}
+.k-row-next {
+  margin-top: 4px;
+  font: 400 13px/20px var(--font-sans);
+  color: var(--color-ink-4);
+}
+
+/* ---- the prose under the figure ---- */
+
+/* Its second half walks the house's other computers, which the phone list has just done row by
+ * row, so where the list shows (the same width the figure switches at) the paragraph ends after
+ * the outage. */
+.k-prose {
+  container-type: inline-size;
+}
+@container (max-width: 879.98px) {
+  .k-more {
+    display: none;
+  }
+}
+
+/* ---- motion (the contract in styles.css; runs and fades use its helpers) ---- */
+
+/* the internet's break opens from its centre */
+@keyframes k-gap {
+  from {
+    transform: scaleX(0);
+  }
+}
+.k-gap {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+html[data-motion="on"] [data-armed]:not([data-played]) .k-gap {
+  transform: scaleX(0);
+}
+html[data-motion="on"] [data-armed][data-played] .k-gap {
+  animation: k-gap 300ms var(--ease-inout) 1300ms both;
+}
+
+/* pointing is an interaction, so it still answers under reduced motion, as a short fade */
+@media (prefers-reduced-motion: reduce) {
+  .k-read,
+  .k-read[data-on] {
+    transition: opacity 100ms var(--ease-ui);
+  }
+}

@@ -1,125 +1,341 @@
-import type { ComponentType } from "react";
-
-import { Databases, Models, Reach, SignIn } from "~/components/demo/fragments";
-import { SectionHeader } from "~/components/ui/section-header";
-
-/** The tree, already cut, as a ledger: four choices every app would otherwise make for itself, the
- * usual alternatives struck through, and the answer the platform gives once, with the piece of the
- * app it becomes beside it (demo/fragments.tsx).
+/** The tree (#decisions): why talking about Grandma's cards was enough. Every app has to answer the
+ * same nine questions, which is 46,656 ways to build it; daedalus answers seven of them the same way
+ * every time, and the last two come from what you asked for. The figure is the manifesto's FIG. 1
+ * argued for a family: the reader picks a request, watches the house cut the tree, and sees the one
+ * path left run from the request to the app.
  *
- * Each answer is what the engine does today (ARCHITECTURE.md, the apps registry): Pocket ID's
- * passkeys as one sign-in for the house; a database per app on the shared Postgres, inside the
- * snapshotted state; one LiteLLM key per app in front of the house's model server and the frontier;
- * the three exposure rungs with the wildcard certificate and DNS. How the box builds and how a
- * change is undone are How's to show. The struck alternatives are generic categories and name no
- * vendor.
- *
- * A real table. From 1024px it keeps table layout, so its semantics are never in doubt: four equal
- * columns whose padding (COL) puts each column's content on a three-column span of the page grid at
- * any width. Below 1024px the rows stack and the head row is left to screen readers. */
+ * The drawing has two compositions (plate.tsx wide, plate-narrow.tsx on end for phones), both in the
+ * DOM, one shown by a container query. This file owns the run: one rAF loop paints whichever state
+ * the timeline says, into both, through a writer that skips unchanged values. It plays once, when
+ * most of the plate has been in view for a beat (motion.ts); after that, Replay and the selector
+ * rerun parts of it. Reduced motion, no-JS and the prerender all show the finished frame. */
 
-interface Decision {
-  q: string;
-  usual: string[];
-  title: string;
-  text: string;
-  Piece: ComponentType<{ className?: string }>;
+import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import { AppIcon } from "~/components/landing/app-icon";
+import { motionOn, useFigure } from "~/components/landing/motion";
+import { Header, Section } from "~/components/landing/section";
+
+import {
+  type HotHow,
+  type State,
+  PlateWide,
+  Quote,
+  REPLAY_END,
+  RUN_END,
+  SWITCH_END,
+  collect,
+  collectWords,
+  done,
+  paintWide,
+  paintWords,
+  run,
+  sketch,
+  swap,
+  undo,
+  writer,
+} from "./decisions/plate";
+import { PlateNarrow, paintNarrow } from "./decisions/plate-narrow";
+import { COLUMNS, REQUESTS, WHERE, WHO, fmt } from "./decisions/requests";
+
+type Controller = {
+  play: () => void;
+  select: (r: number) => void;
+  replay: () => void;
+  /** Show the finished frame now (a row took focus before its answer arrived). */
+  settle: () => void;
+  dispose: () => void;
+};
+
+/** One loop for the plate: whatever runs (the first run, Replay, another request) is a function of
+ * elapsed time, painted into both compositions until it ends. If the plate leaves the screen
+ * mid-run, it stops at the finished frame. */
+function controller(root: HTMLElement, armed: boolean): Controller {
+  const put = writer();
+  const wideEl = root.querySelector<HTMLElement>('[data-comp="w"]')!;
+  const narrowEl = root.querySelector<HTMLElement>('[data-comp="n"]')!;
+  const wide = collect(wideEl);
+  const narrow = collect(narrowEl);
+  const words = collectWords(root);
+  // A run paints only the composition on screen (decided once, when it starts); a still frame paints
+  // both, so a resize afterwards shows the right one.
+  let only: "w" | "n" | null = null;
+  const draw = (S: State) => {
+    if (only !== "n") paintWide(wide, S, put);
+    if (only !== "w") paintNarrow(narrow, S, put);
+    paintWords(words, S, put);
+  };
+
+  let cur = 0;
+  let started = !armed;
+  let raf = 0;
+  let live: { at: (ms: number) => State; len: number } | null = null;
+
+  const finish = () => {
+    cancelAnimationFrame(raf);
+    live = null;
+    only = null;
+    draw(done(cur));
+  };
+  const start = (at: (ms: number) => State, len: number) => {
+    cancelAnimationFrame(raf);
+    live = { at, len };
+    only = wideEl.offsetParent ? "w" : narrowEl.offsetParent ? "n" : null;
+    let t0 = -1;
+    const step = (now: number) => {
+      if (!live) return;
+      if (t0 < 0) t0 = now;
+      const ms = now - t0;
+      if (ms >= live.len) return finish();
+      draw(live.at(ms));
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  };
+
+  const io = new IntersectionObserver((entries) => {
+    const e = entries[entries.length - 1];
+    if (e && !e.isIntersecting && live) finish();
+  });
+  io.observe(root);
+
+  if (armed) draw(sketch(cur));
+  // on screen at load: the finished frame stays, and Replay is offered
+  else if (motionOn()) draw(done(cur));
+
+  return {
+    play() {
+      if (started) return;
+      started = true;
+      start((ms) => run(ms, cur), RUN_END);
+    },
+    select(r) {
+      if (r === cur) return;
+      if (!motionOn()) {
+        // reduced motion: the new frame at once, and still no Replay (there is nothing to replay)
+        cur = r;
+        return draw({ ...done(r), replay: 0 });
+      }
+      if (!started) {
+        // chosen before the plate played: play it now, for this request
+        cur = r;
+        started = true;
+        return start((ms) => run(ms, r), RUN_END);
+      }
+      if (live) finish();
+      const a = cur;
+      cur = r;
+      start((ms) => swap(ms, a, r), SWITCH_END);
+    },
+    replay() {
+      if (live) finish();
+      start((ms) => undo(ms, cur), REPLAY_END);
+    },
+    settle() {
+      if (live || !started) {
+        started = true;
+        finish();
+      }
+    },
+    dispose() {
+      cancelAnimationFrame(raf);
+      live = null;
+      io.disconnect();
+    },
+  };
 }
 
-const DECISIONS: Decision[] = [
-  {
-    q: "How do people sign in?",
-    usual: ["A users table in every app", "A hosted sign-in service", "Magic links by email"],
-    title: "One sign-in for the house",
-    text: "Passkeys, through the house’s own identity provider. Every app gets it without writing a login.",
-    Piece: SignIn,
-  },
-  {
-    q: "Where does the data live?",
-    usual: ["A managed database in the cloud", "SQLite in a volume", "Files on disk"],
-    title: "Postgres, on the box",
-    text: "A database for each app on one cluster, snapshotted every hour with the rest of the house.",
-    Piece: Databases,
-  },
-  {
-    q: "How does it reach a model?",
-    usual: ["A provider key in every app", "One provider, hard-coded", "A model baked into the image"],
-    title: "One key for every model",
-    text: "A gateway in front of the models on your own GPU and the frontier ones, so an app never chooses a provider.",
-    Piece: Models,
-  },
-  {
-    q: "Who can reach it?",
-    usual: ["Port forwarding on the router", "A VPN for every guest", "A second host for the public part"],
-    title: "A switch",
-    text: "Off, the house, or the internet. The address, the certificate and the DNS follow the switch.",
-    Piece: Reach,
-  },
-];
-
-const HEAD = ["Question", "Every app would otherwise choose from", "Decided once", "In the app"];
-
-/** Each column is a quarter of the width W, and a three-column span of the page grid is W/4 − 18px
- * wide with 24px gutters. Padding of 18 / 6+12 / 12+6 / 18 lands every content box on its span. */
-const COL = ["lg:pr-4.5", "lg:pl-1.5 lg:pr-3", "lg:pl-3 lg:pr-1.5", "lg:pl-4.5"];
-/** Row padding and alignment, on the table's own boxes from 1024px; below, the row carries it. */
-const AT_LG = "lg:py-6 lg:align-top";
-/** The fragment's top edge sits on the cap line of the row's first text line, 6px into its 24px
- * line box, so it does not ride high against the question and answer beside it. */
-const AT_LG_PIECE = "lg:pb-6 lg:pt-[30px] lg:align-top";
+/** Every number the section prints, computed from the drawing: 46,656, and the 9 the house leaves. */
+const TOTAL = COLUMNS.reduce((p, c) => p * c.n, 1);
+const LEFT = COLUMNS.slice(7).reduce((p, c) => p * c.n, 1);
+const ARITHMETIC = `${COLUMNS.map((c) => c.n).join(" × ")} = ${fmt(TOTAL)}`;
 
 export function Decisions() {
-  return (
-    <section id="platform" aria-labelledby="platform-title" className="pb-18 pt-10 sm:pb-24 sm:pt-12 lg:pb-28 lg:pt-16">
-      <div className="wrap">
-        <SectionHeader
-          id="platform-title"
-          title="Every decision, made before the first prompt."
-          lead="Before writing anything that matters, an engineer walks a tree of choices. daedalus makes them once, for every app, so all that’s left to talk about is what you want."
-        />
+  const [req, setReq] = useState(0);
+  const [hot, setHot] = useState<number | null>(null);
+  const plate = useRef<HTMLDivElement>(null);
+  const ctl = useRef<Controller | null>(null);
+  const items = useRef<(HTMLButtonElement | null)[]>([]);
+  const strip = useRef<HTMLDivElement>(null);
+  const pointer = useRef(false);
 
-        <table aria-labelledby="platform-title" className="mt-10 w-full table-fixed text-left max-lg:block lg:mt-16">
-          <thead className="max-lg:sr-only">
-            <tr className="border-b border-edge-2">
-              {HEAD.map((h, i) => (
-                <th key={h} scope="col" className={`t-small h-10 text-left font-medium text-ink-4 ${COL[i]}`}>
-                  {h}
-                </th>
+  useFigure(plate, {
+    // read once, when the hook arms the plate, so the plate is laid out by then. Wide, .75: the plate
+    // enters top first and its axis sits two thirds of the way down, so at .6 the walk ran below the
+    // fold. Narrow, .45: the plate runs down the screen, and three quarters of it is in view only
+    // while a reader holds still, so at an ordinary scroll it would never play
+    get threshold() {
+      const fig = plate.current?.parentElement;
+      return fig && fig.clientWidth < 920 ? 0.45 : 0.75;
+    },
+    dwellMs: 300,
+    onPlay: () => ctl.current?.play(),
+  });
+
+  // Declared after useFigure, so its layout effect has already armed the plate or not: an armed
+  // plate is reduced to its sketch before the browser paints it.
+  useLayoutEffect(() => {
+    const root = plate.current;
+    if (!root) return;
+    const c = controller(root, root.hasAttribute("data-armed"));
+    ctl.current = c;
+    // each composition's seven answers become one tab stop (plate.tsx, rove), now that a row can tell
+    // what runs it
+    root.querySelectorAll('[role="list"]').forEach((list) =>
+      list.querySelectorAll<HTMLElement>("[data-focus]").forEach((row, i) => (row.tabIndex = i === 0 ? 0 : -1)),
+    );
+    return () => c.dispose();
+  }, []);
+
+  const choose = (r: number, focus = false) => {
+    setReq(r);
+    ctl.current?.select(r);
+    const el = items.current[r];
+    if (!el) return;
+    if (focus) el.focus({ preventScroll: true });
+    // on a phone the row of requests scrolls: bring the chosen one clear of the edge fades
+    const s = strip.current;
+    if (s && s.scrollWidth > s.clientWidth) {
+      const pad = 40;
+      const l = el.getBoundingClientRect().left - s.getBoundingClientRect().left + s.scrollLeft;
+      const behavior = motionOn() ? "smooth" : "auto";
+      if (l - pad < s.scrollLeft) s.scrollTo({ left: l - pad, behavior });
+      else if (l + el.offsetWidth + pad > s.scrollLeft + s.clientWidth)
+        s.scrollTo({ left: l + el.offsetWidth + pad - s.clientWidth, behavior });
+    }
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const n = REQUESTS.length;
+    const to =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? (req + 1) % n
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? (req + n - 1) % n
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? n - 1
+              : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    choose(to, true);
+  };
+
+  const onHot = useCallback((k: number, how: HotHow) => {
+    if (how === "down") pointer.current = true;
+    else if (how === "enter") setHot(k);
+    else if (how === "leave") setHot((h) => (h === k ? null : h));
+    else if (how === "tap") {
+      pointer.current = false;
+      setHot((h) => (h === k ? null : k));
+    } else if (how === "focus") {
+      ctl.current?.settle();
+      // a tap focuses the row as well: the tap decides, not the focus
+      if (!pointer.current) setHot(k);
+    } else {
+      pointer.current = false;
+      setHot((h) => (h === k ? null : h));
+    }
+  }, []);
+  const onReplay = useCallback(() => ctl.current?.replay(), []);
+
+  // On a phone the requests scroll sideways: an edge fades only where there is more to scroll to.
+  useEffect(() => {
+    const s = strip.current;
+    if (!s) return;
+    const edges = () => {
+      s.toggleAttribute("data-more-l", s.scrollLeft > 1);
+      s.toggleAttribute("data-at-end", s.scrollLeft + s.clientWidth >= s.scrollWidth - 1);
+    };
+    edges();
+    s.addEventListener("scroll", edges, { passive: true });
+    const ro = new ResizeObserver(edges);
+    ro.observe(s);
+    return () => {
+      s.removeEventListener("scroll", edges);
+      ro.disconnect();
+    };
+  }, []);
+
+  // The row being read brightens its question and its own leader (the elbows belong to the writer's SVG).
+  useEffect(() => {
+    const root = plate.current;
+    if (!root || hot === null) return;
+    const lines = root.querySelectorAll(`[data-elbow="${hot}"], [data-lead="${hot}"], [data-focus="${hot}"]`);
+    lines.forEach((el) => el.setAttribute("data-hot", ""));
+    return () => lines.forEach((el) => el.removeAttribute("data-hot"));
+  }, [hot]);
+
+  const r = REQUESTS[req]!;
+  return (
+    <Section id="decisions">
+      <Header
+        title={"All you talked about was Grandma’s cards."}
+        intro="Every hard decision was made before you asked."
+        prose={
+          "Pinch needed a sign-in for Grandma, a place to keep the recipes, an AI that can read handwriting and a way back if something broke. An engineer can spend weeks on each. daedalus answered them once, for every app, so all that’s left is what you want."
+        }
+      />
+      <div className="wrap after-header">
+        <figure className="dc-fig" aria-describedby="decisions-desc">
+          <p id="decisions-try" className="dc-label">
+            Every app starts from the same seven answers. Try another request:
+          </p>
+          <div ref={strip} className="dc-strip">
+            <div role="radiogroup" aria-label="Example requests" className="dc-sel">
+              {REQUESTS.map((x, i) => (
+                <button
+                  key={x.app}
+                  ref={(el) => {
+                    items.current[i] = el;
+                  }}
+                  type="button"
+                  role="radio"
+                  aria-checked={i === req}
+                  tabIndex={i === req ? 0 : -1}
+                  className="dc-sel-item"
+                  onClick={() => choose(i)}
+                  onKeyDown={onKey}
+                >
+                  <AppIcon app={x.app} size={20} />
+                  {x.name}
+                </button>
               ))}
-            </tr>
-          </thead>
-          <tbody className="max-lg:block">
-            {DECISIONS.map((d) => (
-              <tr key={d.q} className="border-b border-edge-1 max-lg:block max-lg:py-6">
-                {/* stacked, the question is the row's small label and the decided title its one
-                    head; at body size the two competed. The type classes take no breakpoint
-                    variants, so each size is its own span and the other is display:none */}
-                <th scope="row" className={`text-left max-lg:block ${COL[0]} ${AT_LG}`}>
-                  <span className="t-small block font-medium text-ink-4 lg:hidden">{d.q}</span>
-                  <span className="t-body block font-medium text-ink-2 max-lg:hidden">{d.q}</span>
-                </th>
-                <td className={`max-lg:mt-3 max-lg:block ${COL[1]} ${AT_LG}`}>
-                  <ul className="flex flex-wrap gap-x-5 gap-y-1 lg:block">
-                    {d.usual.map((u) => (
-                      <li key={u} className="t-body text-ink-4">
-                        <s className="decoration-white/28 decoration-1">{u}</s>
-                      </li>
-                    ))}
-                  </ul>
-                </td>
-                <td className={`max-lg:mt-4 max-lg:block ${COL[2]} ${AT_LG}`}>
-                  <p className="t-body font-medium text-ink-1">{d.title}</p>
-                  <p className="t-body mt-1">{d.text}</p>
-                </td>
-                {/* the product needs the room: from 640px only */}
-                <td className={`max-sm:hidden sm:max-lg:mt-5 sm:max-lg:block ${COL[3]} ${AT_LG_PIECE}`}>
-                  <d.Piece className="w-full max-w-[282px]" />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </div>
+          </div>
+          <div ref={plate} className="dc-plate">
+            <div className="dc-quotes" aria-hidden>
+              {REQUESTS.map((x, i) => (
+                <Quote key={x.app} r={i} />
+              ))}
+            </div>
+            <PlateWide onHot={onHot} onReplay={onReplay} />
+            <PlateNarrow onHot={onHot} onReplay={onReplay} />
+            <p className="dc-readout t-under" aria-live="polite">
+              {hot !== null ? `Under the hood: ${COLUMNS[hot]!.under}` : ""}
+            </p>
+          </div>
+          <figcaption className="dc-caption">
+            <p>
+              In this drawing there are {fmt(TOTAL)} ways to build an app. daedalus answers seven of the questions the same
+              way every time, and your request answers the last two.
+            </p>
+          </figcaption>
+          <div id="decisions-desc" className="sr-only">
+            <p>
+              The request: {"“"}
+              {r.text}
+              {"”"}
+            </p>
+            <p>
+              {ARITHMETIC} ways to build it. The house{"’"}s seven answers leave {COLUMNS.slice(7).map((c) => c.n).join(" × ")} = {LEFT}. From the request, where
+              you want it: {WHERE[r.keep[0]]}; who it{"’"}s for: {WHO[r.keep[1]]}. That leaves one way: {r.end}.
+            </p>
+            <p>How many options each question has is our estimate; every number is computed from the drawing.</p>
+          </div>
+        </figure>
       </div>
-    </section>
+    </Section>
   );
 }

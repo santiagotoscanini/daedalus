@@ -13,12 +13,13 @@
 
 /* Design tokens. Every neutral shares the product's hue (oklch 270, chroma
  * about 0.004), so the page and the pictures of the app read as one material:
- * five surfaces, four inks, three edge alphas. Colour is for state only: one
- * green, and the terracotta of the logo mark.
+ * five surfaces, four inks, three edge alphas. The page is greyscale; colour
+ * belongs to what is made for you (app icons, the real apps' screenshots,
+ * Pinch's cream) and to the box's one green status light.
  *
  * The two resets are the enforcement. With `--text-*` and `--radius-*`
- * cleared, `text-sm` and `rounded-lg` do not exist: marketing type comes only
- * from the .t-* classes below, and corners only from the four radii.
+ * cleared, `text-sm` and `rounded-lg` do not exist: type comes only from the
+ * .t-* classes below, and corners only from the named radii.
  *
  * Every ink clears WCAG AA (4.5:1) on page and on raise-2; anything new goes
  * through the same check before it lands. */
@@ -30,10 +31,10 @@
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
   --color-page: #08090a;
-  --color-raise-1: #0f1012; /* page cards, the closing band, the hero frame */
-  --color-raise-2: #16171a; /* the Messages window, cards on the band */
-  --color-raise-3: #1c1d20; /* user bubble, active segment */
-  --color-product: #151618; /* product fragments outside the hero */
+  --color-raise-1: #0f1012;
+  --color-raise-2: #16171a;
+  --color-raise-3: #1c1d20;
+  --color-product: #151618; /* product cards: the record, the Vercel card */
 
   --color-ink-1: #f5f6f7; /* 18.4:1 on page */
   --color-ink-2: #c8cacf; /* 12.2:1 */
@@ -42,18 +43,23 @@
 
   --color-edge-1: rgba(255, 255, 255, 0.06); /* dividers inside things */
   --color-edge-2: rgba(255, 255, 255, 0.08); /* every card and frame border */
-  --color-edge-3: rgba(255, 255, 255, 0.12); /* the Messages window */
+  --color-edge-3: rgba(255, 255, 255, 0.12);
 
-  --color-ok: #4ea87a; /* the only green */
+  --color-ok: #4ea87a; /* THE status light, the only page accent */
   --color-accent: #e2795a; /* the logo mark only */
+  --color-cream: #fbf3e4; /* Grandma's scanned card */
+  --color-cream-icon: #fff6e6; /* the card inside the Pinch icon */
 
   --radius-chip: 4px;
   --radius-control: 8px;
   --radius-card: 12px;
-  --radius-frame: 20px; /* the hero frame only: 20 - 8 inset = the panel's 12 */
+  --radius-frame: 20px;
 
   --ease-ui: cubic-bezier(0.25, 0.46, 0.45, 0.94); /* hover, colour */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, state */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, slides */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1); /* in-phone motion, the gallery */
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1); /* cuts, flights, arcs */
+  --ease-fill: cubic-bezier(0.4, 0, 0.2, 1); /* the install ring */
 }
 
 :root {
@@ -61,22 +67,38 @@
   --d-1: 120ms;
   --d-2: 240ms;
   --d-3: 400ms;
+  --d-4: 600ms;
   --d-wash: 1600ms;
+
+  /* drawing inks: the three figures drawn in line (tree, kitchen, house to rack) */
+  --ink-stroke: rgba(255, 255, 255, 0.45); /* structure */
+  --ink-faint: rgba(255, 255, 255, 0.14); /* construction, hidden lines, routes */
+  --ink-label: rgba(255, 255, 255, 0.5); /* lowercase mono labels, small dots */
+  --ink-run: rgba(255, 255, 255, 0.3); /* the kitchen's machine runs */
+  --ink-subject: #f5f6f7; /* the one 1.5px subject stroke per drawing: the box */
+
+  /* green means one thing per figure: live, settled for you, or where it runs */
+  --light-wash: rgba(78, 168, 122, 0.14);
+  --light-tint: rgba(78, 168, 122, 0.1); /* diff additions */
+  --light-leader: rgba(78, 168, 122, 0.55);
+  --light-text: rgba(78, 168, 122, 0.8); /* small green text on the page */
+  --bar-rent: rgba(255, 255, 255, 0.28); /* iCloud+ bars */
 }
 
 html {
   background: var(--color-page);
   color: var(--color-ink-1);
   font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  scroll-behavior: smooth;
+  /* a guard, not a layout tool: wide things scroll inside their own box */
+  overflow-x: clip;
+  scrollbar-color: rgba(255, 255, 255, 0.18) var(--color-page);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
 }
 
 /* In the base layer, so a utility on the element still wins. */
@@ -97,23 +119,30 @@ html {
   [id] {
     scroll-margin-top: 80px;
   }
-  /* A grooved section's heading sits its top padding (72 / 96 / 112px) below the groove, so
-   * landing the section 80px down left up to 128px of nothing under the bar. These land the
-   * heading 48px under the bar at every width (the close, which opens deeper, a little lower; the
-   * questions' sticky heading stops at 112 anyway). Decisions and Anywhere open at 64 / 48 / 40
-   * and keep the 80. */
-  main > section.groove[id] {
-    scroll-margin-top: 40px;
+  /* A landing section opens 160 / 128 / 96px above its heading. Landing the section a little above
+   * the viewport puts the heading 112 / 100 / 88px down: 48 / 36 / 24 clear of the bar. */
+  main > section[id] {
+    scroll-margin-top: -8px;
   }
   @media (min-width: 640px) {
-    main > section.groove[id] {
-      scroll-margin-top: 16px;
+    main > section[id] {
+      scroll-margin-top: -28px;
     }
   }
   @media (min-width: 1024px) {
-    main > section.groove[id] {
-      scroll-margin-top: 0;
+    main > section[id] {
+      scroll-margin-top: -48px;
     }
+  }
+
+  /* Visible keyboard focus everywhere; never remove without replacing. In the base layer, so a
+   * component's own offset or ring (decisions.css, kitchen.css, made.css) wins by the cascade alone.
+   * The outline follows the element's border-radius: a pill gets a pill, a card a card, a bar
+   * control the control radius, and a footer link a 4px corner held clear of its glyphs by its
+   * padding. A link inside a sentence (.link) takes a tint instead. */
+  :focus-visible {
+    outline: 2px solid rgba(245, 246, 247, 0.7);
+    outline-offset: 2px;
   }
 }
 
@@ -132,14 +161,17 @@ html {
     "calt" 0;
 }
 
-/* Visible keyboard focus everywhere; never remove without replacing. */
-:focus-visible {
-  outline: 2px solid var(--color-ink-1);
-  outline-offset: 2px;
-}
-
+/* Opaque, the tone 16% white makes on the page: a translucent wash doubles where two lines' bands
+ * overlap (the H1's 76px type on an 80px line) and shows as a lighter stripe. */
 ::selection {
-  background: rgba(255, 255, 255, 0.16);
+  background: #303032;
+  color: var(--color-ink-1);
+}
+/* the warm surfaces (her card, the Pinch screen) are pictures of paper: a white wash would vanish */
+.selection-warm::selection,
+.selection-warm ::selection {
+  background: rgba(217, 71, 46, 0.18);
+  color: #1c1a17;
 }
 
 /* Everything below is a COMPONENT class, and it has to live in the
@@ -151,16 +183,12 @@ html {
  * caller already assumes. */
 @layer components {
   /* ---------------------------------------------------------------- *
-   * Type: the marketing layer is set only through these. Weight 500 is
-   * the ceiling; 600 belongs to product UI. The `font` shorthand resets
-   * font-variant-numeric, so the mono pair declares it after `font`.
+   * Type, part 1: the classes /docs and /integrations are set in.
+   * Unchanged; the landing uses part 2. The `font` shorthand resets
+   * font-variant-numeric and font-feature-settings, so anything that
+   * needs them declares them after `font`.
    * ---------------------------------------------------------------- */
 
-  .t-display-xl {
-    font: 500 40px/44px var(--font-sans);
-    letter-spacing: -0.032em;
-    color: var(--color-ink-1);
-  }
   .t-display {
     font: 500 32px/36px var(--font-sans);
     letter-spacing: -0.025em;
@@ -170,11 +198,6 @@ html {
     font: 500 28px/34px var(--font-sans);
     letter-spacing: -0.022em;
     color: var(--color-ink-1);
-  }
-  .t-quote {
-    font: 400 20px/30px var(--font-sans);
-    letter-spacing: -0.01em;
-    color: var(--color-ink-3);
   }
   .t-lead {
     font: 400 18px/28px var(--font-sans);
@@ -211,11 +234,6 @@ html {
     color: var(--color-ink-4);
   }
   @media (min-width: 640px) {
-    .t-display-xl {
-      font-size: 56px;
-      line-height: 60px;
-      letter-spacing: -0.038em;
-    }
     .t-display {
       font-size: 40px;
       line-height: 44px;
@@ -225,11 +243,6 @@ html {
       font-size: 32px;
       line-height: 40px;
       letter-spacing: -0.025em;
-    }
-    .t-quote {
-      font-size: 24px;
-      line-height: 34px;
-      letter-spacing: -0.012em;
     }
     .t-lead {
       font-size: 20px;
@@ -247,11 +260,6 @@ html {
     }
   }
   @media (min-width: 1024px) {
-    .t-display-xl {
-      font-size: 72px;
-      line-height: 72px;
-      letter-spacing: -0.04em;
-    }
     .t-display {
       font-size: 48px;
       line-height: 52px;
@@ -259,15 +267,209 @@ html {
     }
   }
 
-  /* the name beside the mark in the nav and the footer: a one-off */
+  /* ---------------------------------------------------------------- *
+   * Type, part 2: the landing. One tone per heading (ink-1), 600 only
+   * for H1 and H2 and the product names. Centred text carries its own
+   * column (max-width + auto margins) so a block centres on the page
+   * axis wherever it is put; a utility on the element still wins.
+   * ---------------------------------------------------------------- */
+
+  .t-hero {
+    max-width: 900px;
+    margin-inline: auto;
+    font: 600 40px/44px var(--font-sans);
+    letter-spacing: -0.035em;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--color-ink-1);
+  }
+  .t-h2 {
+    max-width: 960px;
+    margin-inline: auto;
+    font: 600 32px/36px var(--font-sans);
+    letter-spacing: -0.025em;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--color-ink-1);
+  }
+  /* three lines or fewer, centred; anything longer is .t-prose */
+  .t-intro {
+    max-width: 620px;
+    margin-inline: auto;
+    font: 400 17px/26px var(--font-sans);
+    letter-spacing: -0.01em;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--color-ink-3);
+  }
+  /* story copy: left-aligned, in the same centred 620 column as the intro */
+  .t-prose {
+    max-width: 620px;
+    margin-inline: auto;
+    font: 400 16px/26px var(--font-sans);
+    text-align: left;
+    text-wrap: pretty;
+    color: var(--color-ink-2);
+  }
+  .t-quote {
+    max-width: 760px;
+    margin-inline: auto;
+    font: 400 24px/32px var(--font-sans);
+    letter-spacing: -0.02em;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--color-ink-3);
+  }
+  .t-close {
+    max-width: 760px;
+    margin-inline: auto;
+    font: 500 22px/30px var(--font-sans);
+    letter-spacing: -0.02em;
+    text-align: center;
+    text-wrap: balance;
+    color: var(--color-ink-3);
+  }
+  .t-transition {
+    max-width: 540px;
+    margin-inline: auto;
+    font: 400 15px/24px var(--font-sans);
+    text-align: center;
+    text-wrap: balance;
+    color: var(--color-ink-4);
+  }
+  .t-for {
+    font: 400 17px/26px var(--font-sans);
+    letter-spacing: -0.01em;
+    color: var(--color-ink-1);
+  }
+  .t-step {
+    font: 600 19px/26px var(--font-sans);
+    letter-spacing: -0.01em;
+    color: var(--color-ink-1);
+  }
+  .t-name {
+    font: 600 15px/20px var(--font-sans);
+    letter-spacing: -0.01em;
+    color: var(--color-ink-1);
+  }
+  .t-caption {
+    font: 400 13px/20px var(--font-sans);
+    color: var(--color-ink-4);
+  }
+  .t-fine {
+    font: 400 12px/18px var(--font-sans);
+    color: var(--color-ink-4);
+  }
+  .t-count {
+    font: 600 28px/32px var(--font-sans);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-1);
+  }
+  /* the record's diff only */
+  .t-code {
+    font: 400 12px/20px var(--font-mono);
+    font-variant-ligatures: none;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
+  }
+  /* the tree's "Under the hood" readout only */
+  .t-under {
+    font: 400 11px/16px var(--font-mono);
+    font-variant-ligatures: none;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
+    color: var(--color-ink-3);
+  }
+  /* SVG text in the drawings: lowercase mono, haloed in the page colour so it reads over lines */
+  .fig-label {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-variant-ligatures: none;
+    fill: var(--ink-label);
+    stroke: var(--color-page);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    paint-order: stroke;
+  }
+  @media (min-width: 640px) {
+    .t-hero {
+      font-size: 56px;
+      line-height: 60px;
+      letter-spacing: -0.04em;
+    }
+    .t-h2 {
+      font-size: 40px;
+      line-height: 44px;
+      letter-spacing: -0.03em;
+    }
+    .t-intro {
+      font-size: 19px;
+      line-height: 30px;
+    }
+    .t-prose {
+      font-size: 17px;
+      line-height: 28px;
+    }
+    .t-quote {
+      font-size: 28px;
+      line-height: 36px;
+    }
+    .t-close {
+      font-size: 28px;
+      line-height: 36px;
+    }
+    .t-transition {
+      font-size: 16px;
+      line-height: 26px;
+    }
+    .t-for {
+      font-size: 19px;
+      line-height: 28px;
+    }
+    .t-count {
+      font-size: 32px;
+      line-height: 36px;
+    }
+    .t-code {
+      font-size: 12.5px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .t-hero {
+      font-size: 76px;
+      line-height: 80px;
+      letter-spacing: -0.045em;
+    }
+    .t-h2 {
+      font-size: 48px;
+      line-height: 52px;
+      letter-spacing: -0.035em;
+    }
+    .t-quote {
+      font-size: 36px;
+      line-height: 44px;
+    }
+  }
+
+  /* the name beside the mark in the nav and the footer */
   .wordmark {
     font: 500 15px/20px var(--font-sans);
     letter-spacing: -0.01em;
     color: var(--color-ink-1);
   }
 
-  /* a link inside running text */
+  /* A link inside running text. The 2px of padding is taken back by the margin, so the words sit
+   * exactly where they would without it. Focused, it takes a tint with a 4px corner and a solid
+   * underline instead of a ring: a ring round words in a sentence always crosses their neighbours
+   * (the period after "open source", the "d" of "and"). The transparent outline is for forced
+   * colours, where the tint does not show. */
   .link {
+    margin-inline: -2px;
+    padding: 2px;
+    border-radius: 4px;
     color: var(--color-ink-1);
     text-decoration-line: underline;
     text-decoration-color: rgba(255, 255, 255, 0.3);
@@ -278,52 +480,110 @@ html {
   .link:hover {
     text-decoration-color: rgba(255, 255, 255, 0.6);
   }
+  .link:focus-visible {
+    outline: 2px solid transparent;
+    background: rgba(245, 246, 247, 0.14);
+    text-decoration-color: var(--color-ink-1);
+  }
+
+  /* The "coming" mark (components/landing/coming.tsx): 10px, a little taller than Geist's capitals
+   * (9.35px at 13px), centred on their middle, 0.36em up: so it never sits on the x-height like an o.
+   * 6px to the words, so ring and gap advance 16. */
+  .coming {
+    display: inline;
+    flex: none;
+    vertical-align: calc(0.36em - 5px);
+    margin-right: 6px;
+  }
+  /* ComingLine: the ring in its own column, the words in the next, both on the first line's
+   * baseline (the lead is a line box of the same type, so its baseline is the words'). */
+  .coming-line {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 6px;
+    align-items: baseline;
+    text-align: left;
+  }
+  .coming-line > .coming-lead .coming {
+    margin-right: 0;
+  }
+
+  /* A target smaller than a fingertip: an invisible hit area of at least 44x44, centred on it, so the
+   * thing keeps its drawn size. It takes the element's ::after; percentages in an inset resolve
+   * against the element itself, so (100% - 44px) / 2 is how far each side has to reach. */
+  .hit,
+  .foot-link {
+    position: relative;
+  }
+  .hit::after,
+  .foot-link::after {
+    content: "";
+    position: absolute;
+    inset-block: min(0px, calc((100% - 44px) / 2));
+    inset-inline: min(0px, calc((100% - 44px) / 2));
+  }
 
   /* ---------------------------------------------------------------- *
-   * The column: 1200px of content on a 12-column grid (x=120 to 1320 at
-   * 1440). The grid exists only from 1024px; below it, blocks stack.
+   * The column and the rhythm. 1200px of content at 1440 (x=120 to
+   * 1320); every section is a centred header block over one centred
+   * figure, 160 / 128 / 96px apart, with no rule between sections.
    * ---------------------------------------------------------------- */
 
   .wrap {
     margin-inline: auto;
     width: 100%;
     max-width: 1296px;
-    padding-inline: 24px;
+    padding-inline: 16px;
   }
-  .grid-12 {
-    display: block;
+  .section {
+    padding-top: 96px;
+  }
+  /* the last section before the footer: the same air below as above */
+  .section-end {
+    padding-bottom: 96px;
+  }
+  /* last header text to the figure */
+  .after-header {
+    margin-top: 40px;
+  }
+  /* a figure to the story copy under it (Prose in section.tsx) */
+  .after-figure {
+    margin-top: 48px;
   }
   @media (min-width: 640px) {
     .wrap {
       padding-inline: 40px;
+    }
+    .section {
+      padding-top: 128px;
+    }
+    .section-end {
+      padding-bottom: 128px;
+    }
+    .after-header {
+      margin-top: 56px;
     }
   }
   @media (min-width: 1024px) {
     .wrap {
       padding-inline: 48px;
     }
-    .grid-12 {
-      display: grid;
-      grid-template-columns: repeat(12, minmax(0, 1fr));
-      column-gap: 24px;
+    .section {
+      padding-top: 160px;
+    }
+    .section-end {
+      padding-bottom: 160px;
+    }
+    .after-header {
+      margin-top: 64px;
     }
   }
 
   /* ---------------------------------------------------------------- *
    * Surfaces. No ambient light: depth is the fill ladder, a flat 1px top
-   * highlight on product objects, and one drop shadow (.window).
+   * highlight on product objects, and one drop shadow for lifted cards.
    * ---------------------------------------------------------------- */
 
-  .card {
-    position: relative;
-    border-radius: 12px;
-    background: var(--color-raise-1);
-    border: 1px solid var(--color-edge-2);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
-  }
-  .card-on-band {
-    background: var(--color-raise-2);
-  }
   .fragment {
     position: relative;
     border-radius: 12px;
@@ -333,8 +593,7 @@ html {
   }
   /* the top highlight is drawn ABOVE the children: an inset shadow on the
    * box itself would sit under their fills */
-  .fragment::after,
-  .hero-frame::after {
+  .fragment::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -343,15 +602,11 @@ html {
     pointer-events: none;
     z-index: 1;
   }
-  /* no outer ring: the mask would clip it */
-  .hero-frame {
-    position: relative;
-    overflow: hidden;
-    border-radius: 20px;
-    background: var(--color-raise-1);
-    border: 1px solid var(--color-edge-2);
-    -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
-    mask-image: linear-gradient(to bottom, #000 72%, transparent);
+  /* a card that sits above the page: `fragment lifted` */
+  .lifted {
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.6),
+      0 24px 48px -12px rgba(0, 0, 0, 0.72);
   }
   .window {
     border-radius: 12px;
@@ -362,38 +617,45 @@ html {
       0 24px 48px -12px rgba(0, 0, 0, 0.72),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
-  .well {
-    border-radius: 8px;
-    background: var(--color-page);
-    border: 1px solid var(--color-edge-2);
-  }
 
   /* ---------------------------------------------------------------- *
-   * Controls. No button carries elevation; the micro-shadows are part of
-   * the recipe. Hover is a fill step, never a lift.
+   * Buttons. One filled button per viewport. Hover is a fill step over
+   * 120ms, never a lift; a press sinks to .98 in 100ms and comes back
+   * over 160ms.
    * ---------------------------------------------------------------- */
 
   .btn {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    height: 40px;
-    padding: 0 18px;
+    height: 44px;
+    padding: 0 22px;
     border-radius: 9999px;
     font: 500 15px/20px var(--font-sans);
     white-space: nowrap;
-    /* colour too: the nav's button changes variant in the close, and the text has to cross with
-     * the fill, or it shows light on light for a frame */
-    transition:
-      background-color var(--d-1) var(--ease-ui),
-      box-shadow var(--d-1) var(--ease-ui),
-      color var(--d-1) var(--ease-ui);
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition-property: transform, background-color, box-shadow, color;
+    transition-duration: 160ms, var(--d-1), var(--d-1), var(--d-1);
+    transition-timing-function: var(--ease-out), var(--ease-ui), var(--ease-ui), var(--ease-ui);
+  }
+  .btn:active:not(:disabled, [aria-disabled="true"]) {
+    transform: scale(0.98);
+    transition-duration: 100ms, var(--d-1), var(--d-1), var(--d-1);
   }
   .btn-sm {
     height: 32px;
     padding: 0 14px;
     font-size: 13px;
+  }
+  /* 32 tall to the eye, 44 to a finger */
+  .btn-sm::before {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
   }
   .btn-primary {
     background: var(--color-ink-1);
@@ -407,259 +669,374 @@ html {
     background: #fff;
   }
   .btn-secondary {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.06);
     color: var(--color-ink-1);
-    box-shadow:
-      inset 0 0 0 1px var(--color-edge-2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04),
-      0 0 0 1px rgba(0, 0, 0, 0.6);
-  }
-  .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  /* a segmented control: the active segment fills, nothing slides */
-  .seg {
-    display: inline-flex;
-    height: 36px;
-    padding: 3px;
-    gap: 2px;
-    border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.03);
     box-shadow: inset 0 0 0 1px var(--color-edge-2);
   }
-  .seg-item {
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+  /* product UI inside the Vercel card mock: Vercel's own deploy-button look, carrying the triangle */
+  .btn-vercel {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 14px;
-    border-radius: 9999px;
-    font: 500 13px/20px var(--font-sans);
-    color: var(--color-ink-3);
-    transition:
-      background-color var(--d-2) var(--ease-out),
-      color var(--d-1) var(--ease-ui);
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 6px;
+    background: #fff;
+    color: #000;
+    font: 500 14px/20px var(--font-sans);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+    transition-property: transform, background-color, color;
+    transition-duration: 160ms, var(--d-1), var(--d-1);
+    transition-timing-function: var(--ease-out), var(--ease-ui), var(--ease-ui);
   }
-  .seg-item[aria-selected="true"] {
-    background: var(--color-raise-3);
-    color: var(--color-ink-1);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 0 0 1px var(--color-edge-2),
-      0 1px 2px rgba(0, 0, 0, 0.4);
+  .btn-vercel:hover:not(:disabled, [aria-disabled="true"]) {
+    background: #e8e8e8;
+  }
+  .btn-vercel:active:not(:disabled, [aria-disabled="true"]) {
+    transform: scale(0.98);
+    transition-duration: 100ms, var(--d-1), var(--d-1);
+  }
+  .btn-vercel:is(:disabled, [aria-disabled="true"]) {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-ink-2);
+    cursor: default;
   }
 
-  .faq summary {
-    list-style: none;
+  /* ---------------------------------------------------------------- *
+   * The motion contract (components/landing/motion.ts). Text never
+   * animates; only figures do, once, then hold still.
+   *
+   *   html[data-motion="on"]  set by the head script when the reader has no
+   *                           reduced-motion preference, and taken away
+   *                           again if the app has not hydrated in 6s.
+   *   [data-armed]            set by useFigure on a figure that was off
+   *                           screen at hydration (or alwaysArmed).
+   *   [data-played]           set when it plays, or at once for the final
+   *                           frame (no motion, or on screen at hydration:
+   *                           then data-armed is never set).
+   *
+   * Start states:  html[data-motion="on"] [data-armed]:not([data-played]) …
+   * Keyframes:     html[data-motion="on"] [data-armed][data-played] …
+   * Nothing else ever hides content, so the prerender, no-JS and reduced
+   * motion all paint the final frame.
+   *
+   * The four helpers below cover most cases. Each reads --at (delay, 0ms),
+   * --for (duration, 240ms) and --ease (curve, ease-out) from the element.
+   *   .m-fade    opacity 0 -> its own opacity
+   *   .m-rise    the same, rising --rise (8px)
+   *   .m-draw    an SVG stroke drawn along its length (needs pathLength="1"; solid strokes only)
+   *   .m-grow-x  scaleX 0 -> 1 from the left edge
+   * ---------------------------------------------------------------- */
+
+  @keyframes m-fade {
+    from {
+      opacity: 0;
+    }
   }
-  .faq summary::-webkit-details-marker {
+  @keyframes m-rise {
+    from {
+      opacity: 0;
+      transform: translateY(var(--rise, 8px));
+    }
+  }
+  @keyframes m-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
+  @keyframes m-grow-x {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  .m-draw {
+    stroke-dasharray: 1;
+  }
+  .m-grow-x {
+    transform-origin: left center;
+  }
+  html[data-motion="on"] [data-armed]:not([data-played]) :is(.m-fade, .m-rise) {
+    opacity: 0;
+  }
+  html[data-motion="on"] [data-armed]:not([data-played]) .m-rise {
+    transform: translateY(var(--rise, 8px));
+  }
+  html[data-motion="on"] [data-armed]:not([data-played]) .m-draw {
+    stroke-dashoffset: 1;
+  }
+  html[data-motion="on"] [data-armed]:not([data-played]) .m-grow-x {
+    transform: scaleX(0);
+  }
+  html[data-motion="on"] [data-armed][data-played] :is(.m-fade, .m-rise, .m-draw, .m-grow-x) {
+    animation-duration: var(--for, 240ms);
+    animation-timing-function: var(--ease, var(--ease-out));
+    animation-delay: var(--at, 0ms);
+    animation-fill-mode: both;
+  }
+  html[data-motion="on"] [data-armed][data-played] .m-fade {
+    animation-name: m-fade;
+  }
+  html[data-motion="on"] [data-armed][data-played] .m-rise {
+    animation-name: m-rise;
+  }
+  html[data-motion="on"] [data-armed][data-played] .m-draw {
+    animation-name: m-draw;
+  }
+  html[data-motion="on"] [data-armed][data-played] .m-grow-x {
+    animation-name: m-grow-x;
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The nav (components/nav.tsx). The bar's fill lives on ::before so it
+   * can fade in whole (fill, blur and hairline together) and so the bar
+   * itself is never a backdrop root: the phone sheet under it blurs the
+   * page, not an empty bar.
+   * ---------------------------------------------------------------- */
+
+  .nav-bar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 9, 10, 0.72);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    box-shadow: 0 1px 0 var(--color-edge-2);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--d-2) var(--ease-ui),
+      background-color var(--d-2) var(--ease-ui);
+  }
+  .nav-bar[data-scrolled]::before {
+    opacity: 1;
+  }
+  /* Without script nothing tells the bar the page has moved, so it keeps its fill (over the hero the
+   * fill is nearly the page's own colour) and text never runs under a bare bar. Where the browser can
+   * tie an animation to the page's scroll, it fades in over the first 8px exactly as with script. */
+  html:not([data-js]) .nav-bar::before {
+    opacity: 1;
+  }
+  @supports (animation-timeline: scroll()) {
+    html:not([data-js]) .nav-bar::before {
+      opacity: 0;
+      animation: nav-fill linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 8px;
+    }
+  }
+  @keyframes nav-fill {
+    to {
+      opacity: 1;
+    }
+  }
+  /* The three page links. Each is a 32px box (padding taken back by the margin, so the words sit
+   * where they would without it), the same box as the GitHub mark beside them: every focus ring in
+   * the bar is 36 tall with the control radius, and the pill is the one exception. */
+  .nav-link {
+    margin: -6px -8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-control);
+    font: 400 14px/20px var(--font-sans);
+    color: var(--color-ink-3);
+    transition: color var(--d-1) var(--ease-ui);
+  }
+  /* a hash link is never "the current page", even when the URL carries its hash */
+  /* focused is never dimmer than hovered */
+  .nav-link:hover,
+  .nav-link:focus-visible,
+  .nav-link[aria-current="page"]:not([href*="#"]) {
+    color: var(--color-ink-1);
+  }
+  .nav-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-control);
+    color: var(--color-ink-3);
+    transition: color var(--d-1) var(--ease-ui);
+  }
+  .nav-icon:hover,
+  .nav-icon:focus-visible {
+    color: var(--color-ink-1);
+  }
+
+  /* below 768: a <details> sheet, so the menu opens without script. The 36px button is pulled 10px
+   * into the gutter, so its 16px lines end on the gutter's edge, mirroring the logo at the left. */
+  .nav-sheet {
+    margin-right: -10px;
+  }
+  .nav-sheet > summary {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-control);
+    color: var(--color-ink-1);
+    list-style: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-sheet > summary::-webkit-details-marker {
     display: none;
   }
-  /* The answers run two to six lines, and `pretty` in Chromium only rescues a one-word last line:
-   * "you keep them." still set at 13% of the measure. Balanced, an answer's lines run at about one
-   * length. Only here: every other paragraph keeps the global `pretty`. */
-  .faq > p {
-    text-wrap: balance;
+  /* inside the box: pulled into the gutter, an outside ring would end 2px from the screen's edge */
+  .nav-sheet > summary:focus-visible {
+    outline-offset: -2px;
   }
-
-  /* ---------------------------------------------------------------- *
-   * Section dividers: a full-bleed groove (1px black over 1px white at
-   * 6%), and the one contrasting band the page ends on
-   * ---------------------------------------------------------------- */
-
-  .groove {
+  .nav-sheet > summary::before {
+    content: "";
+    position: absolute;
+    inset: -4px;
+  }
+  /* two 1.5px lines whose top edges sit on whole pixels at 2x; they cross into an x */
+  .nav-burger {
     position: relative;
+    width: 16px;
+    height: 16px;
   }
-  .groove::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto;
-    height: 1px;
-    background: #000;
-  }
-  .groove::after {
-    content: "";
+  .nav-burger > span {
     position: absolute;
     left: 0;
-    right: 0;
-    top: 1px;
+    width: 16px;
+    height: 1.5px;
+    border-radius: 1px;
+    background: currentColor;
+    transition: transform var(--d-2) var(--ease-out);
+  }
+  .nav-burger > span:first-child {
+    top: 4.5px;
+  }
+  .nav-burger > span:last-child {
+    top: 9.5px;
+  }
+  .nav-sheet[open] .nav-burger > span:first-child {
+    transform: translateY(2.5px) rotate(45deg);
+  }
+  .nav-sheet[open] .nav-burger > span:last-child {
+    transform: translateY(-2.5px) rotate(-45deg);
+  }
+  /* The open sheet covers the whole viewport under the bar in the page's own colour, opaque, as one
+   * surface with the bar: no line of the page shows through it or cut in half under an edge, and
+   * the page under it does not scroll. The rows sit at its top on the column. */
+  .nav-panel {
+    position: fixed;
+    inset: 64px 0 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 8px 0 24px;
+    background: var(--color-page);
+  }
+  /* the hairlines stay on the column; each row's box reaches 8px past it, so its ring clears the text */
+  .nav-panel li + li {
+    border-top: 1px solid var(--color-edge-1);
+  }
+  .nav-panel a {
+    display: flex;
+    align-items: center;
+    height: 52px;
+    margin-inline: -8px;
+    padding-inline: 8px;
+    border-radius: var(--radius-control);
+    font: 500 17px/24px var(--font-sans);
+    color: var(--color-ink-1);
+  }
+  .nav-panel a:focus-visible {
+    outline-offset: -2px;
+  }
+  /* the surface fades in; only the rows move, so the sheet's own edges never leave the viewport */
+  html[data-motion="on"] .nav-sheet[open] .nav-panel {
+    animation: m-fade var(--d-2) var(--ease-ui);
+  }
+  html[data-motion="on"] .nav-sheet[open] .nav-panel > ul {
+    animation: m-rise var(--d-2) var(--ease-out);
+    --rise: -4px;
+  }
+  @media (max-width: 767px) {
+    .nav-bar:has(.nav-sheet[open])::before {
+      opacity: 1;
+      background: var(--color-page);
+      box-shadow: none;
+    }
+    html:has(.nav-sheet[open]) {
+      overflow: hidden;
+    }
+  }
+
+  /* The footer's links: 20px lines whose ring is rounded and held 2px off the glyphs by the padding,
+   * with a 44px hit area (.hit, above) so a thumb can take them on a phone. */
+  .foot-link {
+    display: block;
+    margin-inline: -2px;
+    padding-inline: 2px;
+    border-radius: 4px;
+    font: 400 13px/20px var(--font-sans);
+    color: var(--color-ink-4);
+    transition: color var(--d-1) var(--ease-ui);
+  }
+  .foot-link:hover {
+    color: var(--color-ink-1);
+  }
+
+  /* Skip to content: out of sight until a keyboard reaches it, then a small card under the bar on
+   * the content's left edge, clear of the logo. */
+  .skip-link {
+    position: fixed;
+    top: 76px;
+    left: 16px;
+    z-index: 50;
+    padding: 8px 12px;
+    border-radius: var(--radius-control);
+    background: var(--color-raise-2);
+    box-shadow:
+      inset 0 0 0 1px var(--color-edge-2),
+      0 0 0 1px rgba(0, 0, 0, 0.6);
+    font: 400 13px/20px var(--font-sans);
+    color: var(--color-ink-1);
+  }
+  .skip-link:not(:focus) {
+    width: 1px;
     height: 1px;
-    background: rgba(255, 255, 255, 0.06);
-  }
-  .band {
-    background: var(--color-raise-1);
-  }
-
-  /* ---------------------------------------------------------------- *
-   * The hero's product: the Apps page on a fixed 1280x800 canvas, zoomed
-   * to the frame (components/demo). Script writes --demo-scale on
-   * .hero-shot from the frame's measured width; the values here are what
-   * the canvas renders at before that, and without script.
-   * ---------------------------------------------------------------- */
-
-  .hero-shot {
-    --demo-scale: 0.775;
-  }
-  @media (min-width: 1280px) {
-    .hero-shot {
-      --demo-scale: 0.975;
-    }
-  }
-  @media (min-width: 1312px) {
-    .hero-shot {
-      --demo-scale: 1;
-    }
-  }
-  @supports (opacity: calc(100vw / 1280px)) {
-    .hero-shot {
-      --demo-scale: min(1, calc((100vw - 32px) / 1280px));
-    }
-  }
-  .demo-canvas {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 1280px;
-    height: 800px;
-    zoom: var(--demo-scale);
-  }
-  @supports not (zoom: 1) {
-    .demo-canvas {
-      zoom: normal;
-      transform: scale(var(--demo-scale));
-      transform-origin: 0 0;
-    }
-  }
-
-  /* The story the hero tells once: the request is sent, the app arrives at
-   * the top of the table building, then runs. CSS with delays (--at, and
-   * --for for the typing dots), paused until Hero sets data-play on
-   * .hero-shot. Reduced motion, and the <noscript> copy of the same rule in
-   * the hero, jump every piece to its last frame. */
-  @keyframes seq-in {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-  @keyframes seq-out {
-    to {
-      opacity: 0;
-    }
-  }
-  @keyframes row-in {
-    from {
-      opacity: 0;
-      max-height: 0;
-    }
-    to {
-      opacity: 1;
-      max-height: 60px;
-    }
-  }
-  @keyframes grow-in {
-    from {
-      opacity: 0;
-      max-height: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      max-height: 4rem;
-      transform: none;
-    }
-  }
-  @keyframes life {
-    0% {
-      opacity: 0;
-      max-height: 0;
-    }
-    15%,
-    85% {
-      opacity: 1;
-      max-height: 2rem;
-    }
-    100% {
-      opacity: 0;
-      max-height: 0;
-    }
-  }
-  @keyframes wash {
-    from {
-      background-color: var(--wash);
-    }
-    to {
-      background-color: transparent;
-    }
-  }
-  @keyframes demo-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
-  }
-  .seq {
-    animation: seq-in var(--d-2) var(--ease-out) both;
-    animation-delay: var(--at, 0s);
-  }
-  .seq-out {
-    animation: seq-out 160ms var(--ease-ui) both;
-    animation-delay: var(--at, 0s);
-  }
-  .seq-row {
+    padding: 0;
     overflow: hidden;
-    animation: row-in var(--d-3) var(--ease-out) both;
-    animation-delay: var(--at, 0s);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
-  .seq-grow {
-    overflow: hidden;
-    animation: grow-in var(--d-2) var(--ease-out) both;
-    animation-delay: var(--at, 0s);
+  @media (min-width: 640px) {
+    .skip-link {
+      left: 40px;
+    }
   }
-  .seq-life {
-    overflow: hidden;
-    animation: life var(--for, 1s) ease both;
-    animation-delay: var(--at, 0s);
-  }
-  .seq-wash {
-    --wash: color-mix(in oklch, oklch(0.94 0.002 270) 8%, transparent);
-    animation: wash var(--d-wash) var(--ease-out) both;
-    animation-delay: var(--at, 0s);
-  }
-  /* the Building dot: exactly two cycles, never infinite */
-  .seq-pulse {
-    animation: demo-pulse 1s ease-in-out 2 both;
-    animation-delay: var(--at, 0s);
-  }
-  /* a value that changes: both stacked in one grid area, the second takes over */
-  .seq-swap {
-    display: inline-grid;
-  }
-  .seq-swap > * {
-    grid-area: 1 / 1;
-  }
-  .hero-shot:not([data-play]) :is(.seq, .seq-out, .seq-row, .seq-grow, .seq-life, .seq-wash, .seq-pulse) {
-    animation-play-state: paused;
-  }
-  /* running as well as instant: a paused 1ms animation holds its FIRST
-   * frame, and the play gate may not have fired yet */
-  @media (prefers-reduced-motion: reduce) {
-    .hero-shot :is(.seq, .seq-out, .seq-row, .seq-grow, .seq-life, .seq-wash, .seq-pulse) {
-      animation-duration: 1ms !important;
-      animation-delay: 0s !important;
-      animation-iteration-count: 1 !important;
-      animation-play-state: running !important;
+  @media (min-width: 1024px) {
+    .skip-link {
+      left: max(48px, calc(50% - 600px));
     }
   }
 }
+
+/* ---------------------------------------------------------------- *
+ * The landing's sections, one partial per section, each owned by the
+ * section's file in components/sections. In page order, after the
+ * shared classes above so a section can refine them.
+ * ---------------------------------------------------------------- */
+@import "./styles/landing/hero.css" layer(components);
+@import "./styles/landing/made.css" layer(components);
+@import "./styles/landing/decisions.css" layer(components);
+@import "./styles/landing/kitchen.css" layer(components);
+@import "./styles/landing/cost.css" layer(components);
+@import "./styles/landing/runs-itself.css" layer(components);
+@import "./styles/landing/vercel.css" layer(components);
+@import "./styles/landing/start.css" layer(components);
 
 /* ---------------------------------------------------------------- *
  * The integrations wall (components/universe): glass tiles on the dark page

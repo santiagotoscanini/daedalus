@@ -1,0 +1,353 @@
+/* Cost (#cost, components/sections/cost.tsx): the paired-bar chart and the text under it.
+ *
+ * The chart is laid out on its column, not the viewport: at 792px of column and up it is the 760px
+ * chart (labels in a 70px column, so the bars start on the prose column's left edge 70px in, and
+ * $3,600 = 608px, so --u is 1px); below, each row's label sits over two full-width bars in the
+ * prose's own 620 column (so a tablet has one left edge, not two) and the same scale stretches to
+ * that width minus 64px, which leaves room for the longest value outside its bar. */
+
+.cost-figure {
+  container-type: inline-size;
+}
+
+/* --px is one device pixel, the step every bar length is rounded to: on a 2x screen a year can be
+ * 13.5px, where whole pixels would make it 13 or 14 and the five years visibly unequal. */
+.cost-chart {
+  --u: calc((min(100cqw, 620px) - 64px) / 608);
+  --px: 1px;
+  max-width: 620px;
+  margin-inline: auto;
+}
+@media (min-resolution: 2dppx) {
+  .cost-chart {
+    --px: 0.5px;
+  }
+}
+@media (min-resolution: 3dppx) {
+  .cost-chart {
+    --px: calc(1px / 3);
+  }
+}
+
+.cost-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 20px;
+  font: 400 12px/16px var(--font-sans);
+  color: var(--color-ink-3);
+}
+.cost-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cost-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.cost-legend .is-rent {
+  background: var(--bar-rent);
+}
+.cost-legend .is-box {
+  background: var(--color-ok);
+}
+
+.cost-rows {
+  display: grid;
+  gap: 28px;
+  margin-top: 28px;
+}
+.cost-row {
+  display: grid;
+  gap: 8px;
+}
+.cost-label {
+  font: 500 15px/20px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-2);
+}
+.cost-pair {
+  display: grid;
+  gap: 6px;
+}
+
+/* A bar is its end (--e) and one year (--w), both from cost.tsx on the gap-free 608 scale times
+ * --u. The years sit 1px apart: the rent's from the left, the box's back from its end, so the box's
+ * purchase is what remains before them and the total lands where the value says. */
+.cost-bar {
+  --w: calc(var(--u) * var(--year));
+  --e: calc(var(--u) * var(--end));
+  position: relative;
+  height: 14px;
+}
+.cost-bar.is-rent {
+  --e: calc(5 * var(--w));
+  --gaps: 4;
+}
+.cost-bar.is-box {
+  --gaps: 5;
+}
+.cost-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--w);
+}
+.cost-seg.is-rent {
+  left: calc(var(--i) * (var(--w) + 1px));
+  background: var(--bar-rent);
+}
+.cost-seg.is-buy {
+  left: 0;
+  width: calc(var(--e) - 5 * var(--w));
+  background: var(--color-ok);
+}
+.cost-seg.is-run {
+  left: calc(var(--e) - (5 - var(--i)) * var(--w) + (var(--i) + 1) * 1px);
+  background: var(--color-ok);
+  opacity: 0.7;
+}
+/* every value 10px after its bar: at the narrowest phone the longest bar and "$3,599" still end
+ * inside the column, so no value is ever set into a bar */
+.cost-val {
+  position: absolute;
+  top: -1px;
+  left: calc(var(--e) + var(--gaps) * 1px + 10px);
+  font: 400 13px/16px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-ink-2);
+}
+.cost-base {
+  height: 1px;
+  margin-top: 28px;
+  background: var(--color-edge-3);
+}
+
+/* Hold the start state through each delay, then let go: a transform animation that stays in force
+ * after it ends keeps its segment on its own compositor layer, and those layers, sampled at
+ * fractional offsets, closed every other 1px gap. Let go, each bar paints exactly like the still
+ * frame. */
+html[data-motion="on"] [data-armed][data-played] :is(.cost-seg, .cost-val) {
+  animation-fill-mode: backwards;
+}
+
+@container (min-width: 792px) {
+  .cost-chart {
+    --u: 1px;
+    width: 760px;
+    max-width: none;
+  }
+  .cost-rows {
+    gap: 36px;
+  }
+  .cost-row {
+    grid-template-columns: 70px 1fr;
+    align-items: center;
+    gap: 0;
+  }
+  /* right-aligned against the bars, so the units stack and each label sits by its own pair */
+  .cost-label {
+    padding-right: 16px;
+    text-align: right;
+  }
+  .cost-bar {
+    height: 16px;
+  }
+  .cost-val {
+    top: 0;
+  }
+  .cost-base {
+    margin-left: 70px;
+  }
+}
+
+/* Every length on a whole device pixel, so no edge is antialiased and every gap stays exactly 1px.
+ * The end is rounded once and the years are laid back from it, so rounding never adds up along
+ * the bar. */
+@supports (left: round(1.5px, 1px)) {
+  .cost-bar {
+    --w: round(calc(var(--u) * var(--year)), var(--px));
+    --e: round(calc(var(--u) * var(--end)), var(--px));
+  }
+  .cost-bar.is-rent {
+    --e: calc(5 * var(--w));
+  }
+}
+
+/* the intro's second sentence, the box, on a line of its own under the rent */
+.cost-line {
+  display: block;
+}
+/* A phone cannot set the intro in three centred lines (its first sentence alone takes three at
+ * 17px in 358), so there it follows the page's alignment rule: one left-aligned paragraph, on the
+ * same left edge as the chart under it. */
+@media (max-width: 639.98px) {
+  #cost .t-intro {
+    text-align: left;
+    text-wrap: pretty;
+  }
+  .cost-line {
+    display: inline;
+  }
+}
+
+/* ---- under the chart ---- */
+
+.cost-note {
+  max-width: 620px;
+  margin: 24px auto 0;
+  text-align: center;
+  text-wrap: balance;
+}
+/* one sentence to a line, so the note never runs wider than the text under it */
+.cost-note > span {
+  display: block;
+}
+.cost-prose {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 40px;
+}
+
+/* "How we counted": a native <details>; the summary centred on the axis, the list left-aligned in
+ * the 620 column under it. The summary carries 4px of air on each side and 8px at the ends, so its
+ * focus ring and hover never touch the words; the margins give the air back to the layout. */
+.cost-how {
+  margin-top: 20px;
+}
+.cost-how > summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin: -4px auto;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font: 500 14px/20px var(--font-sans);
+  color: var(--color-ink-1);
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--d-1) var(--ease-ui);
+}
+/* hover fills its own rounded box faintly, the step every quiet control on the page takes */
+.cost-how > summary:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.cost-how > summary::-webkit-details-marker {
+  display: none;
+}
+/* 28px tall to the eye, 44 to a finger */
+.cost-how > summary::before {
+  content: "";
+  position: absolute;
+  inset: -8px -4px;
+}
+.cost-how > summary svg {
+  color: var(--color-ink-3);
+  transition: color var(--d-1) var(--ease-ui);
+}
+/* the turn is motion: with reduced motion the chevron just points the new way */
+html[data-motion="on"] .cost-how > summary svg {
+  transition:
+    transform 200ms var(--ease-out),
+    color var(--d-1) var(--ease-ui);
+}
+.cost-how > summary:hover svg {
+  color: var(--color-ink-1);
+}
+.cost-how[open] > summary svg {
+  transform: rotate(90deg);
+}
+
+.cost-how-body {
+  max-width: 620px;
+  margin-inline: auto;
+  padding-top: 16px;
+  text-align: left;
+}
+.cost-how-body ul {
+  display: grid;
+  gap: 8px;
+  font: 400 14px/22px var(--font-sans);
+  color: var(--color-ink-3);
+}
+.cost-how-body li {
+  position: relative;
+  padding-left: 16px;
+  text-wrap: pretty;
+}
+.cost-how-body li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 6px;
+  height: 1px;
+  background: var(--color-ink-4);
+}
+/* the drive list: its dashes on the parent's text column */
+.cost-how-body li ul {
+  margin-top: 8px;
+}
+/* Where each line's number came from, on a quiet line of its own under the sentence: 13/20 plus
+ * 2px keeps the list's 22px step. Two sources sit 12px apart with nothing between them, their
+ * underlines already tell them apart. A source name never breaks, so "office-watch.com" stays one
+ * word. */
+.cost-srcs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-ink-4);
+}
+/* 2px of air inside the link for the focus tint, given back by the margin, so the words and the
+ * line keep their places */
+.cost-srcs a {
+  margin: -2px;
+  padding: 2px;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(128, 131, 137, 0.45);
+  text-underline-offset: 3px;
+  transition:
+    color var(--d-1) var(--ease-ui),
+    text-decoration-color var(--d-1) var(--ease-ui);
+}
+.cost-srcs a:hover {
+  color: var(--color-ink-2);
+  text-decoration-color: rgba(200, 202, 207, 0.5);
+}
+/* focused, the tint every text link takes (.link), not a ring that would crowd the next source */
+.cost-srcs a:focus-visible {
+  outline: 2px solid transparent;
+  background: rgba(245, 246, 247, 0.14);
+  color: var(--color-ink-1);
+  text-decoration-color: currentColor;
+}
+
+/* Opening slides the list down rather than dropping it in (where the browser can animate to
+ * height: auto); reduced motion and older browsers open it at once. */
+html[data-motion="on"] .cost-how {
+  interpolate-size: allow-keywords;
+}
+html[data-motion="on"] .cost-how::details-content {
+  height: 0;
+  overflow: clip;
+  transition:
+    height var(--d-2) var(--ease-out),
+    content-visibility var(--d-2) allow-discrete;
+}
+html[data-motion="on"] .cost-how[open]::details-content {
+  height: auto;
+}

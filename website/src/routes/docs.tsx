@@ -1,21 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { pageHead } from "~/site-head";
 
-/** /docs — the boundary document. A daedalus-managed machine rebuilds from
- * its config repo; this page inventories what every install still needs
- * OUTSIDE it: provider accounts, a router, two keys, and the steps that stay
- * steps. Same register as the landing's ledger: hairline rows, sans labels,
- * no cards, on the landing's column. The operator's own ledger (this box's
- * ports, tokens, tunnels) lives in the private config repo, not here. */
+/** /docs: the setup notes. The landing's Start section links its first two steps here: how a
+ * house sets up the box (#box) and joins its other computers (#computers), the only place on the
+ * site that shows commands. Below them, the boundary document: a daedalus-managed machine
+ * rebuilds from its config repo, and the rest of the page inventories what every install still
+ * needs OUTSIDE it: provider accounts, a router, two keys, and the steps that stay steps.
+ * Hairline rows, sans labels, no cards, no eyebrows or pills, on the landing's column. The
+ * operator's own ledger (this box's ports, tokens, tunnels) lives in the private config repo. */
 
 export const Route = createFileRoute("/docs")({
   component: DocsPage,
   head: () =>
     pageHead({
       path: "/docs",
-      title: "daedalus docs: what stays outside the repo",
+      title: "daedalus docs: the setup notes",
       description:
-        "What a daedalus install still needs outside its config repo: a Cloudflare zone and tunnel, a router, GitHub, a mail relay, and two keys you cannot lose.",
+        "How to set up a daedalus box and add a house’s other computers, and what an install still needs outside its config repo: a Cloudflare zone and tunnel, a router, GitHub, a mail relay, and two keys you cannot lose.",
     }),
 });
 
@@ -28,13 +29,16 @@ type Tag = "re-issuable" | "keep safe" | "hand-made";
 interface Row {
   name: string;
   body: string;
+  /** a command, one line per entry, shown as typed */
+  code?: string[];
   via?: string;
   tag?: Tag;
 }
 
 interface DocSection {
   id: string;
-  provider: string;
+  /** the jump list's name for it */
+  short: string;
   title: string;
   blurb: string;
   rows: Row[];
@@ -42,9 +46,65 @@ interface DocSection {
 
 const SECTIONS: DocSection[] = [
   {
+    id: "box",
+    short: "Set up the box",
+    title: "Set up the box",
+    blurb:
+      "The box is one computer running NixOS, and everything it runs is written down in a git repository of your own, which takes daedalus as an input. Setting it up takes someone comfortable with a terminal, once. After that the box rebuilds itself from that repository.",
+    rows: [
+      {
+        name: "start from the template",
+        body: "On the computer that will be the box, with NixOS installed and flakes turned on, make an empty folder for the repository and fill it from daedalus’s template.",
+        code: ["nix flake init -t github:santiagotoscanini/daedalus#config"],
+      },
+      {
+        name: "replace the documentation values",
+        body: "Every value in the template is a stand-in: example.org, a user called alice, documentation addresses, all-zero image pins and placeholder secrets. Replace each one with your own (the files say which), and swap in this machine’s own hardware-configuration.nix.",
+      },
+      {
+        name: "create the secrets",
+        body: "Write .sops.yaml with two recipients: the box, from its SSH host key, so it can decrypt at activation, and your own age key, so a clone of the repository and that key are the whole recovery path. Then create each placeholder secret with sops. host/sops/README.md lists every file and its format.",
+        code: ["ssh-to-age < /etc/ssh/ssh_host_ed25519_key.pub"],
+        tag: "keep safe",
+      },
+      {
+        name: "switch",
+        body: "Build the machine from the repository and make it the running system. The template’s host is called box.",
+        code: ["sudo nixos-rebuild switch --flake .#box"],
+      },
+    ],
+  },
+  {
+    id: "computers",
+    short: "Add a computer",
+    title: "Add a computer",
+    blurb:
+      "Every other computer in the house joins the box with the daedalus app: a small service, with a menu bar or tray app beside it. Install it as the person whose Claude Code should run on that machine.",
+    rows: [
+      {
+        name: "a Mac",
+        body: "macOS 13 or newer. Download the disk image (Download for Mac on the home page, or daedalus-agent-macos.dmg from the newest release), drag Daedalus Agent into Applications and open it. One administrator prompt says what it installs and for whom.",
+      },
+      {
+        name: "Windows",
+        body: "From an administrator PowerShell. It installs the service and the tray, and starts them. Nothing opens in the firewall.",
+        code: ["Set-ExecutionPolicy -Scope Process Bypass -Force", "irm https://daedalus.toscanini.me/install.ps1 | iex"],
+      },
+      {
+        name: "Linux",
+        body: "systemd 240 or newer, on x86_64 or aarch64, from a terminal. It checks every file against the release’s signed manifest where the machine’s openssl can. A NixOS machine is configured through nix instead.",
+        code: ["curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh"],
+      },
+      {
+        name: "approve it on the box",
+        body: "A Mac logs in: Log in… in its menu bar opens the box’s page in your browser, where you sign in and confirm it. Windows and Linux pair with the key the box shows in Settings › Machines. The installer asks for it at its end, or Pair with the box… in the tray takes it later. The machine then waits until you approve it on that page, once you have compared the fingerprints both sides show.",
+      },
+    ],
+  },
+  {
     id: "cloudflare",
-    provider: "Cloudflare",
-    title: "The zone and the tunnel",
+    short: "Cloudflare",
+    title: "Cloudflare’s zone and tunnel",
     blurb:
       "One zone, one API token, one tunnel. All public HTTP enters through the tunnel. DNS for the zone splits two ways: records the repo syncs, and records you manage by hand. Confusing them is the classic mistake.",
     rows: [
@@ -55,12 +115,12 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "the tunnel",
-        body: "Created once via the API. Cloudflare returns the tunnel secret only in the creation response, so the dashboard wizard can't be used. Ingress is locally managed from the rendered config; editing it in the dashboard does nothing. The credential rides sops-encrypted in the config repo, which is the whole backup.",
+        body: "Created once via the API. Cloudflare returns the tunnel secret only in the creation response, so the dashboard wizard can’t be used. Ingress is locally managed from the rendered config; editing it in the dashboard does nothing. The credential rides sops-encrypted in the config repo, which is the whole backup.",
         tag: "re-issuable",
       },
       {
         name: "synced CNAMEs",
-        body: "One proxied CNAME per published app, upserted and swept on every rebuild. Any record pointing at the tunnel that isn't declared gets deleted. The repo owns this class of record; the dashboard doesn't.",
+        body: "One proxied CNAME per published app, upserted and swept on every rebuild. Any record pointing at the tunnel that isn’t declared gets deleted. The repo owns this class of record; the dashboard doesn’t.",
       },
       {
         name: "hand-made records",
@@ -69,44 +129,44 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "the API token",
-        body: "One token for everything Cloudflare on the box. Zone › Zone › Read and Zone › DNS › Edit cover the proxy's DNS-01, the route sync, the dynamic address and the control plane's domain picker; Account › Cloudflare One Connector: cloudflared › Read covers its tunnel panels. Include all zones and a domain added later shows up without touching the token. Stored once, so rotating it is one edit. Losing it is an outage, not data loss.",
+        body: "One token for everything Cloudflare on the box. Zone › Zone › Read and Zone › DNS › Edit cover the proxy’s DNS-01, the route sync, the dynamic address and the control plane’s domain picker; Account › Cloudflare One Connector: cloudflared › Read covers its tunnel panels. Include all zones and a domain added later shows up without touching the token. Stored once, so rotating it is one edit. Losing it is an outage, not data loss.",
         tag: "re-issuable",
       },
     ],
   },
   {
     id: "acme",
-    provider: "Let's Encrypt",
-    title: "One wildcard",
+    short: "Let’s Encrypt",
+    title: "One wildcard certificate",
     blurb:
       "The ACME account is created implicitly on first run. One certificate covers the apex and the wildcard, issued over DNS-01 with the token above.",
     rows: [
       {
         name: "DNS-01, pinned upstream",
-        body: "Challenges resolve against 1.1.1.1 directly. The LAN's own resolver can't see a fresh TXT record, and waiting on it would time every renewal out.",
+        body: "Challenges resolve against 1.1.1.1 directly. The LAN’s own resolver can’t see a fresh TXT record, and waiting on it would time every renewal out.",
       },
       {
         name: "the cert store",
-        body: "Not in any backup tree. It reissues itself from nothing, but Let's Encrypt rate-limits duplicates, so copy it aside before risky disk work.",
+        body: "Not in any backup tree. It reissues itself from nothing, but Let’s Encrypt rate-limits duplicates, so copy it aside before risky disk work.",
         tag: "re-issuable",
       },
     ],
   },
   {
     id: "router",
-    provider: "The router",
-    title: "Forward nothing you didn't choose",
+    short: "The router",
+    title: "Forward nothing you didn’t choose",
     blurb:
-      "The only hardware configuration in the system. Public HTTP arrives through the tunnel, so 80 and 443 are never forwarded. The router can't be declared, so each forward you do make is written down in the repo beside the stack that needs it, where a reader would look.",
+      "The only hardware configuration in the system. Public HTTP arrives through the tunnel, so 80 and 443 are never forwarded. The router can’t be declared, so each forward you do make is written down in the repo beside the stack that needs it, where a reader would look.",
     rows: [
       {
         name: "what gets forwarded",
-        body: "Only protocols that can't ride the tunnel: a WireGuard endpoint, a game server. No TLS means no SNI for a proxy to route on, and no tunnel client inside a game launcher.",
+        body: "Only protocols that can’t ride the tunnel: a WireGuard endpoint, a game server. No TLS means no SNI for a proxy to route on, and no tunnel client inside a game launcher.",
         tag: "hand-made",
       },
       {
         name: "DHCP: off",
-        body: "The box's DNS server is also the LAN's DHCP server, so the router's must be off. The box itself boots on a static IP, since there'd be nobody to lease from that early.",
+        body: "The box’s DNS server is also the LAN’s DHCP server, so the router’s must be off. The box itself boots on a static IP, since there’d be nobody to lease from that early.",
       },
       {
         name: "everything else: closed",
@@ -116,28 +176,28 @@ const SECTIONS: DocSection[] = [
   },
   {
     id: "github",
-    provider: "GitHub",
-    title: "Keys and builds",
+    short: "GitHub",
+    title: "Keys and builds on GitHub",
     blurb:
       "The repos live here; the builds do not. A push wakes the box, which builds the image itself and lands it in its own registry. GitHub holds the source and the keys.",
     rows: [
       {
         name: "the config repo",
-        body: "Private. It holds the machine: every stack, every sops-encrypted secret, and the ledger of what's outside it. A deploy SSH key, its public half registered by hand in account settings, authenticates the weekly autoupgrade push.",
+        body: "Private. It holds the machine: every stack, every sops-encrypted secret, and the ledger of what’s outside it. A deploy SSH key, its public half registered by hand in account settings, authenticates the weekly autoupgrade push.",
         tag: "re-issuable",
       },
       {
         name: "one repo per app",
-        body: "Each app is a repo. A push to main reaches the box as a webhook, which builds the image on its own hardware (Railpack, unless the repo has a Dockerfile and no railpack.json) and pushes it to the box's registry, then starts the app's deploy.",
+        body: "Each app is a repo. A push to main reaches the box as a webhook, which builds the image on its own hardware (Railpack, unless the repo has a Dockerfile and no railpack.json) and pushes it to the box’s registry, then starts the app’s deploy.",
       },
       {
-        name: "the box's own GitHub App",
+        name: "the box’s own GitHub App",
         body: "Created and installed from the control plane. Its private key is sealed into the config repo and stays host-side; the container only ever sees a one-hour installation token, scoped to reading contents and Actions runs and writing checks and deployments.",
         tag: "re-issuable",
       },
       {
         name: "Pages",
-        body: "This site. Built by Actions, custom domain set once in the repo's Pages settings, paired with a hand-made grey-cloud CNAME in the zone.",
+        body: "This site. Built by Actions, custom domain set once in the repo’s Pages settings, paired with a hand-made grey-cloud CNAME in the zone.",
         via: ".github/workflows/website.yml",
         tag: "hand-made",
       },
@@ -145,7 +205,7 @@ const SECTIONS: DocSection[] = [
   },
   {
     id: "mail",
-    provider: "Mail",
+    short: "Mail",
     title: "The alert channel",
     blurb:
       "Every alert, disk failure and dead-man ping emails through one SMTP relay. One app password, one encrypted copy, shared by every consumer. None duplicates it.",
@@ -163,31 +223,31 @@ const SECTIONS: DocSection[] = [
   },
   {
     id: "custody",
-    provider: "Custody",
+    short: "Custody",
     title: "The two keys",
     blurb:
       "Everything above is re-issuable: lose it and you have an outage. The two keys here are not. Lose either and no rebuild, snapshot or provider dashboard brings it back.",
     rows: [
       {
         name: "the age recovery key",
-        body: "Every secret in the config repo decrypts for exactly two identities: the box's SSH host key, and your personal age key, whose password-manager copy is the recovery of last resort. Lose both and the repo's secrets are ciphertext forever; every provider relationship above gets rebuilt by hand.",
+        body: "Every secret in the config repo decrypts for exactly two identities: the box’s SSH host key, and your personal age key, whose password-manager copy is the recovery of last resort. Lose both and the repo’s secrets are ciphertext forever; every provider relationship above gets rebuilt by hand.",
         tag: "keep safe",
       },
       {
-        name: "the identity provider's encryption key",
-        body: "One environment variable encrypts the identity provider's signing keys at rest. Set it once and treat it as fixed. Rotating it means re-encrypting everything it protects; losing it means every session and every app registration starts over.",
+        name: "the identity provider’s encryption key",
+        body: "One environment variable encrypts the identity provider’s signing keys at rest. Set it once and treat it as fixed. Rotating it means re-encrypting everything it protects; losing it means every session and every app registration starts over.",
         tag: "keep safe",
       },
       {
         name: "passkeys",
-        body: "The identity provider's first boot is interactive: an admin account and a passkey, registered once. The passkeys on your devices are the credential; the last resort is a one-time token minted from a shell on the box.",
+        body: "The identity provider’s first boot is interactive: an admin account and a passkey, registered once. The passkeys on your devices are the credential; the last resort is a one-time token minted from a shell on the box.",
         tag: "keep safe",
       },
     ],
   },
   {
     id: "manual",
-    provider: "Still manual",
+    short: "Still manual",
     title: "The steps that stay steps",
     blurb: "Three moves no rebuild makes for you. Each is one command, if you know it exists.",
     rows: [
@@ -197,11 +257,11 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "after importing a fresh pool",
-        body: "Child datasets are not auto-created. Each one is a one-time create. The repo lists every child; the pool doesn't.",
+        body: "Child datasets are not auto-created. Each one is a one-time create. The repo lists every child; the pool doesn’t.",
       },
       {
         name: "after losing the box",
-        body: "Images live only in the box's own registry, so every app needs one build before its first deploy on new hardware.",
+        body: "Images live only in the box’s own registry, so every app needs one build before its first deploy on new hardware.",
       },
     ],
   },
@@ -211,17 +271,14 @@ const SECTIONS: DocSection[] = [
  * Page
  * ---------------------------------------------------------------- */
 
-/** The custody tags carry no colour: colour on this site is for live state. "keep safe" is the one
- * that costs data when ignored, so it takes the body emphasis (weight 500, one ink brighter). */
-function TagChip({ tag }: { tag: Tag }) {
+/** The custody tag, as plain small type under the row's name: no border, no colour (colour on this
+ * site is for live state). "keep safe" is the one that costs data when ignored, so it takes the
+ * body emphasis (weight 500, two inks brighter). */
+function TagLine({ tag }: { tag: Tag }) {
   return (
-    <span
-      className={`t-small mt-2 inline-flex h-6 items-center rounded-chip border border-edge-2 px-2 ${
-        tag === "keep safe" ? "font-medium text-ink-2" : ""
-      }`}
-    >
+    <p className={`mt-1 text-[12px] leading-[18px] ${tag === "keep safe" ? "font-medium text-ink-2" : "text-ink-4"}`}>
       {tag}
-    </span>
+    </p>
   );
 }
 
@@ -229,19 +286,18 @@ function DocsPage() {
   return (
     <main id="main" className="wrap pb-32 pt-28 lg:pt-40">
       <div className="max-w-[792px]">
-        <p className="t-small text-ink-4">External setup</p>
-        <h1 className="t-display mt-4">What stays outside the repo.</h1>
+        <h1 className="t-display">The setup notes.</h1>
         <p className="t-lead mt-6 max-w-[690px]">
-          A daedalus-managed machine rebuilds from its config repo, except for these: the accounts,
-          dashboards, two keys and one router that live outside git. Each is configured once, by
-          hand. This page is what every install still needs.
+          How to set up the box and join the house’s other computers to it. Then what every install still needs
+          outside its config repo: the accounts, dashboards, two keys and one router that live outside git, each
+          configured once, by hand.
         </p>
 
         {/* Jump list */}
         <nav aria-label="Sections" className="mt-10 flex flex-wrap gap-x-5 gap-y-2">
           {SECTIONS.map((s) => (
             <a key={s.id} href={`#${s.id}`} className="t-small link">
-              {s.provider}
+              {s.short}
             </a>
           ))}
         </nav>
@@ -249,12 +305,10 @@ function DocsPage() {
         {/* The ledger */}
         <div className="mt-24 flex flex-col gap-24">
           {SECTIONS.map((s) => (
-            <section key={s.id} id={s.id}>
-              <div className="flex items-baseline gap-4">
-                <h2 className="t-small text-ink-4">{s.provider}</h2>
-                <span className="h-px flex-1 bg-edge-1" aria-hidden />
-              </div>
-              <h3 className="t-title-l mt-4">{s.title}</h3>
+            <section key={s.id} id={s.id} aria-labelledby={`${s.id}-title`}>
+              <h2 id={`${s.id}-title`} className="t-title-l">
+                {s.title}
+              </h2>
               <p className="t-body mt-3 max-w-[690px]">{s.blurb}</p>
 
               <div className="mt-8">
@@ -265,10 +319,16 @@ function DocsPage() {
                   >
                     <div>
                       <p className="t-body font-medium text-ink-1">{row.name}</p>
-                      {row.tag ? <TagChip tag={row.tag} /> : null}
+                      {row.tag ? <TagLine tag={row.tag} /> : null}
                     </div>
-                    <div>
+                    {/* min-w-0: a command scrolls inside its own box instead of widening the column */}
+                    <div className="min-w-0">
                       <p className="t-body text-ink-2">{row.body}</p>
+                      {row.code ? (
+                        <pre className="t-mono mt-3 overflow-x-auto rounded-control bg-raise-1 px-4 py-3 shadow-[inset_0_0_0_1px_var(--color-edge-1)]">
+                          <code>{row.code.join("\n")}</code>
+                        </pre>
+                      ) : null}
                       {row.via ? <p className="t-mono-s mt-2">{row.via}</p> : null}
                     </div>
                   </div>
@@ -281,10 +341,10 @@ function DocsPage() {
         {/* Closing */}
         <div className="mt-24 border-t border-edge-3 pt-8">
           <p className="t-body max-w-[690px]">
-            The pattern, if you're building your own: when something can't be declared, declare
-            <em> that it exists</em> — beside the stack that needs it, in the place a reader would
-            look. A port forward lives in a registry no rebuild consumes; your config repo should
-            carry its own copy of this page, filled in.
+            The pattern, if you’re building your own: when something can’t be declared, declare
+            <em> that it exists</em>, beside the stack that needs it, in the place a reader would look. A port
+            forward lives in a registry no rebuild consumes; your config repo should carry its own copy of this
+            page, filled in.
           </p>
           <p className="t-small mt-6 text-ink-4">declared where possible, written down where not</p>
         </div>

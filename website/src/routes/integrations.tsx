@@ -41,8 +41,7 @@ function IntegrationsPage() {
   return (
     <main id="main">
       <header className="wrap pb-4 pt-28 lg:pt-40">
-        <p className="t-small text-ink-4">Integrations</p>
-        <h1 id="integrations-title" className="t-display mt-4 max-w-[792px]">
+        <h1 id="integrations-title" className="t-display max-w-[792px]">
           Everything it touches.
         </h1>
         <p className="t-lead mt-6 max-w-[588px]">

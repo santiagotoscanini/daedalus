@@ -1,14 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { Anywhere } from "~/components/sections/anywhere";
+import { Cost } from "~/components/sections/cost";
 import { Decisions } from "~/components/sections/decisions";
-import { Faq } from "~/components/sections/faq";
-import { GetIt } from "~/components/sections/get-it";
 import { Hero } from "~/components/sections/hero";
-import { House } from "~/components/sections/house";
-import { How } from "~/components/sections/how";
-import { Showcase } from "~/components/sections/showcase";
-import { Statement } from "~/components/sections/statement";
+import { Kitchen } from "~/components/sections/kitchen";
+import { Made } from "~/components/sections/made";
+import { RunsItself } from "~/components/sections/runs-itself";
+import { Start } from "~/components/sections/start";
+import { Vercel } from "~/components/sections/vercel";
 import { pageHead } from "~/site-head";
 
 export const Route = createFileRoute("/")({
@@ -16,29 +15,27 @@ export const Route = createFileRoute("/")({
   head: () =>
     pageHead({
       path: "",
-      title: "daedalus: software, made for one",
+      title: "daedalus: your own cloud, at home",
       description:
-        "Open source. daedalus turns the computers you own into a cloud you can talk to: it writes each change down, builds it, and can undo it in one step.",
+        "daedalus turns a computer in your house into your family’s private cloud. Ask for an app from your phone, and it builds the app and keeps watch over it.",
     }),
 });
 
-/** One argument, in the order a person meets it: the mission and the product doing it, with the
- * objection and its answer as the hero's coda; what has been made this way and for whom; one
- * request, start to finish; the decisions already made; why the house; where it is going; the
- * questions; then the close, on the band the footer continues. */
-
+/** One argument, one centred axis, in the order a person meets it: you ask your house for an app
+ * and it arrives on Grandma's phone; the apps no company would make; every hard decision already
+ * made; where it lives; what it costs against renting; how it looks after itself; where it goes
+ * next; how to start. Read only the headings in order and the argument still holds. */
 function Landing() {
   return (
     <main id="main">
       <Hero />
-      <Statement />
-      <Showcase />
-      <How />
+      <Made />
       <Decisions />
-      <House />
-      <Anywhere />
-      <Faq />
-      <GetIt />
+      <Kitchen />
+      <Cost />
+      <RunsItself />
+      <Vercel />
+      <Start />
     </main>
   );
 }

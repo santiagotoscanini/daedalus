@@ -1,0 +1,166 @@
+/* Start (#start, components/sections/start.tsx): three steps in one 560 column centred on the axis,
+ * a hairline between each (none above the first, so the column opens 64px under the intro like
+ * every figure), then the closing line and the repo link. No motion.
+ *
+ * The steps are set left inside their centred column, like every passage on the page longer than
+ * three lines (spec §2.2): step 3 runs to five lines on a phone, and centred that would be the wall
+ * of centred grey text the page is built to avoid. Each number is set in the title's own type, in
+ * ink-4, so it reads as the list's numeral rather than a stray glyph. From 768 up it hangs in the
+ * margin, so the text column itself is the one centred on the axis; on a phone it takes a gutter
+ * inside the column. */
+
+.start-steps {
+  max-width: 560px;
+  margin-inline: auto;
+}
+.start-steps > li {
+  padding: 40px 0 40px 28px;
+}
+.start-steps > li:first-child {
+  padding-top: 0;
+}
+.start-steps > li:last-child {
+  padding-bottom: 0;
+}
+.start-steps > li + li {
+  border-top: 1px solid var(--color-edge-2);
+}
+
+.start-title {
+  position: relative;
+  text-wrap: balance;
+}
+/* in the title's line box, so it shares the title's baseline */
+.start-num {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  width: 28px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-4);
+}
+@media (min-width: 768px) {
+  .start-steps > li {
+    padding-left: 0;
+  }
+  .start-num {
+    width: 32px;
+  }
+}
+
+/* The three systems, each standing on the title's baseline like a letter (an inline svg's bottom
+ * sits on the baseline), kept together on one line. The margins are set between the marks' ink,
+ * not their boxes: the apple and Tux leave air inside theirs, the squares fill theirs, so 12px of
+ * ink apart takes different box gaps. */
+.start-marks {
+  white-space: nowrap;
+}
+.start-marks > svg {
+  display: inline;
+  vertical-align: baseline;
+}
+.start-marks > svg:nth-child(1) {
+  margin-left: 11px;
+}
+.start-marks > svg:nth-child(2) {
+  margin-left: 10.5px;
+}
+.start-marks > svg:nth-child(3) {
+  margin-left: 11px;
+}
+
+.start-text {
+  margin-top: 10px;
+  font: 400 16px/26px var(--font-sans);
+  text-wrap: pretty;
+  color: var(--color-ink-2);
+}
+/* a ComingLine: the ring in a column of its own, so a second line starts under the words */
+.start-next {
+  margin-top: 12px;
+}
+.start-next .coming-text {
+  text-wrap: pretty;
+}
+/* a link inside a caption: the caption's own grey, underlined, like the sources under the chart,
+ * with 2px of air inside it (given back by the margin) for the focus tint */
+.start-link {
+  margin: 0 -2px;
+  padding: 2px;
+  border-radius: 4px;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(128, 131, 137, 0.45);
+  text-underline-offset: 3px;
+  transition:
+    color var(--d-1) var(--ease-ui),
+    text-decoration-color var(--d-1) var(--ease-ui);
+}
+.start-link:hover {
+  color: var(--color-ink-2);
+  text-decoration-color: rgba(200, 202, 207, 0.5);
+}
+/* focused, the tint every link inside a sentence takes (.link), never a ring: a ring round words in
+ * a sentence crosses their neighbours. The transparent outline is for forced colours. */
+.start-link:focus-visible {
+  outline: 2px solid transparent;
+  background: rgba(245, 246, 247, 0.14);
+  color: var(--color-ink-1);
+  text-decoration-color: currentColor;
+}
+
+/* the button and what it needs, on the column's left edge */
+.start-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: fit-content;
+  margin-top: 20px;
+}
+/* the bite leaves the mark's box 2px of air on its right; take it back so the gap reads as 8 */
+.start-apple {
+  margin-right: -2px;
+}
+.start-req {
+  margin-top: 10px;
+}
+
+/* each sentence on its own balanced line: the first is about 610px of 15px type */
+.start-close {
+  max-width: 620px;
+  margin: 64px auto 0;
+  font: 400 15px/24px var(--font-sans);
+  text-align: center;
+  text-wrap: balance;
+  color: var(--color-ink-3);
+}
+.start-line {
+  display: block;
+}
+.start-repo {
+  margin-top: 16px;
+  text-align: center;
+}
+.start-repo > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 4px;
+  font: 500 14px/20px var(--font-sans);
+}
+
+/* phones: the same sequence, buttons included. They keep their own width (about 200, so under
+ * the 320 cap) rather than running the column: the column is 330 beside the numbers, and a
+ * 320 pill ending 10px short of the hairline read as a near miss. The close is one paragraph at
+ * 14/22, balanced as a whole into three lines. The steps' own words stay `pretty` at every width:
+ * balanced, a 330px column ended every line 70px short of its edge and the paragraph read as a
+ * narrow block hung off the numbers. */
+@media (max-width: 639px) {
+  .start-close {
+    font-size: 14px;
+    line-height: 22px;
+  }
+  .start-line {
+    display: inline;
+  }
+}

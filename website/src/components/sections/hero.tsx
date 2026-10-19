@@ -1,109 +1,407 @@
-import { Link } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
-import { DemoWindow } from "~/components/demo/demo-window";
-import { useFitScale } from "~/components/demo/use-fit-scale";
-import { Mark } from "~/components/marks";
-import { Messages } from "~/components/messages";
+/** The hero: what daedalus is in two lines, then the whole product in two iPhones. On yours you ask
+ * Home, the box in the kitchen, for an app for Grandma's recipe cards; it asks two questions and
+ * comes back with Pinch. Then Grandma's phone takes over: TestFlight tells her it is ready, she taps
+ * it, Pinch installs, and it opens on her Lentil Soup card, her handwriting above the same recipe
+ * typed out. Pinch's coral icon arriving in a grey chat is the first colour in the picture.
+ *
+ * Where the screen is wide enough for both (1200 and up, and landscape screens from 1024) the hero
+ * is one composed first screen, like the page's share image: the words on the left, both phones on
+ * the right, scaled so the pair always fits under the nav (hero.css). Elsewhere the words stack over
+ * the phones; below 768 the phones share one spot, with a pager (and a horizontal swipe on the phone)
+ * after the sequence, or a plain swipeable row without script.
+ *
+ * The sequence plays once, in two acts that each wait until the reader can see them (hero/timeline.ts):
+ * your chat once the top of your phone is on screen, Grandma's phone once the top of hers is. Then it
+ * holds its final frame, which is also what the prerender, reduced motion and no-JS show (and what
+ * the page falls back to if the script never runs: motion only exists under html[data-motion="on"]).
+ * Almost all of it is CSS keyframes in styles/landing/hero.css; the script here starts each act,
+ * keeps each arrival in the part of your phone that is on screen (even as the reader scrolls),
+ * ends the sequence, swaps the phones on narrow screens and runs the composer's examples once. The
+ * devices are aria-hidden; a visually hidden list carries the conversation. */
+
+import { type PointerEvent, useEffect, useRef, useState } from "react";
+import { Coming } from "~/components/landing/coming";
+import { motionOn, round1, useFigure } from "~/components/landing/motion";
+import { Section, SectionLink } from "~/components/landing/section";
+import { ChatScreen, THREAD } from "./hero/chat-screen";
+import { HomeScreen } from "./hero/home-screen";
+import { IPhone } from "./hero/iphone";
+import { PinchScreen } from "./hero/pinch-screen";
+import {
+  COMPOSER_AFTER_E,
+  COMPOSER_STEP,
+  DONE_AFTER_E,
+  E_DELAY_NARROW,
+  E_DELAY_WIDE,
+  EDGE_CLEAR,
+  FLOOR_MIN,
+  HANDOVER_NARROW,
+  HANDOVER_WIDE,
+  NARROW,
+  TEMPO_NARROW,
+  TEMPO_WIDE,
+  THREAD_PAD,
+  THREAD_TOP,
+} from "./hero/timeline";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 
-/** The hero: the mission in one line, then the product doing it.
- *
- * The picture is the control plane's Apps page (a hand-built redraw of the real one, components/demo)
- * in a frame that breaks 40px past the column at 1440, with a messages window over it. In the
- * window, a request goes to a coding agent on the box; in the table, the app it asked for arrives at
- * the top, building, then running. That is how the reference box is driven today.
- *
- * The sequence is CSS with delays, played once: paused until the fonts are in and 40% of the shot
- * (below 1024, of the messages window, which sits under the fold on a phone) is on screen, when
- * the effect below sets data-play. Reduced motion jumps it to the last frame (styles.css), and so
- * does the <noscript> rule, so the prerendered page without script shows the finished frame
- * instead of the first.
- *
- * On a desktop shorter than 860px the text block and the frame sit 40px higher, so at 1440×790 (a
- * 1440×900 laptop with browser chrome) the fold falls between the request in the window and the
- * first reply, never through a line. */
+type Phone = "a" | "b";
 
-// The reduced-motion rule from styles.css, verbatim. Running as well as instant: a paused 1ms
-// animation would hold its first frame, and without script nothing ever sets data-play.
-const FINAL_FRAME =
-  ".hero-shot :is(.seq,.seq-out,.seq-row,.seq-grow,.seq-life,.seq-wash,.seq-pulse){animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;animation-play-state:running!important}";
+/** The thread follow: see `follow` in Hero. */
+interface Follow {
+  /** [ms from the chat's start, bottom edge in the column] for each arrival and each typing bubble */
+  stops: [number, number][];
+  /** the column's resting place, where the bottom-anchored final frame has it */
+  end: number;
+  to: (px: number) => void;
+  arrive: (bottom: number) => void;
+  /** follows the reader's scrolling until the returned function is called */
+  watch: () => () => void;
+}
 
 export function Hero() {
-  const shotRef = useRef<HTMLDivElement>(null);
-  useFitScale(shotRef);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const watchA = useRef<HTMLDivElement>(null);
+  const watchB = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState<Phone>("a");
+  const [composerStep, setComposerStep] = useState(0);
+  const run = useRef({
+    started: false,
+    handed: false,
+    done: false,
+    timers: [] as number[],
+    /** undone when the sequence ends: the scroll follow, the wait for Grandma's phone */
+    halt: [] as (() => void)[],
+    /** undone on unmount: the composer's pass, which outlives the sequence */
+    stop: () => {},
+    follow: undefined as Follow | null | undefined,
+  });
 
-  useEffect(() => {
-    const el = shotRef.current;
-    if (!el) return;
-    // On a phone the shot is on screen at load while the window is not, so watch the window there:
-    // the conversation and the row it causes play together, when both can be seen.
-    const target = window.matchMedia("(min-width: 1024px)").matches ? el : (el.querySelector(".window") ?? el);
-    let io: IntersectionObserver | undefined;
-    let gone = false;
-    void document.fonts.ready.then(() => {
-      if (gone) return;
-      io = new IntersectionObserver(
+  const root = () => stageRef.current?.closest<HTMLElement>("#top") ?? null;
+
+  /** Thread follow. Every row is laid out from the start (a hidden one keeps its space), so each
+   * arrival's bottom edge is known before it arrives. The column slides so the newest row sits at
+   * the bottom of the part of the thread the reader can see: the thread's own bottom edge, or the
+   * viewport's when it cuts your phone short, and it keeps doing so as the reader scrolls, so the
+   * conversation always happens where they are looking. It rests where the bottom-anchored final
+   * frame (no motion) rests, and stays top-anchored there afterwards (data-follow), so the end
+   * never moves it, not even by the half pixel a re-anchor can round to. */
+  const follow = (): Follow | null => {
+    const r = run.current;
+    if (r.follow !== undefined) return r.follow;
+    const col = stageRef.current?.querySelector<HTMLElement>(".hero-slide-a .chat-col");
+    const thread = col?.parentElement;
+    if (!col || !thread) return (r.follow = null);
+    const stops: [number, number][] = [];
+    for (const el of Array.from(col.children) as HTMLElement[]) {
+      if (el.dataset.at) stops.push([Number(el.dataset.at), el.offsetTop + el.offsetHeight]);
+      const dots = el.querySelector<HTMLElement>("[data-typing-at]");
+      if (dots?.dataset.typingAt) stops.push([Number(dots.dataset.typingAt), el.offsetTop + dots.offsetHeight]);
+    }
+    stops.sort((x, y) => x[0] - y[0]);
+    const h = thread.clientHeight;
+    let now = 0;
+    let newest = 0; // the request alone never moves the column
+    const to = (px: number) => {
+      if (px === now) return;
+      now = px;
+      col.style.setProperty("--shift", `${px}px`);
+    };
+    const place = () => {
+      const box = thread.getBoundingClientRect();
+      const k = box.height / h || 1; // the stage's scale
+      const seen = (window.innerHeight - EDGE_CLEAR - box.top) / k;
+      const floor = Math.max(FLOOR_MIN, Math.min(h, seen)) - THREAD_PAD;
+      return round1(Math.min(0, floor - THREAD_TOP - newest - THREAD_PAD));
+    };
+    const watch = () => {
+      let frame = 0;
+      const onMove = () => {
+        if (!frame)
+          frame = window.requestAnimationFrame(() => {
+            frame = 0;
+            to(place());
+          });
+      };
+      window.addEventListener("scroll", onMove, { passive: true });
+      window.addEventListener("resize", onMove);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.removeEventListener("scroll", onMove);
+        window.removeEventListener("resize", onMove);
+      };
+    };
+    // where the bottom-anchored final frame rests, to the hundredth: the column is 16.5px-lined, so
+    // its height is rarely whole, and offsetHeight would put the text a fraction of a pixel off it
+    const resting = () => {
+      const k = thread.getBoundingClientRect().height / h || 1;
+      return Math.round((h - THREAD_PAD - THREAD_TOP - col.getBoundingClientRect().height / k) * 100) / 100;
+    };
+    col.setAttribute("data-follow", "");
+    return (r.follow = {
+      stops,
+      end: resting(),
+      to,
+      arrive: (bottom) => {
+        newest = Math.max(newest, bottom);
+        to(place());
+      },
+      watch,
+    });
+  };
+
+  /** The final frame, now: at the natural end, or when the reader takes the pager mid-sequence. */
+  const finish = () => {
+    const r = run.current;
+    if (r.done) return;
+    r.done = true;
+    for (const t of r.timers) window.clearTimeout(t);
+    r.timers = [];
+    for (const undo of r.halt.splice(0)) undo();
+    const top = root();
+    top?.setAttribute("data-played", "");
+    top?.setAttribute("data-done", "");
+    const f = follow();
+    f?.to(f.end);
+  };
+
+  const at = (ms: number, fn: () => void) => run.current.timers.push(window.setTimeout(fn, ms));
+
+  /** Act one: your chat, from the moment the top of your phone is on screen. */
+  const play = () => {
+    const r = run.current;
+    if (r.started || r.done) return;
+    r.started = true;
+    root()?.setAttribute("data-played", "");
+    const narrow = window.matchMedia(NARROW).matches;
+    const tempo = narrow ? TEMPO_NARROW : TEMPO_WIDE;
+
+    const f = follow();
+    if (f) {
+      for (const [t, bottom] of f.stops) at(Math.round(t * tempo), () => f.arrive(bottom));
+      const unwatch = f.watch();
+      r.halt.push(unwatch);
+    }
+
+    // Act two waits for the top of Grandma's screen (her notification and Pinch's slot) to be
+    // whole on screen under the nav; until then your phone rests on its last row.
+    at(narrow ? HANDOVER_NARROW : HANDOVER_WIDE, () => {
+      const el = watchB.current;
+      if (!el) return handover(narrow);
+      const nav = document.querySelector<HTMLElement>(".nav-bar")?.offsetHeight ?? 64;
+      const io = new IntersectionObserver(
         (entries) => {
-          // the first callback reports any overlap as intersecting, so read the ratio
-          if (entries.some((e) => e.intersectionRatio >= 0.4)) {
-            el.setAttribute("data-play", "");
-            io?.disconnect();
+          const e = entries[entries.length - 1];
+          if (e?.isIntersecting && e.intersectionRatio >= 0.99) {
+            io.disconnect();
+            handover(narrow);
           }
         },
-        { threshold: 0.4 },
+        { rootMargin: `-${nav}px 0px 0px 0px`, threshold: [0.99, 1] },
       );
-      io.observe(target);
+      io.observe(el);
+      r.halt.push(() => io.disconnect());
     });
-    return () => {
-      gone = true;
+  };
+
+  /** Act two: Grandma's phone. Its beats are keyframes timed from data-b (hero.css). */
+  const handover = (narrow: boolean) => {
+    const r = run.current;
+    if (r.handed || r.done) return;
+    r.handed = true;
+    root()?.setAttribute("data-b", "");
+    const E = narrow ? E_DELAY_NARROW : E_DELAY_WIDE;
+    if (narrow) setShown("b");
+    // the column settles where the final frame has it as your phone steps aside, or, on a phone,
+    // once Grandma's has covered it
+    const f = follow();
+    at(narrow ? 500 : 0, () => {
+      for (const undo of r.halt.splice(0)) undo();
+      f?.to(f.end);
+    });
+    at(E + DONE_AFTER_E, finish);
+    if (!narrow) composer(E + COMPOSER_AFTER_E);
+  };
+
+  /** The composer's single pass through the examples, `after` ms from now. It waits for the composer
+   * to be on screen; if the reader scrolls it away mid-pass, it goes back to "Message Home" and
+   * stays there. It outlives finish(): the pass starts half a second after the sequence ends. */
+  const composer = (after: number) => {
+    const field = stageRef.current?.querySelector(".hero-slide-a .chat-composer");
+    let step = 0;
+    let timer = 0;
+    let going = false;
+    const tick = () => {
+      step += 1;
+      setComposerStep(step);
+      if (step < 5) timer = window.setTimeout(tick, COMPOSER_STEP);
+      else io?.disconnect();
+    };
+    const io = field
+      ? new IntersectionObserver(([e]) => {
+          if (!e) return;
+          if (e.isIntersecting && !going) {
+            going = true;
+            tick();
+          } else if (!e.isIntersecting && going) {
+            window.clearTimeout(timer);
+            io?.disconnect();
+            if (step < 5) setComposerStep(5);
+          }
+        })
+      : null;
+    const begin = window.setTimeout(() => {
+      if (io && field) io.observe(field);
+      else {
+        going = true;
+        tick();
+      }
+    }, after);
+    run.current.stop = () => {
+      window.clearTimeout(begin);
+      window.clearTimeout(timer);
       io?.disconnect();
+    };
+  };
+
+  useFigure(watchA, { threshold: 1, fonts: true, alwaysArmed: true, onPlay: play });
+
+  useEffect(() => {
+    const r = run.current;
+    return () => {
+      for (const t of r.timers) window.clearTimeout(t);
+      for (const undo of r.halt.splice(0)) undo();
+      r.stop();
     };
   }, []);
 
+  /** The pager and the swipe: the final frame at once, then the chosen phone. */
+  const pick = (p: Phone) => {
+    if (motionOn()) finish();
+    setShown(p);
+  };
+  const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
+  const onDown = (e: PointerEvent) => {
+    if (window.matchMedia(NARROW).matches) swipe.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  };
+  const onUp = (e: PointerEvent) => {
+    const s = swipe.current;
+    swipe.current = null;
+    if (!s || s.id !== e.pointerId) return;
+    const dx = e.clientX - s.x;
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(e.clientY - s.y)) pick(dx < 0 ? "b" : "a");
+  };
+
   return (
-    <section className="pt-26 sm:pt-30 lg:pt-34 lg:[@media(max-height:860px)]:pt-24">
-      <noscript dangerouslySetInnerHTML={{ __html: `<style>${FINAL_FRAME}</style>` }} />
+    <Section id="top" className="hero">
       <div className="wrap">
-        <h1 className="t-display-xl">Software, made for one.</h1>
-        <p className="t-lead mt-6 max-w-[690px]">
-          daedalus turns the computers you already own into a cloud you can talk to. Say what you need, and it
-          writes the change down, builds it and ships it. Every change can be undone in one step.
-        </p>
-        {/* below 640 the two buttons share a row and the note wraps under them, 16px down (the
-            row gap plus mt-1) */}
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
-          <Link to="/" hash="get" className="btn btn-primary h-11 sm:h-10">
-            Get started
-          </Link>
-          <a href={REPO} className="btn btn-secondary h-11 sm:h-10">
-            <Mark id="github" size={16} />
-            View on GitHub
-          </a>
-          <p className="t-small col-span-2 mt-1 text-ink-4 sm:mt-0 sm:ml-4">
-            Open source, MIT licensed. Running one house today.
+        <div className="hero-copy">
+          <h1 id="top-title" className="t-hero">
+            <span className="hero-line-1">Your own cloud, at home.</span>
+            <span className="block">You just talk to it.</span>
+          </h1>
+          <p className="t-intro hero-lead">
+            daedalus turns a computer in your house into your family’s own cloud. Ask for any app from your phone,
+            and you never need to know how it gets made, unless you want to.
+          </p>
+          <div className="hero-ctas">
+            <SectionLink hash="start" className="btn btn-primary">
+              Get started
+            </SectionLink>
+            <SectionLink hash="made" className="btn btn-secondary">
+              See the apps
+            </SectionLink>
+          </div>
+          <p className="t-caption hero-free">
+            Free and{" "}
+            <a href={REPO} className="link">
+              open source
+            </a>
+            .
           </p>
         </div>
-      </div>
 
-      {/* Below 1024 the shot keeps to the text's 24 and 40px gutters; the 40px break past the column
-          is a desktop gesture. */}
-      <div
-        ref={shotRef}
-        className="hero-shot relative mx-auto mt-10 w-[calc(100%-48px)] sm:w-[calc(100%-80px)] lg:mt-12 lg:w-[min(1280px,calc(100%-32px))]"
-      >
-        <DemoWindow />
-        {/* From 1024 it hangs over the frame 9 design px under the almacen row (which ends at canvas
-            y≈283), and from 1440 breaks the frame's right edge by 40px. Below 1024 it overlaps the
-            list's foot: below 640 inset 8px from both sides of the shot, so its left edge covers the
-            list's tile column whole instead of leaving a sliver of a tile beside it; from 640 at
-            most 376px wide, on the right. The wrapper places it and the window zooms with the
-            canvas, never under .875 so its type stays beside the product's: a zoom on the
-            positioned box would scale its top and right as well. */}
-        <div className="relative z-10 mr-2 ml-auto -mt-16 w-[calc(100%-16px)] sm:w-[min(376px,calc(100%-32px))] lg:absolute lg:top-[calc(292px*var(--demo-scale))] lg:right-6 lg:mt-0 lg:mr-0 lg:w-auto min-[90rem]:-right-10">
-          <Messages className="lg:w-[376px] lg:origin-top-right lg:[zoom:max(.875,var(--demo-scale))] lg:[@supports_not_(zoom:1)]:[transform:scale(max(.875,var(--demo-scale)))]" />
+        <div className="sr-only">
+          <p>A conversation on your iPhone with Home, the box in the kitchen:</p>
+          <ol>
+            {THREAD.map((row, i) =>
+              row.kind === "me" || row.kind === "home" ? (
+                <li key={i}>{`${row.kind === "me" ? "You" : "Home"}: ${row.text}`}</li>
+              ) : row.kind === "card" ? (
+                <li key={i}>Home: Pinch, the family’s recipes, at pinch.rivera.family.</li>
+              ) : null,
+            )}
+          </ol>
+          <p>
+            On Grandma’s iPhone, Pinch installs from TestFlight and opens on her Lentil Soup card: her handwritten
+            card, the same recipe typed out below it, and notes from Dad and Sofi.
+          </p>
         </div>
+
+        <div className="hero-figure">
+          {/* Without script the stage is a row to swipe, which a browser makes a tab stop: it is a
+              named group, so that stop lands on something a screen reader can see (the captions);
+              the devices themselves are pictures, told by the list above. */}
+          <div
+            ref={stageRef}
+            className="hero-stage"
+            data-shown={shown}
+            role="group"
+            aria-label="Your iPhone and Grandma’s iPhone"
+            onPointerDown={onDown}
+            onPointerUp={onUp}
+            onPointerCancel={() => {
+              swipe.current = null;
+            }}
+          >
+            <div className="hero-slide hero-slide-a">
+              <div className="hero-dev" aria-hidden>
+                <IPhone finish="black">
+                  <ChatScreen composerStep={composerStep} />
+                </IPhone>
+              </div>
+              <p className="t-caption hero-cap">Your iPhone</p>
+            </div>
+            <div className="hero-slide hero-slide-b">
+              <div className="hero-dev" aria-hidden>
+                <IPhone finish="desert">
+                  <HomeScreen />
+                  <div className="pinch-open">
+                    <PinchScreen />
+                  </div>
+                </IPhone>
+              </div>
+              <p className="t-caption hero-cap">Grandma’s iPhone</p>
+            </div>
+            {/* what each act waits for: the top of your screen, then the top of Grandma's */}
+            <div ref={watchA} className="hero-watch hero-watch-a" />
+            <div ref={watchB} className="hero-watch hero-watch-b" />
+          </div>
+        </div>
+
+        <div className="hero-pager" role="group" aria-label="Phones">
+          {(["a", "b"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className="hero-dot"
+              aria-label={p === "a" ? "Show your iPhone" : "Show Grandma’s iPhone"}
+              aria-pressed={shown === p}
+              onClick={() => pick(p)}
+            />
+          ))}
+        </div>
+
+        {/* one sentence a line wherever it takes two (hero.css) */}
+        <p className="t-caption hero-next">
+          <span className="hero-next-1">
+            <Coming />
+            Today you ask through Claude Code on the box, from the Claude app on your phone.
+          </span>{" "}
+          <span className="hero-next-2">Talking to the house itself, like this, is next.</span>
+        </p>
       </div>
-    </section>
+    </Section>
   );
 }

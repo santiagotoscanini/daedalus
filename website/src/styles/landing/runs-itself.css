@@ -1,0 +1,484 @@
+/* ---------------------------------------------------------------- *
+ * Runs itself (components/sections/runs-itself.tsx). The quote, the
+ * switch, and the record card, open to the eye from the start: three
+ * entries, one line each. The switch opens the newest into its full
+ * record, and the caption under the card, with CSS alone
+ * (`.record-switch:checked ~ …`), so it works without script; reduced
+ * motion opens it instantly.
+ * ---------------------------------------------------------------- */
+
+/* both quote marks hang outside the words, so the words of each line centre on the axis (a mark left
+ * in the line would pull its line about half its own width to the side) */
+.ri-hang,
+.ri-hang-end {
+  position: relative;
+}
+.ri-hang > span,
+.ri-hang-end > span {
+  position: absolute;
+  top: 0;
+}
+.ri-hang > span {
+  right: 0;
+}
+.ri-hang-end > span {
+  left: 0;
+}
+
+/* each sentence of the heading breaks only inside itself when it must: a line never ends one and
+ * starts the other */
+.ri-sentence {
+  display: inline-block;
+}
+
+.ri-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: 12px;
+  margin-top: 40px;
+}
+
+/* the switch: 51 x 31, an iOS switch, green when on */
+.record-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: 15.5px;
+  background: rgba(120, 120, 128, 0.32);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 200ms var(--ease-ui);
+}
+.record-switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.15),
+    0 3px 1px rgba(0, 0, 0, 0.06);
+  transition: transform var(--d-2) var(--ease-out);
+}
+/* 31 tall to the eye, 45 to a finger */
+.record-switch::after {
+  content: "";
+  position: absolute;
+  inset: -7px -4px;
+}
+/* off, pointing at it (or at its label) lifts the track a step */
+.record-switch:not(:checked):hover,
+.ri-figure:has(.ri-label:hover) > .record-switch:not(:checked) {
+  background: rgba(120, 120, 128, 0.42);
+}
+.record-switch:checked {
+  background: var(--color-ok);
+}
+.record-switch:checked::before {
+  transform: translateX(20px);
+}
+/* the label and the hint share a baseline beside the switch */
+.ri-words {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.ri-label {
+  font: 500 15px/20px var(--font-sans);
+  color: var(--color-ink-1);
+  cursor: pointer;
+  /* the label's own target, 44 tall */
+  padding-block: 12px;
+  margin-block: -12px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* What the switch opens (the record, the caption) folds by its grid row, 0fr to 1fr; closed, it is
+ * hidden from tab and from reading. Its children inherit that visibility, so nothing inside may set
+ * its own `visibility: visible`. */
+.ri-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 320ms var(--ease-out),
+    opacity 320ms var(--ease-out);
+}
+.record-switch:checked ~ .rc-card .ri-fold,
+.record-switch:checked ~ .ri-fold {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.ri-fold-in {
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  transition: visibility 0s linear 320ms;
+}
+.record-switch:checked ~ .rc-card .ri-fold-in,
+.record-switch:checked ~ .ri-fold .ri-fold-in {
+  visibility: visible;
+  transition-delay: 0s;
+}
+@keyframes ri-row-in {
+  from {
+    opacity: 0;
+  }
+}
+.record-switch:checked ~ .rc-card .ri-row {
+  animation: ri-row-in var(--d-2) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 40ms + 40ms);
+}
+
+/* ---- the record: a picture of the product, in product type ---- */
+
+.rc-card {
+  flex: 0 0 100%;
+  max-width: 720px;
+  margin: 24px auto 0;
+  text-align: left;
+}
+.rc-entry + .rc-entry {
+  border-top: 1px solid var(--color-edge-1);
+}
+/* one line per change: the app, what changed, then who asked and when */
+.rc-top {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: start;
+  padding: 16px 20px;
+}
+.rc-title {
+  font: 500 14px/20px var(--font-sans);
+  letter-spacing: -0.005em;
+  color: var(--color-ink-1);
+}
+/* a 13px face in a 20px line sits a pixel above a 14px one: a pixel down, on the title's baseline */
+.rc-when {
+  margin: 0 0 -1px 12px;
+  padding-top: 1px;
+  font: 400 13px/20px var(--font-sans);
+  white-space: nowrap;
+  color: var(--color-ink-4);
+}
+/* the attempt that never went live: greyed, its icon without colour (nothing was made) */
+.rc-entry[data-failed] .rc-top {
+  opacity: 0.55;
+}
+.rc-entry[data-failed] .rc-top > svg {
+  filter: grayscale(1);
+}
+/* open, the newest entry's line becomes the record's header, its by-line right under the title */
+.rc-pinch .rc-top {
+  transition: padding-bottom 320ms var(--ease-out);
+}
+.record-switch:checked ~ .rc-card .rc-pinch .rc-top {
+  padding-bottom: 2px;
+}
+
+.rc-by {
+  padding: 0 20px 15px 52px;
+  border-bottom: 1px solid var(--color-edge-1);
+  font: 400 12px/18px var(--font-sans);
+  color: var(--color-ink-4);
+}
+.rc-hash,
+.rc-file,
+.rc-name,
+.rc-time {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+.rc-hash {
+  font-size: 12px;
+}
+.rc-file {
+  padding: 14px 20px 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-ink-4);
+}
+
+/* the diff: eight added lines that run to the card's edges and scroll inside it */
+.rc-diff {
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: none;
+}
+.rc-diff::-webkit-scrollbar {
+  display: none;
+}
+.rc-lines {
+  min-width: max-content;
+  margin: 0;
+}
+.rc-line {
+  display: flex;
+  padding: 0 20px;
+  background-color: var(--light-tint);
+  transition: background-color var(--d-2) var(--ease-ui);
+}
+.rc-plus {
+  flex: none;
+  width: 16px;
+  color: var(--color-ok);
+  transition: color var(--d-2) var(--ease-ui);
+}
+.rc-code {
+  white-space: pre;
+  color: var(--color-ink-2);
+}
+
+/* the rows: a 104px label column, edge-1 between them */
+.rc-row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-top: 1px solid var(--color-edge-1);
+}
+.rc-row > dt {
+  font: 400 13px/20px var(--font-sans);
+  color: var(--color-ink-4);
+}
+.rc-row > dd {
+  min-width: 0;
+}
+.rc-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-block: 12px;
+  font: 400 13px/20px var(--font-sans);
+  color: var(--color-ink-2);
+}
+/* every row's mark sits in one 16px column, on its first line */
+.rc-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 20px;
+}
+.rc-ok {
+  color: var(--color-ok);
+  transition: color var(--d-2) var(--ease-ui);
+}
+.rc-apple {
+  color: var(--color-ink-3);
+}
+
+.rc-app {
+  align-items: start;
+  padding-block: 6px;
+}
+.rc-app > dt {
+  padding-top: 6px;
+}
+.rc-step {
+  display: grid;
+  grid-template-columns: 16px 80px minmax(0, 1fr) 60px;
+  column-gap: 8px;
+  align-items: center;
+  height: 32px;
+}
+.rc-name {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-ink-1);
+}
+.rc-detail {
+  font: 400 13px/20px var(--font-sans);
+  color: var(--color-ink-3);
+}
+.rc-time {
+  font-size: 12px;
+  line-height: 20px;
+  text-align: right;
+  color: var(--color-ink-4);
+}
+
+/* undone: the change stays on record, no longer live */
+.rc-card[data-undone] .rc-line {
+  background-color: transparent;
+}
+.rc-card[data-undone] :is(.rc-plus, .rc-ok) {
+  color: var(--color-ink-4);
+}
+
+/* the foot: Undo, and in its place, once pressed, what happened and Redo (a 200ms cross-fade) */
+.rc-foot {
+  display: grid;
+  align-items: center;
+  /* 64 under its hairline, so the button sits on whole pixels with 16 above and below */
+  min-height: 65px;
+  padding: 0 20px;
+  border-top: 1px solid var(--color-edge-1);
+}
+/* `inherit`, never `visible`: the closed fold above hides the shown one too, from tab and reading */
+.rc-swap {
+  grid-area: 1 / 1;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 200ms var(--ease-ui),
+    visibility 0s linear 200ms;
+}
+.rc-swap[data-on] {
+  opacity: 1;
+  visibility: inherit;
+  transition-delay: 0s;
+}
+.rc-undone {
+  padding-block: 12px;
+  font: 400 13px/20px var(--font-sans);
+  color: var(--color-ink-2);
+}
+/* its focus ring keeps clear of the sentence's full stop, with a text link's soft corners */
+.rc-redo {
+  position: relative;
+  margin-left: 4px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.rc-redo::before {
+  content: "";
+  position: absolute;
+  inset: -12px -8px;
+}
+
+/* the caption, 24 under the card, only while the record is open */
+.ri-under-fold {
+  flex: 0 0 100%;
+}
+.ri-under {
+  max-width: 620px;
+  margin: 0 auto;
+  padding-top: 24px;
+  font: 400 15px/24px var(--font-sans);
+  text-align: center;
+  text-wrap: balance;
+  color: var(--color-ink-4);
+}
+
+@media (max-width: 639px) {
+  .ri-words {
+    display: contents;
+  }
+  .ri-hint {
+    flex-basis: 100%;
+    margin-top: 8px;
+    text-align: center;
+  }
+  /* the title wraps if it must; who asked and when go under it */
+  .rc-top {
+    grid-template-columns: 20px minmax(0, 1fr);
+    padding: 14px 16px;
+  }
+  .rc-when {
+    grid-column: 2;
+    margin: 0;
+    padding-top: 0;
+    white-space: normal;
+  }
+  .rc-by {
+    padding: 4px 16px 13px 48px;
+  }
+  .rc-file,
+  .rc-row,
+  .rc-foot {
+    padding-inline: 16px;
+  }
+  /* the diff scrolls under a 32px fade, with room past its longest line */
+  .rc-diff {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  }
+  .rc-line {
+    padding: 0 48px 0 16px;
+  }
+  .t-code.rc-lines {
+    font-size: 12px;
+  }
+  /* labels above their content */
+  .rc-row,
+  .rc-app {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    padding-block: 12px;
+  }
+  .rc-row > dt,
+  .rc-app > dt {
+    padding-top: 0;
+  }
+  .rc-item {
+    padding-block: 4px 0;
+  }
+  .rc-app {
+    padding-bottom: 8px;
+  }
+  /* check, step and time on one line, the detail under them */
+  .rc-step {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon name time"
+      ". detail detail";
+    height: auto;
+    padding-block: 4px;
+  }
+  .rc-step > .rc-icon {
+    grid-area: icon;
+  }
+  .rc-step > .rc-name {
+    grid-area: name;
+  }
+  .rc-step > .rc-detail {
+    grid-area: detail;
+  }
+  .rc-step > .rc-time {
+    grid-area: time;
+  }
+  /* left-aligned under a full-width card, so its rag follows prose rules, not a heading's */
+  .ri-under {
+    text-align: left;
+    text-wrap: pretty;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-switch,
+  .record-switch::before,
+  .ri-fold,
+  .ri-fold-in,
+  .rc-pinch .rc-top {
+    transition: none;
+  }
+  .record-switch:checked ~ .rc-card .ri-row {
+    animation: none;
+  }
+  .rc-line,
+  .rc-plus,
+  .rc-ok {
+    transition-duration: var(--d-1);
+  }
+  .rc-swap {
+    transition-duration: var(--d-1), 0s;
+    transition-delay: 0s, var(--d-1);
+  }
+  .rc-swap[data-on] {
+    transition-delay: 0s;
+  }
+}

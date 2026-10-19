@@ -82,9 +82,10 @@ jobs:
       - name: Assert prerendered pages
         run: |
           test -f dist/client/index.html
-          # The hero headline — proves the page actually prerendered, not
-          # just an empty shell. Update alongside any hero rewrite.
-          grep -q "Software, made for one." dist/client/index.html
+          # The hero headline's last line, one element however the layout breaks
+          # the first sentence: proves the page actually prerendered, not just
+          # an empty shell. Update alongside any hero rewrite.
+          grep -q "You just talk to it." dist/client/index.html
           test -f dist/client/integrations/index.html
           test -f dist/client/install.ps1
           test -f dist/client/install.sh

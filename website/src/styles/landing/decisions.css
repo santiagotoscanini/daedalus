@@ -1,0 +1,514 @@
+/* The tree (#decisions): components/sections/decisions.tsx and decisions/*.
+ *
+ * Two compositions share one figure: wide (the plate, containers 920px and up) and narrow (the same
+ * tree stood on end, below that). The wide plate is a picture that scales as one from 920 to 1000px:
+ * every overlay position and type size is in plate units (`--u`, a thousandth of its width), the
+ * same units as its viewBox. The narrow one is drawn at fixed pixels so a phone keeps its type.
+ * Everything that moves is written inline by the rAF writer; nothing here animates on its own
+ * except hover and focus. */
+
+.dc-fig {
+  container: dc-fig / inline-size;
+}
+
+/* ------------------------------------------------------------------ *
+ * The selector: five example requests, the chosen one underlined.
+ * ------------------------------------------------------------------ */
+
+.dc-label {
+  max-width: 620px;
+  margin-inline: auto;
+  font: 400 15px/22px var(--font-sans);
+  color: var(--color-ink-3);
+  text-align: center;
+  text-wrap: balance;
+}
+.dc-strip {
+  margin-top: 16px;
+}
+.dc-sel {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  /* the room the chosen one's underline takes under the words */
+  padding-bottom: 8px;
+}
+/* an item is its words and nothing else, so its focus ring sits level around them; the underline
+ * and the finger's 44 are drawn outside the box */
+.dc-sel-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  border-radius: 6px;
+  font: 500 14px/20px var(--font-sans);
+  color: var(--color-ink-4);
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--d-1) var(--ease-ui);
+}
+/* the chosen one's underline: a hairline 8 under the whole item, square-ended (an inset shadow would
+ * follow the focus ring's rounded corners) */
+.dc-sel-item::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -8px;
+  height: 1px;
+  background: var(--color-ink-1);
+  opacity: 0;
+  transition: opacity var(--d-1) var(--ease-ui);
+}
+.dc-sel-item[aria-checked="true"]::after {
+  opacity: 1;
+}
+/* 28 tall to the eye, 44 to a finger */
+.dc-sel-item::before {
+  content: "";
+  position: absolute;
+  inset: -12px -14px -12px;
+}
+.dc-sel-item:hover {
+  color: var(--color-ink-2);
+}
+.dc-sel-item[aria-checked="true"] {
+  color: var(--color-ink-1);
+}
+.dc-sel-item:focus-visible {
+  outline-offset: 4px;
+}
+/* a roving radiogroup focuses only the chosen item: while focused, its ring carries the choice, so the
+ * underline steps aside rather than print a second rule inside the ring (it returns on blur) */
+.dc-sel-item:focus-visible::after {
+  opacity: 0;
+}
+/* without script the plate cannot follow a choice, so the choices are not offered: the plate shows
+ * Pinch, finished */
+html:not([data-js]) :is(.dc-label, .dc-strip) {
+  display: none;
+}
+html:not([data-js]) .dc-plate {
+  margin-top: 0;
+}
+/* and the readout, which only a row under the pointer, finger or keyboard can fill, keeps no room */
+html:not([data-js]) .dc-readout {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ *
+ * The plate, shared.
+ * ------------------------------------------------------------------ */
+
+.dc-plate {
+  --u: 0.1cqw;
+  container-type: inline-size;
+  position: relative;
+  /* narrow, the plate takes the prose's column (620, or the full width when narrower), so the
+   * section keeps one left edge; the drawing is placed in pixels, so only the answers gain the width */
+  max-width: 620px;
+  margin: 40px auto 0;
+}
+.dc-quotes {
+  display: grid;
+}
+/* the five requests share one cell, so switching never moves what is under them */
+.dc-quote {
+  grid-area: 1 / 1;
+  /* a shorter request sits on the tree it feeds; the spare line, if any, goes above it */
+  align-self: end;
+  margin: 0;
+  font: 400 15px/22px var(--font-sans);
+  color: var(--color-ink-2);
+  text-align: left;
+  text-wrap: pretty;
+  /* the opening quote mark hangs, so the words align with the column */
+  text-indent: -0.4em;
+}
+.dc-quote mark {
+  background: none;
+  color: inherit;
+}
+
+/* rows 8 and 9 (.dc-row-a.dc-mine, .dc-n-a.dc-mine) carry the light; where their answer came from, a step quieter */
+.dc-from {
+  color: var(--light-text);
+}
+
+.dc-foot {
+  display: flex;
+  /* Replay sits on the baseline of "ways to build it" */
+  align-items: last baseline;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 24px;
+}
+.dc-count {
+  display: flex;
+  flex-direction: column;
+}
+.dc-unit {
+  font: 400 12px/16px var(--font-sans);
+  color: var(--color-ink-4);
+}
+.dc-replay {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 13px/20px var(--font-sans);
+  color: var(--color-ink-3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--d-1) var(--ease-ui);
+}
+.dc-replay:hover {
+  color: var(--color-ink-1);
+}
+.dc-replay::before {
+  content: "";
+  position: absolute;
+  inset: -14px -12px;
+}
+.dc-replay:focus-visible {
+  border-radius: 4px;
+  outline-offset: 4px;
+}
+.dc-readout {
+  min-height: 16px;
+  margin-top: 20px;
+  text-align: center;
+}
+
+.dc-caption {
+  max-width: 620px;
+  margin: 28px auto 0;
+  text-align: center;
+}
+.dc-caption > p:first-child {
+  font: 400 15px/24px var(--font-sans);
+  color: var(--color-ink-3);
+  text-wrap: balance;
+}
+
+/* ------------------------------------------------------------------ *
+ * Wide: the plate (containers 920px and up).
+ * ------------------------------------------------------------------ */
+
+.dc-wide {
+  display: none;
+}
+.dc-stage {
+  position: relative;
+  /* the drawing is 1000 x 464 units; its box is rounded up to a whole pixel, so nothing below it on the
+   * page (other sections' hairlines included) lands on half a pixel */
+  height: round(up, 46.4cqw, 1px);
+}
+.dc-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* hairlines stay hairlines however far the plate is scaled */
+.dc-svg * {
+  vector-effect: non-scaling-stroke;
+}
+.dc-over {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dc-over > *:not(.dc-rows),
+.dc-rows > * {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+}
+.dc-rows {
+  position: absolute;
+  inset: 0;
+}
+
+/* an open column's question, centred over it, its baseline on the tier */
+.dc-q-at {
+  transform: translateX(-50%);
+  margin-top: calc(-11 * var(--u));
+}
+.dc-q {
+  display: block;
+  padding: 0 calc(4 * var(--u));
+  background: var(--color-page);
+  font: 400 calc(11.5 * var(--u)) / calc(14 * var(--u)) var(--font-sans);
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+/* the callout stack: a row is centred on its leader's height */
+.dc-row {
+  display: grid;
+  grid-template-columns: calc(172 * var(--u)) auto;
+  align-items: baseline;
+  height: calc(18 * var(--u));
+  margin-top: calc(-9 * var(--u));
+  padding-inline: calc(4 * var(--u));
+  border-radius: 4px;
+  pointer-events: auto;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+/* the ring keeps 5 of air on every side of the words (the box's 4 plus 1, and above the caps and
+ * under the baseline alike), which is as far left as it can reach and still clear its leader's dot
+ * at 460; the rows are 24 apart, so it never meets a neighbour's words */
+.dc-row:focus-visible {
+  outline-offset: 1px;
+}
+.dc-row-q {
+  font: 400 calc(12 * var(--u)) / calc(16 * var(--u)) var(--font-sans);
+  color: var(--color-ink-4);
+}
+.dc-row-a {
+  font: 400 calc(13 * var(--u)) / calc(18 * var(--u)) var(--font-sans);
+  color: var(--color-ink-1);
+}
+.dc-row-a.dc-mine {
+  color: var(--color-ok);
+}
+.dc-row .dc-from {
+  margin-left: calc(10 * var(--u));
+  font: 400 calc(12 * var(--u)) / calc(16 * var(--u)) var(--font-sans);
+}
+/* the row under the pointer, the finger or the keyboard brightens its question and its own leader */
+.dc-row-q,
+.dc-n-q {
+  transition: color var(--d-1) var(--ease-ui);
+}
+.dc-row[data-hot] .dc-row-q,
+.dc-n-row[data-hot] .dc-n-q {
+  color: var(--color-ink-2);
+}
+.dc-svg [data-elbow],
+.dc-n-svg [data-lead] {
+  transition: stroke var(--d-1) var(--ease-ui);
+}
+.dc-svg [data-elbow][data-hot],
+.dc-n-svg [data-lead][data-hot] {
+  stroke: rgba(255, 255, 255, 0.6);
+}
+
+.dc-icon {
+  width: calc(40 * var(--u));
+  height: calc(40 * var(--u));
+  margin: calc(-20 * var(--u)) 0 0 calc(-20 * var(--u));
+}
+.dc-icon > svg {
+  width: 100%;
+  height: 100%;
+}
+.dc-end-at {
+  transform: translateX(-50%);
+  margin-top: calc(-9 * var(--u));
+}
+.dc-end {
+  display: block;
+  font: 400 calc(13 * var(--u)) / calc(18 * var(--u)) var(--font-sans);
+  color: var(--color-ink-2);
+  white-space: nowrap;
+  -webkit-text-stroke: 3px var(--color-page);
+  paint-order: stroke fill;
+}
+
+@container dc-fig (min-width: 920px) {
+  .dc-wide {
+    display: block;
+  }
+  .dc-narrow {
+    display: none;
+  }
+  .dc-plate {
+    max-width: 1000px;
+  }
+  /* the request is the plate's first line: its opening quote mark hangs over the start node */
+  .dc-quotes {
+    position: absolute;
+    z-index: 1;
+    top: calc(24 * var(--u));
+    left: calc(57 * var(--u));
+  }
+  .dc-quote {
+    font-size: calc(15 * var(--u));
+    line-height: calc(22 * var(--u));
+    white-space: nowrap;
+    text-indent: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Narrow: the tree on end (containers under 920px).
+ * ------------------------------------------------------------------ */
+
+.dc-n-stage {
+  position: relative;
+  margin-top: 16px;
+}
+.dc-n-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+.dc-n-svg .fig-label {
+  font-size: 13px;
+}
+.dc-n-icon {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+}
+.dc-n-icon > svg {
+  width: 100%;
+  height: 100%;
+}
+.dc-n-row {
+  position: absolute;
+  /* shrink-wrapped, so a focus ring hugs the words instead of running on to the page's edge; a line
+   * too long for the column is cut short below. The 4 of padding hold the ring off the glyphs and
+   * the margin takes them back, so the words stay where the stage places them */
+  width: max-content;
+  max-width: calc(100% - 84px);
+  margin-left: -4px;
+  padding-inline: 4px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+/* placed, not flowed: every line fits at 360px with Geist; a fallback font is cut short, never overlaps */
+.dc-n-row > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 30 tall to the eye, 44 to a finger: the rows are 46 apart, so no two hit areas meet */
+.dc-n-row::before {
+  content: "";
+  position: absolute;
+  inset: -7px 0;
+}
+.dc-n-row:focus-visible {
+  outline-offset: 1px;
+}
+.dc-n-q {
+  font: 400 11.5px/14px var(--font-sans);
+  color: var(--color-ink-4);
+}
+.dc-n-a {
+  font: 400 13px/16px var(--font-sans);
+  color: var(--color-ink-1);
+}
+.dc-n-a.dc-mine {
+  color: var(--color-ok);
+}
+.dc-n-a .dc-from {
+  font-size: 12px;
+}
+/* the end's tenth line, level with the end: "your app", then the app's name in its place (on the
+ * narrowest phones a long name wraps downward, balanced) */
+.dc-n-end {
+  position: absolute;
+  right: 0;
+  display: grid;
+  align-items: start;
+}
+.dc-n-end > * {
+  grid-area: 1 / 1;
+  font: 400 13px/18px var(--font-sans);
+  color: var(--color-ink-2);
+  text-wrap: balance;
+}
+.dc-n-end > .dc-n-yourapp {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  color: var(--ink-label);
+}
+
+/* on a phone the five requests scroll sideways, out to the screen's edges, and fade where they run off */
+@container dc-fig (max-width: 919.98px) {
+  .dc-strip {
+    margin-inline: -16px;
+    padding-inline: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    --fade-l: 0px;
+    --fade-r: 24px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+  }
+  /* script says which ends have more to scroll to */
+  .dc-strip[data-more-l] {
+    --fade-l: 24px;
+  }
+  .dc-strip[data-at-end] {
+    --fade-r: 0px;
+  }
+  .dc-strip::-webkit-scrollbar {
+    display: none;
+  }
+  .dc-sel {
+    width: max-content;
+    margin-inline: auto;
+    gap: 24px;
+  }
+  /* the strip clips (it scrolls), so it holds the ring and the finger's 44 inside itself: 16 above
+   * the words, 8 under them for the underline */
+  .dc-sel {
+    padding-top: 16px;
+  }
+  .dc-sel-item::before {
+    inset: -16px -12px -8px;
+  }
+  /* the readout follows the narrow plate's left edge, like everything under it, and keeps room for a
+   * second line, so a tap never moves the caption */
+  .dc-readout {
+    min-height: 32px;
+    text-align: left;
+  }
+}
+@media (min-width: 640px) {
+  @container dc-fig (max-width: 919.98px) {
+    .dc-strip {
+      margin-inline: -40px;
+      padding-inline: 40px;
+    }
+  }
+}
+
+/* narrow, the caption joins the plate's column and its left edge, as everything under the requests does */
+@container dc-fig (max-width: 919.98px) {
+  .dc-caption {
+    max-width: 620px;
+  }
+  .dc-caption,
+  .dc-caption > p:first-child {
+    text-align: left;
+    text-wrap: pretty;
+  }
+}
+/* on a phone the label over the requests starts at the same edge as the strip under it */
+@container dc-fig (max-width: 639.98px) {
+  .dc-label {
+    text-align: left;
+  }
+}
+
+/* the narrowest phones (320): the answers step down a size and may run 8px into the page's gutter
+ * (it is 16), rather than lose their ends */
+@container dc-fig (max-width: 299.98px) {
+  .dc-n-a {
+    font-size: 12px;
+  }
+  .dc-n-row {
+    max-width: calc(100% - 76px);
+  }
+}

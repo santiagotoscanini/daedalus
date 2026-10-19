@@ -1,0 +1,389 @@
+/* Made for one (#made, components/sections/made.tsx): the transition line and the gallery.
+ *
+ * The row is a native scroll-snap scroller across the full width. Its slides are 880 wide on
+ * desktop (narrower on a short laptop screen, so a picture, its caption and the controls fit under
+ * the bar together), min(880, 86%) on tablets and the width less 56 on phones, where they
+ * start-align behind a 16px gutter so the next one peeks 24. Widths come from the gallery's own
+ * inline size (cqi), so a slide and the padding that centres it agree without a
+ * scrollbar-dependent 100vw.
+ *
+ * Dimming, hidden captions and the controls exist only under html[data-js]: the prerender and the
+ * no-JS page show every slide at full strength with its caption, and no controls that would do
+ * nothing. */
+
+/* the transition takes the prose's place in the header block, 24 under the intro */
+.made-transition {
+  margin-top: 24px;
+}
+
+.made-gallery {
+  container-type: inline-size;
+  --slide: 880px;
+  --gap: 24px;
+}
+
+/* 8px of padding above and below (taken back by the margins) so the pictures' outer ring and the
+ * focus rings are not clipped by the scroller */
+.made-track {
+  position: relative;
+  display: flex;
+  gap: var(--gap);
+  margin-block: -8px;
+  padding: 8px calc(50cqi - var(--slide) / 2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.made-track::-webkit-scrollbar {
+  display: none;
+}
+
+.made-slide {
+  flex: 0 0 var(--slide);
+  min-width: 0;
+  scroll-snap-align: center;
+}
+
+/* the screenshot: no chrome, a hairline inside and a dark ring outside */
+.made-shot {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-raise-1);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.made-shot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+.made-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* The caption is one link. Its 8/16 padding is the focus ring's room, taken back from the 28px gap,
+ * the 600px measure and the 24px to the controls, so the text sits exactly where the spec puts it. */
+.made-cap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 632px;
+  margin: 20px auto 0;
+  padding: 8px 16px;
+  border-radius: 8px;
+  text-align: center;
+}
+.made-cap-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.made-name {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: transparent;
+  text-underline-offset: 4px;
+  transition: text-decoration-color var(--d-1) var(--ease-ui);
+}
+.made-out {
+  margin-left: -3px;
+  color: var(--color-ink-4);
+  transition: transform var(--d-1) var(--ease-ui);
+}
+.made-for {
+  display: block;
+  margin-top: 8px;
+}
+.made-what {
+  display: block;
+  margin-top: 4px;
+  font: 400 16px/24px var(--font-sans);
+  color: var(--color-ink-3);
+  text-wrap: balance;
+}
+@media (hover: hover) {
+  .made-cap:hover .made-name {
+    text-decoration-color: rgba(255, 255, 255, 0.6);
+  }
+  .made-cap:hover .made-out {
+    transform: translate(2px, -2px);
+  }
+}
+
+/* ---- with script: one active slide ---- */
+
+html[data-js] .made-shot {
+  transition: opacity var(--d-3) var(--ease-ui);
+}
+html[data-js] .made-slide:not([data-active]) {
+  cursor: pointer;
+}
+html[data-js] .made-slide:not([data-active]) .made-shot {
+  opacity: 0.4;
+}
+/* a waiting slide answers the pointer that would bring it in: a step up, at hover speed */
+@media (hover: hover) {
+  html[data-js] .made-slide:not([data-active]):hover .made-shot {
+    opacity: 0.55;
+    transition-duration: var(--d-1);
+  }
+}
+/* The captions cross-fade. Hidden ones are also out of the tab order and away from the pointer
+ * (visibility flips after the fade out, and at once on the way in). */
+html[data-js] .made-cap {
+  transition:
+    opacity 200ms var(--ease-ui),
+    visibility 0s;
+}
+html[data-js] .made-slide:not([data-active]) .made-cap {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 200ms var(--ease-ui),
+    visibility 0s linear 200ms;
+}
+
+/* The focused row rings its active picture, not its full-bleed box (the page-wide ring is in the
+ * base layer, so these win by the cascade). Without script there is no active slide, so the ring
+ * goes just inside the row. */
+.made-track:focus-visible {
+  outline-offset: -2px;
+}
+html[data-js] .made-track:focus-visible {
+  outline: none;
+}
+html[data-js] .made-track:focus-visible .made-slide[data-active] .made-shot {
+  outline: 2px solid rgba(245, 246, 247, 0.7);
+  outline-offset: 2px;
+}
+
+/* the controls row: dots on the page axis, paddles at the slide's right edge */
+.made-controls {
+  display: none;
+}
+html[data-js] .made-controls {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  width: var(--slide);
+  margin: 16px auto 0;
+}
+.made-dots {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+}
+/* The button is the mark itself, so the focus ring hugs it. Its margins set a 32px pitch, and
+ * ::before fills them and reaches 19px up and down: a 32×44 target that meets its neighbours' edge
+ * to edge (the current dot's is 46), enough for a pointer beside the paddles. On phones, where the
+ * dots are the only control, the pitch opens to 44 (below). The widths trade off over the same
+ * curve, so the row never shifts. */
+.made-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  margin: 0 13px;
+  padding: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    width 300ms var(--ease-out),
+    background-color var(--d-1) var(--ease-ui);
+}
+.made-dot::before {
+  content: "";
+  position: absolute;
+  inset: -19px -13px;
+}
+.made-dot[aria-current="true"] {
+  width: 20px;
+  background: var(--color-ink-1);
+  cursor: default;
+}
+.made-arrows {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  gap: 8px;
+}
+.made-arrow {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px var(--color-edge-2);
+  color: var(--color-ink-1);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition-property: transform, background-color, box-shadow, color;
+  transition-duration: 160ms, var(--d-1), var(--d-1), var(--d-1);
+  transition-timing-function: var(--ease-out), var(--ease-ui), var(--ease-ui), var(--ease-ui);
+}
+.made-arrow::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+}
+.made-arrow:active:not([aria-disabled="true"]) {
+  transform: scale(0.98);
+  transition-duration: 100ms, var(--d-1), var(--d-1), var(--d-1);
+}
+/* At the ends: the button at 30%, written as its colours at 30% rather than as opacity, so a
+ * keyboard focus ring on it (aria-disabled keeps it focusable) stays at full strength. */
+.made-arrow[aria-disabled="true"] {
+  background: rgba(255, 255, 255, 0.018);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.024);
+  color: rgba(245, 246, 247, 0.3);
+  cursor: default;
+}
+@media (hover: hover) {
+  .made-dot:not([aria-current="true"]):hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
+  .made-arrow:not([aria-disabled="true"]):hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+}
+
+/* ---- without script: the neighbours' captions ---- */
+
+/* Every caption shows, so at a snap point the two beside the centred slide would stand cut off at
+ * the screen's edges. Where the browser can tie a fade to the row's own scroll, each caption is
+ * whole only near the middle and gone before it reaches an edge (a neighbour's snap point sits
+ * outside the 20% to 80% band at any width). */
+@supports (animation-timeline: view()) {
+  html:not([data-js]) .made-cap {
+    animation: made-cap linear both;
+    animation-timeline: view(inline);
+    animation-range: cover 0% cover 100%;
+  }
+}
+@keyframes made-cap {
+  0%,
+  20% {
+    opacity: 0;
+  }
+  35%,
+  65% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* tablets: the slide narrows with the page */
+@media (max-width: 1023px) {
+  .made-gallery {
+    --slide: min(880px, 86cqi);
+  }
+}
+/* Whole pixels where the browser can round: an even slide width, so it and the padding that
+ * centres it land on pixels, and a picture height rounded from 16:10 (a sub-pixel crop at the
+ * bottom, never seen) so its lower edge and hairline stay crisp at any width. */
+@supports (width: round(down, 1px, 1px)) {
+  @media (max-width: 1023px) {
+    .made-gallery {
+      --slide: min(880px, round(down, 86cqi, 2px));
+    }
+  }
+  /* On a laptop the whole block (the picture, then 196 for the tallest caption and the controls)
+   * fits under the 64px bar with 15 to spare above and below, so a picture and the dots that move
+   * it are always seen together: 880 wide from 840 tall, 800 at 790, never under 640. */
+  @media (min-width: 1024px) {
+    .made-gallery {
+      --slide: min(880px, max(640px, round(down, (100svh - 290px) * 1.6, 2px)));
+    }
+  }
+  /* the ratio off, or it would derive the width back from the rounded height */
+  .made-shot {
+    aspect-ratio: auto;
+    height: round(var(--slide) / 1.6, 1px);
+  }
+}
+
+/* Phones: start-aligned slides behind the 16px gutter, captions on the slide's left edge, dots only.
+ * The gap equals the gutter, so the slide before ends exactly at the screen's edge instead of
+ * showing a 4px sliver there; the next one still peeks 24 (334 + 16 + 16 + 24 = 390). The row's end
+ * padding is what is left of the screen after the last slide and the gutter (40 at 390), so the
+ * last slide also comes to rest on the gutter like every other one. */
+@media (max-width: 639px) {
+  .made-gallery {
+    --slide: calc(100cqi - 56px);
+    --gap: 16px;
+  }
+  .made-track {
+    padding-inline: 16px calc(100cqi - var(--slide) - 16px);
+    scroll-padding-inline: 16px;
+  }
+  .made-slide {
+    scroll-snap-align: start;
+  }
+  .made-shot {
+    border-radius: 10px;
+  }
+  .made-cap {
+    align-items: flex-start;
+    max-width: none;
+    margin: 16px -8px 0;
+    padding: 8px;
+    text-align: left;
+  }
+  .made-what {
+    font-size: 15px;
+    line-height: 22px;
+    text-wrap: pretty;
+  }
+  html[data-js] .made-controls {
+    display: flex;
+    justify-content: center;
+    width: auto;
+  }
+  .made-arrows {
+    display: none;
+  }
+  /* a 44×44 target for every dot (58×44 for the current one): a 44px pitch, 234 wide in all */
+  .made-dot {
+    margin: 0 19px;
+  }
+  .made-dot::before {
+    inset: -19px;
+  }
+}
+
+/* state changes stay, the travel goes: the row jumps (made.tsx) and the fades shorten */
+@media (prefers-reduced-motion: reduce) {
+  html[data-js] .made-shot {
+    transition-duration: var(--d-1);
+  }
+  html[data-js] .made-cap,
+  html[data-js] .made-slide:not([data-active]) .made-cap {
+    transition-duration: var(--d-1), 0s;
+  }
+  html[data-js] .made-slide:not([data-active]) .made-cap {
+    transition-delay: 0s, var(--d-1);
+  }
+  .made-dot {
+    transition-duration: 0s, var(--d-1);
+  }
+}
