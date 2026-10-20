@@ -1,16 +1,9 @@
-/* The kitchen (#kitchen, components/sections/kitchen.tsx and kitchen/*): the cutaway drawing, its
+/* The kitchen (#kitchen, components/sections/kitchen.tsx and kitchen/*): the house in cutaway, its
  * caption slot, the phone list and the prose under them.
  *
- * The figure is its own container: from 880px of column it shows the house (1000 units, at most
- * 1000px, so at 1440 the box's centre is the page's centre); under that, the kitchen alone, its
- * caption and a list of the machines. Between 928 and 1000px the house is still drawn 1:1, with
- * its two ends cropped by the column (the drawing keeps everything it says inside x 36 to 964):
- * scaled down instead, every hairline would land on a fraction of a pixel and grey.
- *
- * The drawing's inks are the page's tokens (--ink-stroke .45, --ink-faint .14, --ink-run .30, the
- * label's .50) mixed opaque against the page colour. On the page they are the same colours, but a
- * desk under a laptop, a leg on the ground or a run behind the attic floor never paints a brighter
- * knot where two translucent strokes overlap. */
+ * The drawing is the isometric kit's (iso.css) and scales with its column at every width; its lines
+ * keep 1px. From 880px of column the readout under it answers a pointer; under that, the machines
+ * are a plain list, since a phone's drawing is too small to point into. */
 
 .k-fig {
   container-type: inline-size;
@@ -26,203 +19,80 @@
     display: none;
   }
 }
-
-.k-svg {
-  --k-s: color-mix(in srgb, #fff 45%, var(--color-page));
-  --k-f: color-mix(in srgb, #fff 14%, var(--color-page));
-  --k-run: color-mix(in srgb, #fff 30%, var(--color-page));
-  --k-label: color-mix(in srgb, #fff 50%, var(--color-page));
-  --k-lit: color-mix(in srgb, #fff 60%, var(--color-page)); /* a run, pointed at */
-  --k-hot: color-mix(in srgb, #fff 70%, var(--color-page)); /* a machine, pointed at */
-  display: block;
-  width: 100%;
-  height: auto;
+.k-plate {
+  max-width: 1040px;
   margin-inline: auto;
 }
-/* Heights rounded to the nearest whole pixel (the drawing letterboxes by under a pixel), so the readout, the
- * list's hairlines and every section after this one stay on the pixel grid. */
-.k-svg-wide {
-  max-width: 1000px;
-  height: round(calc(min(100cqi, 1000px) * 524 / 1000), 1px);
-}
-/* the plate clips the house's ends where the column is narrower than the house is drawn */
-.k-plate {
-  overflow: clip;
-}
-@container (min-width: 928px) and (max-width: 999.98px) {
-  .k-svg-wide {
-    width: 1000px;
-    max-width: none;
-    height: 524px;
-    /* centred on the column, and on a whole pixel so the lines are */
-    margin-inline: round(calc((100cqi - 1000px) / 2), 1px) 0;
-  }
-}
-.k-svg-narrow {
-  max-width: 380px;
-  height: round(calc(min(100cqi, 380px) * 282 / 300), 1px);
-}
-/* The close-up is shown at 0.96 to 1.27 a unit, so a label drawn in units would swing between 11 and
- * 14.6px. These sizes keep it at 13 to 14px rendered from a 320 phone to the widest the close-up
- * goes (a 360 phone, the commonest Android width, was 12.6px). */
-.k-svg-narrow .fig-label {
-  font-size: 12px;
-}
-@container (max-width: 299.98px) {
-  .k-svg-narrow .fig-label {
-    font-size: 13px;
-  }
-}
-@container (min-width: 375px) {
-  .k-svg-narrow .fig-label {
-    font-size: 11px;
-  }
-}
-/* On a tablet column the close-up grows to 456 (1.52 a unit) and its labels shrink to 9 units, so
- * they still render at the phone's 13.7px and their halo at its 3px. */
-@container (min-width: 560px) {
-  .k-svg-narrow {
-    max-width: 456px;
-    height: round(calc(min(100cqi, 456px) * 282 / 300), 1px);
-  }
-  .k-svg-narrow .fig-label {
-    font-size: 9px;
-    stroke-width: 2px;
-  }
-}
-/* the close-up is shown larger than it is drawn: its lines keep the page's 1px, and the runs' dashes
- * their 4/3 (a non-scaling stroke dashes in screen pixels) */
-.k-svg-narrow :is(path, rect, circle):not(.k-reveal) {
-  vector-effect: non-scaling-stroke;
-}
-/* Between 880 and 928 the whole house is shown a little smaller than it is drawn (.88 at 880),
- * which would thin every hairline to under a pixel and grey it. Its solid lines keep their 1px. The
- * runs keep scaling: their dashes are written out to fit each run's length in drawing units. */
-@container (min-width: 880px) and (max-width: 927.98px) {
-  .k-svg-wide :is(path, rect, circle):not(.k-reveal, .k-body, .k-run) {
-    vector-effect: non-scaling-stroke;
-  }
+
+/* the box's light: the figure's one colour */
+.k-light {
+  fill: var(--color-ok);
 }
 
-.k-s {
-  stroke: var(--k-s);
-}
-.k-f {
-  stroke: var(--k-f);
-}
-.k-dots {
-  fill: var(--k-f);
-}
-.k-run {
-  stroke: var(--k-run);
-  transition: stroke var(--d-1) var(--ease-ui);
-}
-/* the wide drawing writes each run's dashes out (drawing.tsx); the close-up's drops are plain 4/3 */
-.k-svg-narrow .k-run {
-  stroke-dasharray: 4 3;
-}
-.k-run[data-on] {
-  stroke: var(--k-lit);
-  stroke-dasharray: none;
-}
-/* the collector and the one drop into the box: solid, in the runs' ink */
-.k-trunk {
-  stroke: var(--k-run);
-}
-/* a machine's way on from its run to the box, over the collector: lit with its run */
-.k-tail {
-  stroke: var(--k-lit);
-  opacity: 0;
-  transition: opacity var(--d-1) var(--ease-ui);
-}
-.k-tail[data-on] {
-  opacity: 1;
-}
-/* the subject: the one 1.5px stroke, filled with the page so every run ends under it */
-.k-body {
-  fill: var(--color-page);
-  stroke: var(--ink-subject);
-  stroke-width: 1.5;
-}
-/* mask paint: the solid copy that reveals a dashed run, wide enough to cover it whole */
-.k-reveal {
-  stroke: #fff;
-  stroke-width: 4;
-}
-.k-still {
-  fill: rgba(255, 255, 255, 0.75);
-}
-/* labels, and the box's drawing over its own button: the pointer passes through to the hit areas */
-.k-svg text,
-.k-box {
-  pointer-events: none;
-}
-
-/* ---- the machines (wide only) ---- */
+/* ---- the machines: buttons drawn in their places ---- */
 
 .k-mach {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-/* The page's focus outline (base layer) would trace the group's whole box, hit areas included; the
- * ring below is drawn round the machine's mark instead. */
 .k-mach:focus-visible {
   outline: none;
 }
-.k-hit {
+.iso .k-hit {
   fill: transparent;
+  pointer-events: all;
 }
-.k-ms {
-  stroke: var(--k-s);
-  transition: stroke var(--d-1) var(--ease-ui);
+/* the machines are the drawing's subjects: their edges a step brighter than the furniture's, and
+ * the box's brightest of all */
+.k-mach :is(.i-t, .i-l, .i-r) {
+  stroke: #55585e;
 }
-.k-mf {
-  stroke: var(--k-f);
-  transition: stroke var(--d-1) var(--ease-ui);
+.k-box :is(.i-t, .i-l, .i-r) {
+  stroke: #8b8e95;
 }
-/* at rest a shade brighter than the hidden lines, so the mark reads as something to point at */
-.k-disc {
-  fill: var(--color-page);
-  stroke: color-mix(in srgb, #fff 24%, var(--color-page));
-  transition: stroke var(--d-1) var(--ease-ui);
+.k-box .i-t {
+  fill: #24262b;
 }
-.k-mark {
-  fill: var(--k-label);
-  transition: fill var(--d-1) var(--ease-ui);
-}
-.k-mach[data-on] .k-ms {
-  stroke: var(--k-hot);
-}
-/* the gaming PC's graphics card comes out of hiding when it is the one pointed at */
-.k-mach[data-on] .k-mf {
-  stroke: var(--k-s);
-}
-.k-mach[data-on] .k-mark {
-  fill: var(--color-ink-1);
-}
-.k-mach[data-on] .k-disc {
-  stroke: var(--k-s);
-}
-/* the focus ring (drawing.tsx): 1.5px round the machine, over a page-coloured plate that cuts the
- * lines it crosses and clears the room's own from inside it */
-.k-ring,
-.k-ring-back {
-  fill: none;
-  stroke: none;
-  vector-effect: non-scaling-stroke;
+.k-mach[data-on] :is(.i-t, .i-l, .i-r) {
+  stroke: var(--i-hot);
 }
 .k-ring {
+  fill: none;
+  stroke: none;
   stroke-width: 1.5;
-}
-.k-ring-back {
-  stroke-width: 5;
 }
 .k-mach:focus-visible .k-ring {
   stroke: rgba(245, 246, 247, 0.7);
 }
-.k-mach:focus-visible .k-ring-back {
+
+/* ---- the arcs: each machine's to the box, and the box's broken line out ---- */
+
+.k-arc-line,
+.k-net-line {
+  fill: none;
+  stroke: #3a3d42;
+  stroke-width: 1;
+  transition: stroke var(--d-1) var(--ease-ui);
+}
+.k-arc-end {
   fill: var(--color-page);
+  stroke: #6b6e75;
+  stroke-width: 1;
+  transition: stroke var(--d-1) var(--ease-ui), fill var(--d-1) var(--ease-ui);
+}
+.k-arc[data-on] .k-arc-line {
+  stroke: var(--color-ink-2);
+}
+.k-arc[data-on] .k-arc-end {
+  stroke: var(--color-ink-1);
+  fill: var(--color-ink-1);
+}
+/* the break: the page's colour laid across the line */
+.k-net-cut {
+  fill: none;
   stroke: var(--color-page);
+  stroke-width: 6;
+  stroke-linecap: butt;
 }
 
 /* ---- the readout: every line stacked in one cell (the outage, then each machine), the shown one
@@ -331,29 +201,3 @@
   }
 }
 
-/* ---- motion (the contract in styles.css; runs and fades use its helpers) ---- */
-
-/* the internet's break opens from its centre */
-@keyframes k-gap {
-  from {
-    transform: scaleX(0);
-  }
-}
-.k-gap {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-html[data-motion="on"] [data-armed]:not([data-played]) .k-gap {
-  transform: scaleX(0);
-}
-html[data-motion="on"] [data-armed][data-played] .k-gap {
-  animation: k-gap 300ms var(--ease-inout) 1300ms both;
-}
-
-/* pointing is an interaction, so it still answers under reduced motion, as a short fade */
-@media (prefers-reduced-motion: reduce) {
-  .k-read,
-  .k-read[data-on] {
-    transition: opacity 100ms var(--ease-ui);
-  }
-}

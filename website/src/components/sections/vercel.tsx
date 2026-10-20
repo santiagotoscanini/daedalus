@@ -1,14 +1,14 @@
-/** Next: from your kitchen to Vercel. One app, Pinch, moves from the box in the kitchen to a data
- * center in one click, and keeps its address and its sign-in; only who can use it and where it runs
- * change. The figure is FIG. 3 (vercel/drawing.tsx), then the one control, then Pinch's card, never
+/** Next: from your kitchen to Vercel. One app, Pinch, moves from the box in the kitchen to Vercel in one
+ * click, and keeps its address and its sign-in; only who can use it and where it runs
+ * change. The figure is your house and a neighbourhood under Vercel's triangle (vercel/drawing.tsx), then the one control, then Pinch's card, never
  * overlapping the drawing.
  *
  * The move is not built, so nothing here looks like a button that does it: the control is a page
  * button, "Play the move", with the coming mark in front (a solid ring there: the dashed one beside
  * a verb read as a spinner), and it plays only when pressed. It sits between the drawing and the
  * card, so the arc it plays and the two rows it changes are both in view when it is pressed. The
- * icon rides the route into the rack, the green light follows it, then the two rows that change
- * cross-fade, each washed once; the same button, now "Move it home", plays it back. Vercel's triangle appears only in the drawing and, after the move, in the "Runs on"
+ * icon rides the arc to the triangle, the neighbourhood's windows light in its colour, then the two
+ * rows that change cross-fade, each washed once; the same button, now "Move it home", plays it back. Vercel's triangle appears only in the drawing and, after the move, in the "Runs on"
  * value. The prerender and reduced motion show the house state; under reduced motion a press swaps
  * instantly, with no flight. Without script the control is hidden (it could do nothing).
  *
@@ -22,7 +22,7 @@ import { Coming } from "~/components/landing/coming";
 import { EASE, motionOn } from "~/components/landing/motion";
 import { Header, Section } from "~/components/landing/section";
 import { MARKS } from "~/components/marks";
-import { type Movers, NarrowDrawing, place, WideDrawing } from "~/components/sections/vercel/drawing";
+import { type Movers, place, VercelDrawing } from "~/components/sections/vercel/drawing";
 
 /** The move's beats, in ms from the press (spec §6.7, less the press itself: a real one shows). */
 const AT = { flight: 0, flightFor: 700, light: 700, rows: 780, button: 980, done: 1180 } as const;
@@ -94,8 +94,7 @@ export function Vercel() {
   const [wash, setWash] = useState(0);
   const [said, setSaid] = useState("");
 
-  const wide = useRef<Movers>({ icon: null, trail: null });
-  const narrow = useRef<Movers>({ icon: null, trail: null });
+  const movers = useRef<Movers>({ icon: null, trail: null });
   const busy = useRef(false);
   const timers = useRef<number[]>([]);
   const frame = useRef(0);
@@ -110,7 +109,7 @@ export function Vercel() {
     const start = performance.now();
     const step = (now: number) => {
       const p = Math.min(1, (now - start) / ms);
-      place(wide.current, narrow.current, a + (b - a) * EASE.inout(p));
+      place(movers.current, a + (b - a) * EASE.inout(p));
       if (p < 1) frame.current = requestAnimationFrame(step);
     };
     frame.current = requestAnimationFrame(step);
@@ -121,7 +120,7 @@ export function Vercel() {
     setBack(false);
     setSaid("");
     if (!motionOn()) {
-      place(wide.current, narrow.current, 1);
+      place(movers.current, 1);
       setAt("vercel");
       setMoved(true);
       setOnVercel(true);
@@ -150,7 +149,7 @@ export function Vercel() {
     setOnVercel(false);
     setSaid(HOME);
     if (!motionOn()) {
-      place(wide.current, narrow.current, 0);
+      place(movers.current, 0);
       busy.current = false;
       return;
     }
@@ -186,20 +185,12 @@ export function Vercel() {
 
       <div className="vc-fig after-header" data-at={at} data-back={back ? "" : undefined}>
         <div className="vc-draw">
-          <WideDrawing
+          <VercelDrawing
             icon={(el) => {
-              wide.current.icon = el;
+              movers.current.icon = el;
             }}
             trail={(el) => {
-              wide.current.trail = el;
-            }}
-          />
-          <NarrowDrawing
-            icon={(el) => {
-              narrow.current.icon = el;
-            }}
-            trail={(el) => {
-              narrow.current.trail = el;
+              movers.current.trail = el;
             }}
           />
         </div>

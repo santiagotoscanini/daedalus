@@ -44,13 +44,13 @@ export const MACHINES: Record<MachineId, Machine> = {
   },
   gaming: {
     id: "gaming",
-    lead: "Gaming PC upstairs.",
+    lead: "Gaming PC in the bedroom.",
     role: "Runs AI models on its graphics card.",
     os: "windows",
   },
   oldpc: {
     id: "oldpc",
-    lead: "Old PC in the closet.",
+    lead: "Old PC in the hall closet.",
     role: "Joins like the rest. Erased, it could become the box.",
     os: "linux",
   },

@@ -20,7 +20,6 @@ import {
   type RefObject,
   useCallback,
   useEffect,
-  useId,
   useRef,
   useState,
 } from "react";
@@ -29,7 +28,6 @@ import { useFigure } from "~/components/landing/motion";
 import { Header, Prose, Section } from "~/components/landing/section";
 import { Mark } from "~/components/marks";
 import { KitchenDrawing } from "./kitchen/drawing";
-import { KitchenDrawingNarrow } from "./kitchen/drawing-narrow";
 import { LIST_ORDER, MACHINES, type MachineId, OUTAGE, type Os } from "./kitchen/machines";
 
 /** A machine's mark in running text, drawn on its own pixel grid at the size it is used (14 in the
@@ -118,7 +116,6 @@ export function Kitchen() {
   });
   useEffect(() => () => timers.current.forEach(window.clearTimeout), []);
   useWholePixelTop(fig);
-  const uid = `k${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
   // A pointer shows a machine while it is over it; leaving restores the box. Focus shows one only
   // when it came from the keyboard or a tap, so a mouse click does not pin it after the pointer leaves.
@@ -179,10 +176,10 @@ export function Kitchen() {
       />
       <div className="wrap">
         <figure ref={fig} className="k-fig after-header">
+          <div className="k-plate">
+            <KitchenDrawing active={active} bind={bind} />
+          </div>
           <div className="k-wide">
-            <div className="k-plate">
-              <KitchenDrawing uid={uid} active={active} bind={bind} />
-            </div>
             {/* each machine's button already carries these words, so the readout is for the eye */}
             <div className="k-readout" aria-hidden="true">
               <p className="k-read" data-on={shown === "outage" || undefined}>
@@ -212,7 +209,6 @@ export function Kitchen() {
           </div>
 
           <div className="k-narrow">
-            <KitchenDrawingNarrow uid={uid} />
             {/* the drawing's own words say "still on" and "internet"; this says what they mean */}
             <p
               className="k-outage m-fade"

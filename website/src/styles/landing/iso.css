@@ -1,0 +1,103 @@
+/* The isometric kit's paint (components/landing/iso.ts), shared by the kitchen and the move to
+ * Vercel: three greys for a box's three faces, lit from the upper left, one hairline edge, and the
+ * few materials that are not plain (glass, a wall's cut top, a cushion, a leaf, a rug). Every colour
+ * is opaque, so faces that meet or overlap never paint a brighter seam. Strokes keep 1px at any
+ * scale. */
+
+.iso {
+  --i-top: #1c1e22;
+  --i-left: #141518;
+  --i-right: #0e0f11;
+  --i-edge: #34363b;
+  --i-seam: #2d2f34;
+  --i-faint: #212327;
+  --i-hot: #aeb1b7;
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.iso :is(path, rect, circle) {
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+.iso .i-t,
+.iso .i-l,
+.iso .i-r {
+  stroke: var(--i-edge);
+  stroke-width: 1;
+  transition: stroke var(--d-1) var(--ease-ui);
+}
+.iso .i-t {
+  fill: var(--i-top);
+}
+.iso .i-l {
+  fill: var(--i-left);
+}
+.iso .i-r {
+  fill: var(--i-right);
+}
+/* a wall: its cut top a shade lighter than any furniture, as a section drawing shows it */
+.iso .i-wall .i-t {
+  fill: #2a2c31;
+}
+.iso .i-wall .i-l {
+  fill: #121316;
+}
+.iso .i-wall .i-r {
+  fill: #0c0d0f;
+}
+/* upholstery, books, a mattress: a touch warmer and softer than the hard things */
+.iso .i-soft .i-t {
+  fill: #201f22;
+}
+.iso .i-soft .i-l {
+  fill: #17161a;
+}
+.iso .i-soft .i-r {
+  fill: #111013;
+}
+.iso .i-dark .i-t,
+.iso .i-dark .i-l,
+.iso .i-dark .i-r {
+  fill: #08090a;
+}
+.iso .i-floor {
+  fill: #101114;
+  stroke: none;
+}
+.iso .i-rug {
+  fill: #141417;
+  stroke: var(--i-seam);
+}
+.iso .i-glass {
+  fill: #0a0b0d;
+  stroke: var(--i-edge);
+}
+/* windows at night: the sky a little bluer than the room */
+.iso .i-sky {
+  fill: #0d1117;
+  stroke: var(--i-edge);
+}
+.iso .i-leaf {
+  fill: #1a1f1b;
+  stroke: #2f3832;
+}
+.iso .i-seam {
+  fill: none;
+  stroke: var(--i-seam);
+}
+.iso .i-seam.i-faint {
+  stroke: var(--i-faint);
+}
+.iso .i-dots {
+  fill: var(--i-seam);
+}
+.iso text {
+  font: 500 12px/1 var(--font-sans);
+  letter-spacing: 0;
+  fill: var(--color-ink-4);
+  pointer-events: none;
+}

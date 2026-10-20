@@ -1056,6 +1056,7 @@ body {
 @import "./styles/landing/hero.css" layer(components);
 @import "./styles/landing/made.css" layer(components);
 @import "./styles/landing/decisions.css" layer(components);
+@import "./styles/landing/iso.css" layer(components);
 @import "./styles/landing/kitchen.css" layer(components);
 @import "./styles/landing/cost.css" layer(components);
 @import "./styles/landing/runs-itself.css" layer(components);

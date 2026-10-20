@@ -1,33 +1,22 @@
-/** The kitchen, wide: a doll's-house cutaway in the manifesto's FIG. 2 ink. The kitchen is the
- * middle room, so the box on its counter sits on the page axis, a little smaller than the microwave
- * beside it, and a dashed run comes to it from every other machine in the house. The five runs end
- * on one solid riser in the wall above the box, which goes down into it: five dashed lines entering
- * the subject side by side read as a barcode, one line reads as its cable.
- * Its cable to the internet is broken and its light is still on: the paragraph's claim about
- * outages, in one picture. The light is the figure's only green.
+/** The kitchen, drawn: a one-storey house in isometric cutaway, its two back walls standing and its
+ * front open like a doll's house, six rooms on one floor. The box sits on the kitchen counter beside
+ * the microwave, smaller than it, its green light the figure's only colour. Every other computer in
+ * the house stands where people keep one: a MacBook on the study desk, a work laptop in the home
+ * office, a gaming tower with a glass side beside the bedroom desk, an old PC on the hall closet's
+ * shelf, an iPhone left on the sofa. A thin arc rises from each and lands on the box, and one more
+ * leaves the box for the internet and is broken: the house keeps working without it.
  *
- * Each machine is a button that names itself; pointing at one (or at its mark), focusing it or
- * tapping it lights its run, its way down the riser into the box, and its strokes,
- * and the readout under the drawing (kitchen.tsx) says what it does. At rest the five marks'
- * discs are a little brighter than the drawing's hidden lines and the pointer is a hand over a
- * machine: the only cue that they answer, since no sentence asks anyone to point.
+ * The style is the landing's isometric kit (landing/iso.ts): boxes as three tones of the page's grey
+ * with one hairline edge, the cut tops of the walls a shade lighter, as an architect's section shows
+ * them. It scales with its column; the hairlines stay 1px (kitchen.css).
  *
- * The inks are the page's drawing tokens mixed opaque against the page colour (kitchen.css), so a
- * line crossing or standing on another never shows a brighter knot where two translucent strokes
- * overlap. Layer order does the rest: hidden lines, then the runs, then structure over them (a run
- * passes behind the attic floor), then the machines, the box last.
- *
- * Pixel grid: wherever the column is 928px or more the drawing is 1:1 (a narrower column crops its
- * ends: kitchen.css), so everything sits half a unit off the whole numbers it is written in (one
- * translate), which puts every 1px line on a pixel row at 1x and 2x alike. The box's 1.5px outline
- * is drawn a quarter unit inside its 45-unit square, and each focus ring's 1.5px a quarter unit
- * off its whole number, so at 2x they cover exactly three device pixels. The internet cable and its
- * label end 16 units short of the house's eave so that the longest crop (928 wide, x 36 to 964)
- * still holds the whole word. All geometry is literal. */
+ * Each machine is a button that names itself, drawn in its place so the scene keeps its depth order;
+ * pointing at it, focusing it or tapping it lights its edges and its arc, and the readout under the
+ * drawing (kitchen.tsx) says what it lends the house. Pointing at the box lights every arc. */
 
-import type { FocusEvent, KeyboardEvent, PointerEvent } from "react";
-import { MARKS } from "~/components/marks";
-import { LIST_ORDER, MACHINES, type MachineId, readout } from "./machines";
+import type { CSSProperties, FocusEvent, KeyboardEvent, PointerEvent, ReactNode } from "react";
+import { type V3, arc, arcAt, bounds, box, circle, corners, line, onX, onY, onZ, pt } from "~/components/landing/iso";
+import { MACHINES, type MachineId, readout } from "./machines";
 
 export interface MachineHandlers {
   onPointerEnter: (e: PointerEvent<SVGGElement>) => void;
@@ -38,381 +27,513 @@ export interface MachineHandlers {
   onKeyDown: (e: KeyboardEvent<SVGGElement>) => void;
 }
 
-/** A run's dashes, as one list written out for its whole length. Every run starts on the riser with
- * a whole dash, so two runs side by side leave it in phase; its turn lands in the middle of a dash;
- * and its last dash ends on the machine. To fit, the gaps are stretched or squeezed a little (g, g2:
- * never more than a third of a unit off 3): `n` gaps of `g` along the horizontal to the dash that
- * turns, then `m` gaps of `g2` to the machine. */
-function dashes(n: number, g: number, m: number, g2: number): string {
-  const out: number[] = [4];
-  for (let i = 0; i < n; i++) out.push(g, 4);
-  for (let i = 0; i < m; i++) out.push(g2, 4);
-  out.push(7); // an even count, so the list never repeats inverted
-  return out.join(" ");
-}
+type B6 = readonly [number, number, number, number, number, number];
 
-/** The riser: one solid line on the page axis, from the highest run down into the box's top. Every
- * run ends on it, so the box receives a single cable. */
-export const RISER = "M500 354V426";
-
-/** One run per machine, from the riser to the machine (so its dashes start there): across, then up
- * or down to it. The two from the left join the riser at 354 and 361, the three from the right at
- * 354, 375 and 382, the dash's own 7-unit rhythm, nested so that none crosses another. `tail` is the
- * rest of the machine's way to the box, down the riser, lit with the run; it starts half a unit
- * above the run, so the lit corner is square. `reveal` is the run the other way round, for the mask
- * that draws it in from the machine to the riser. They are drawn in this order, the two rooms left
- * of the kitchen, then upstairs, then the two to its right; `at` is when each reveal starts (ms
- * after the figure plays). */
-export const RUNS: readonly {
-  id: Exclude<MachineId, "box">;
-  d: string;
-  tail: string;
-  reveal: string;
-  dash: string;
-  at: number;
-}[] = [
-  {
-    id: "macbook",
-    d: "M500 354H174V451",
-    tail: "M500 353.5V426",
-    reveal: "M174 451V354H500",
-    dash: dashes(46, 3.0435, 14, 2.7857),
-    at: 0,
-  },
-  {
-    id: "laptop",
-    d: "M500 361H275V455",
-    tail: "M500 360.5V426",
-    reveal: "M275 455V361H500",
-    dash: dashes(32, 2.96875, 13, 3.0769),
-    at: 80,
-  },
-  {
-    id: "gaming",
-    d: "M500 354H602V330",
-    tail: "M500 353.5V426",
-    reveal: "M602 330V354H500",
-    dash: dashes(14, 3.1429, 3, 3.3333),
-    at: 160,
-  },
-  {
-    id: "iphone",
-    d: "M500 382H736V488",
-    tail: "M500 381.5V426",
-    reveal: "M736 488V382H500",
-    dash: dashes(33, 3.0909, 15, 2.9333),
-    at: 240,
-  },
-  {
-    id: "oldpc",
-    d: "M500 375H831V454",
-    tail: "M500 374.5V426",
-    reveal: "M831 454V375H500",
-    dash: dashes(47, 3, 11, 3),
-    at: 320,
-  },
-];
-
-/** Each machine's mark: a page-coloured disc on its run, and the brand mark scaled into it. The
- * apple and the penguin are 12 units; the Windows square is 9.6, because a square reads larger than
- * the other two at the same size, and at 12 its corners would touch the disc's rim. */
-type MarkAt = { os: "apple" | "windows" | "linux"; x: number; y: number; fit: string };
-const MARK: Record<Exclude<MachineId, "box">, MarkAt> = {
-  macbook: { os: "apple", x: 174, y: 414, fit: "translate(168 408) scale(.5)" },
-  laptop: { os: "windows", x: 275, y: 414, fit: "translate(270.2 409.2) scale(.4)" },
-  gaming: { os: "windows", x: 560, y: 354, fit: "translate(555.2 349.2) scale(.4)" },
-  oldpc: { os: "linux", x: 831, y: 393, fit: "translate(825 387) scale(.5)" },
-  iphone: { os: "apple", x: 736, y: 440, fit: "translate(730 434) scale(.5)" },
-};
-
-/** Each machine's hit area: the machine itself padded 12, x y w h. Its mark's disc is a second
- * one, so pointing at the logo works too. The runs take no pointer: near the riser they lie 7
- * units apart, and a padded run would steal the pointer from its neighbour. */
-const HIT: Record<MachineId, readonly [number, number, number, number]> = {
-  box: [466, 414, 68, 68],
-  macbook: [134, 439, 80, 60],
-  laptop: [238, 443, 74, 56],
-  gaming: [570, 258, 64, 84],
-  oldpc: [794, 442, 74, 40],
-  iphone: [716, 475, 38, 44],
-};
-
-function HitArea({ id }: { id: MachineId }) {
-  const [x, y, w, h] = HIT[id];
+/** One box, as its three faces. `tone` swaps the faces' fills (a wall, a cushion, a black screen). */
+function Bx({ b, tone }: { b: B6; tone?: "wall" | "soft" | "dark" }) {
+  const f = box(...b);
   return (
-    <>
-      <rect className="k-hit" x={x} y={y} width={w} height={h} />
-      {id !== "box" && <circle className="k-hit" cx={MARK[id].x} cy={MARK[id].y} r="14" />}
-    </>
+    <g className={tone ? `i-${tone}` : undefined}>
+      <path className="i-t" d={f.top} />
+      <path className="i-l" d={f.left} />
+      <path className="i-r" d={f.right} />
+    </g>
   );
 }
 
-/** The keyboard focus ring: 1.5px, ink-1 at 70%, round the machine itself (not its mark, which sits
- * 40 units off) and 4 clear of its outline, with a 6-unit corner (the MacBook's is 3 clear on the
- * side the lamp leans in from). A machine that stands on a desk, the attic floor or a shelf has its
- * ring open at the bottom and ending on that surface's top edge, so it never thickens the surface's
- * line; the box's does the same on its counter, 2.5 clear. The iPhone lies in the sofa, so its ring
- * is closed. Under the ring goes a page-coloured plate (RingBack, drawn before the machine): it
- * cuts the lines the ring crosses, as a label's halo does, and clears the room's own lines from
- * inside it (the sofa's seams round the phone), so nothing makes a brighter knot or a second edge. */
-const RING: Record<MachineId, string> = {
-  box: "M474 469.5V426Q474 422 478 422H522Q526 422 526 426V469.5",
-  macbook: "M141.75 486.5V452.75A6 6 0 0 1 147.75 446.75H198.75A6 6 0 0 1 204.75 452.75V486.5",
-  laptop: "M245.75 486.5V456.75A6 6 0 0 1 251.75 450.75H297.75A6 6 0 0 1 303.75 456.75V486.5",
-  gaming: "M577.75 329.5V271.75A6 6 0 0 1 583.75 265.75H619.75A6 6 0 0 1 625.75 271.75V329.5",
-  oldpc: "M801.75 469.5V455.75A6 6 0 0 1 807.75 449.75H853.75A6 6 0 0 1 859.75 455.75V469.5",
-  iphone:
-    "M729.25 481.75H741.25A6 6 0 0 1 747.25 487.75V505.75A6 6 0 0 1 741.25 511.75H729.25A6 6 0 0 1 723.25 505.75V487.75A6 6 0 0 1 729.25 481.75Z",
+/** Lines drawn on a surface: seams, shelf edges, a door's split. */
+function Ln({ d, faint }: { d: string; faint?: boolean }) {
+  return <path className={faint ? "i-seam i-faint" : "i-seam"} d={d} />;
+}
+
+const WALL_H = 24;
+const PART_H = 9;
+
+/** Where each machine's arc starts, and where they all land: on the box's lid. */
+const AT_BOX: V3 = [48.6, 5.5, 11.4];
+const ANCHOR: Record<Exclude<MachineId, "box">, V3> = {
+  macbook: [3.4, 14.5, 11.6],
+  laptop: [80.5, 3.4, 11.4],
+  gaming: [91, 35.5, 10.4],
+  oldpc: [4.8, 43, 4],
+  iphone: [47.7, 36.3, 5.3],
+};
+/** How high each arc rises over the midpoint of its run, in units. */
+const LIFT: Record<Exclude<MachineId, "box">, number> = {
+  macbook: 13,
+  laptop: 11,
+  gaming: 15,
+  oldpc: 17,
+  iphone: 12,
+};
+/** The order the arcs draw in, and when (ms after the figure plays). */
+const ARCS: readonly { id: Exclude<MachineId, "box">; at: number }[] = [
+  { id: "macbook", at: 0 },
+  { id: "laptop", at: 110 },
+  { id: "gaming", at: 220 },
+  { id: "oldpc", at: 330 },
+  { id: "iphone", at: 440 },
+];
+/** The internet: out of the box, over the back wall, broken a little past halfway. */
+const NET_B: V3 = [70, -22, 40];
+const NET_LIFT = 6;
+const NET_CUT = (() => {
+  const a = arcAt(AT_BOX, NET_B, NET_LIFT, 0.6);
+  const b = arcAt(AT_BOX, NET_B, NET_LIFT, 0.68);
+  return `M${a[0]} ${a[1]}L${b[0]} ${b[1]}`;
+})();
+
+/** Each machine's boxes: its drawing and, through `corners`, its hit area and focus ring. */
+const P = {
+  box: [46.4, 3.4, 9.2, 4.4, 4.2, 2.2],
+  macBase: [3, 12, 7.8, 3.8, 5, 0.3],
+  macLid: [3, 12, 8.1, 0.3, 5, 3.5],
+  lapBase: [78, 3.2, 7.8, 5, 3.4, 0.3],
+  lapLid: [78, 3, 8.1, 5, 0.3, 3.3],
+  gaming: [89, 31.6, 0, 4, 8, 10.4],
+  oldpc: [2.4, 39, 0.6, 4.8, 8, 3.4],
+  iphone: [47, 35, 5.1, 1.4, 2.7, 0.2],
+} as const satisfies Record<string, B6>;
+const PARTS: Record<MachineId, readonly B6[]> = {
+  box: [P.box],
+  macbook: [P.macBase, P.macLid],
+  laptop: [P.lapBase, P.lapLid],
+  gaming: [P.gaming],
+  oldpc: [P.oldpc],
+  iphone: [P.iphone],
 };
 
-function RingBack({ id }: { id: MachineId }) {
-  return <path className="k-ring-back" d={RING[id]} />;
-}
+const hit = (id: MachineId, pad: number) =>
+  bounds(
+    PARTS[id].flatMap((b) => corners(...b)),
+    pad,
+  );
 
-function Ring({ id }: { id: MachineId }) {
-  return <path className="k-ring" d={RING[id]} />;
-}
+/** The drawing's frame: the house and the end of the internet line, with a margin. */
+const VIEW = (() => {
+  const [x, y, w, h] = bounds(
+    [
+      [0, 0, -2],
+      [100, 0, -2],
+      [100, 60, -2],
+      [0, 60, -2],
+      [0, 0, WALL_H],
+      [0, 60, WALL_H],
+      NET_B,
+    ],
+    14,
+  );
+  return { x, y, w: w + 60, h };
+})();
+export const KITCHEN_RATIO = VIEW.h / VIEW.w;
 
-/** Each machine's own drawing: its structure (`s`) and its hidden lines (`f`, the graphics card). */
-function MachineArt({ id }: { id: Exclude<MachineId, "box"> }) {
+/** The machines' own drawings (the box is drawn in its place on the counter). */
+function Machine({ id }: { id: Exclude<MachineId, "box"> }) {
   switch (id) {
     case "macbook":
       return (
-        <g className="k-ms">
-          <rect x="150" y="451" width="48" height="32" rx="3" />
-          <rect x="146" y="483" width="56" height="4" rx="1.5" />
-        </g>
+        <>
+          <Bx b={P.macBase} />
+          <Bx b={P.macLid} />
+          <path className="i-glass" d={onX(3.3, 12.4, 16.6, 8.5, 11.2)} />
+          <Ln d={onZ(8.1, 3.6, 6.2, 13, 16)} faint />
+        </>
       );
     case "laptop":
       return (
-        <g className="k-ms">
-          <rect x="254" y="455" width="42" height="28" rx="1.5" />
-          <rect x="250" y="483" width="50" height="4" rx="1" />
-        </g>
+        <>
+          <Bx b={P.lapBase} />
+          <Bx b={P.lapLid} />
+          <path className="i-glass" d={onY(3.3, 78.4, 82.6, 8.5, 11)} />
+          <Ln d={onZ(8.1, 79, 82, 3.9, 6)} faint />
+        </>
       );
     case "gaming":
       return (
         <>
-          <g className="k-mf" strokeDasharray="3 2">
-            <rect x="586" y="296" width="32" height="16" />
-            <circle cx="595" cy="304" r="5" />
-            <circle cx="609" cy="304" r="5" />
-          </g>
-          <g className="k-ms">
-            <rect x="582" y="270" width="40" height="60" rx="2" />
-            <path d="M590 278H614" />
-          </g>
+          <Bx b={P.gaming} />
+          {/* the glass side, and through it the graphics card with its two fans */}
+          <path className="i-glass" d={onX(93, 32.4, 38.8, 0.8, 9.6)} />
+          <Ln d={onX(93, 33.2, 38, 3.4, 5.4)} />
+          <Ln d={circle("x", [93, 34.6, 4.4], 0.75)} faint />
+          <Ln d={circle("x", [93, 36.6, 4.4], 0.75)} faint />
+          {/* the front: a power button and a vent */}
+          <Ln
+            d={line([
+              [89.6, 39.6, 9.2],
+              [92.4, 39.6, 9.2],
+            ])}
+          />
+          <Ln d={onY(39.6, 89.8, 92.2, 1.2, 6.4)} faint />
         </>
       );
     case "oldpc":
       return (
         <>
-          <g className="k-ms">
-            <rect x="806" y="454" width="50" height="16" rx="1.5" />
-          </g>
-          <path className="k-mf" d="M812 460H826" />
+          <Bx b={P.oldpc} />
+          {/* a case from another decade, lying flat: its drive bay and its button */}
+          <Ln d={onX(7.2, 40, 44, 2.2, 3.2)} />
+          <Ln d={onX(7.2, 45, 46, 1.4, 2)} faint />
         </>
       );
     case "iphone":
       return (
-        <g className="k-ms">
-          <rect x="730.5" y="488" width="9" height="18" rx="2.2" transform="rotate(-16 735 497)" />
-        </g>
+        <>
+          <Bx b={P.iphone} tone="dark" />
+          <path className="i-glass" d={onZ(5.3, 47.15, 48.25, 35.2, 37.5)} />
+        </>
       );
   }
 }
 
+function Group({
+  id,
+  active,
+  bind,
+  children,
+}: {
+  id: MachineId;
+  active: boolean;
+  bind: MachineHandlers;
+  children: ReactNode;
+}) {
+  const [x, y, w, h] = hit(id, 8);
+  const [rx, ry, rw, rh] = hit(id, 5);
+  return (
+    <g
+      className="k-mach"
+      role="button"
+      tabIndex={0}
+      aria-label={readout(MACHINES[id])}
+      data-on={active || undefined}
+      {...bind}
+    >
+      <rect className="k-hit" x={x} y={y} width={w} height={h} />
+      {children}
+      <rect className="k-ring" x={rx} y={ry} width={rw} height={rh} rx="5" />
+    </g>
+  );
+}
+
+const at = (ms: number, dur: number) => ({ "--at": `${ms}ms`, "--for": `${dur}ms` }) as CSSProperties;
+
 export function KitchenDrawing({
-  uid,
   active,
   bind,
 }: {
-  uid: string;
   active: MachineId | null;
   bind: (id: MachineId) => MachineHandlers;
 }) {
-  // pointing at the box lights every run: everything in the house comes to it
   const lit = (id: MachineId) => active === id || (active === "box" && id !== "box");
+  const g = (id: MachineId) => ({ id, active: lit(id), bind: bind(id) });
+  const label = pt(...NET_B);
+  const light = pt(50.1, 7.6, 10.2);
 
   return (
     <svg
-      viewBox="0 84 1000 524"
-      className="k-svg k-svg-wide"
-      fill="none"
+      viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.w} ${VIEW.h}`}
+      className="iso k-svg"
       role="group"
-      aria-label="Drawing: a house in cutaway. The box sits on the kitchen counter beside the microwave, a little smaller than it, and a cable runs to it from every other computer in the house. Its cable to the internet is broken, and its status light is still on."
+      aria-label="Drawing: a house in cutaway, six rooms on one floor. The box sits on the kitchen counter beside the microwave, and an arc runs to it from every other computer in the house. Its line to the internet is broken, and its light is still on."
     >
-      <defs>
-        {/* each dashed run is revealed by a solid copy of itself drawn from the machine to the riser */}
-        {RUNS.map((r) => (
-          <mask key={r.id} id={`${uid}-r-${r.id}`} maskUnits="userSpaceOnUse" x="0" y="84" width="1000" height="524">
-            <path
-              className="k-reveal m-draw"
-              d={r.reveal}
-              pathLength={1}
-              style={{ ["--at" as string]: `${r.at}ms`, ["--for" as string]: "300ms" }}
-            />
-          </mask>
-        ))}
-        {/* the riser, drawn down into the box as the first run reaches it */}
-        <mask id={`${uid}-riser`} maskUnits="userSpaceOnUse" x="0" y="84" width="1000" height="524">
-          <path
-            className="k-reveal m-draw"
-            d={RISER}
-            pathLength={1}
-            style={{ ["--at" as string]: "300ms", ["--for" as string]: "240ms" }}
-          />
-        </mask>
-        {/* the break in the internet cable: a 32-unit gap opened from its centre */}
-        <mask id={`${uid}-gap`} maskUnits="userSpaceOnUse" x="0" y="84" width="1000" height="524">
-          <rect x="0" y="84" width="1000" height="524" fill="#fff" />
-          <rect className="k-gap" x="842" y="562" width="32" height="20" fill="#000" />
-        </mask>
-      </defs>
+      <g aria-hidden="true">
+        {/* the floor, and the kitchen's tiles */}
+        <Bx b={[0, 0, -2, 100, 60, 2]} tone="wall" />
+        <path className="i-floor" d={onZ(0, 0, 100, 0, 60)} />
+        <Ln
+          faint
+          d={[38, 42, 46, 50, 54, 58, 62]
+            .map((x) =>
+              line([
+                [x, 1.6, 0],
+                [x, 29.5, 0],
+              ]),
+            )
+            .concat(
+              [5.6, 9.6, 13.6, 17.6, 21.6, 25.6].map((y) =>
+                line([
+                  [34.5, y, 0],
+                  [66.5, y, 0],
+                ]),
+              ),
+            )
+            .join("")}
+        />
 
-      <g transform="translate(.5 .5)">
-        <g aria-hidden="true">
-          {/* hidden and construction lines: interior walls, knee walls, cabinets, books, towels */}
-          <path
-            className="k-f"
-            d="M240 338V548M360 338V548M640 338V548M790 338V548M280 330V233M720 330V233M372 478V548H628V478M457 478V548M543 478V548M372 492H628M802 420V409H822V420M806 409V416M860 420V411H880V420M864 411V417"
-          />
-          <path className="k-f" strokeWidth="4" d="M306 392V372M313 392V368M320 392V374M327 392V370" />
-          <g className="k-dots">
-            {[434, 440, 446, 452].flatMap((y) =>
-              [452, 457.5, 463].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1" />),
-            )}
-          </g>
-
-          {/* the runs, under the structure they pass through; the riser draws down into the box as the
-              first run reaches it; each machine's way on to the box lies over it, lit with its run */}
-          {RUNS.map((r) => (
-            <path
-              key={r.id}
-              className="k-run"
-              d={r.d}
-              strokeDasharray={r.dash}
-              mask={`url(#${uid}-r-${r.id})`}
-              data-on={lit(r.id) || undefined}
-            />
-          ))}
-          <path className="k-trunk" d={RISER} mask={`url(#${uid}-riser)`} />
-          {RUNS.map((r) => (
-            <path key={r.id} className="k-tail" d={r.tail} data-on={lit(r.id) || undefined} />
-          ))}
-
-          {/* the house, its rooms and their furniture */}
-          <path
-            className="k-s"
-            d="M30 548H970M110 548V330H90L500 96L910 330H890V548M110 330H890M110 338H890M110 330L500 107.5L890 330M236 246.7V196H262V231.8M232 196H266M500 168V212M470 190H530M300 330V312H420V330M300 318H420M462 272H560M468 272V330M554 272V330M512 268V272M128 487H222M128 492H222M134 492V548M216 492V548M214 487L208 462L220 452M214 448L226 456M300 392H354M248 487H350M248 492H350M254 492V548M344 492V548M322 487V471H332V487M332 474A5 5 0 0 1 332 484M366 470H634V478H366ZM446 424V464M590 401V393M590 401L596 404M660 548V500Q660 492 668 492H678Q686 492 686 500V548M744 548V500Q744 492 752 492H762Q770 492 770 500V548M686 506V482Q686 474 694 474H736Q744 474 744 482V506M686 506H744M686 520H744M796 420H884M796 470H884"
-          />
-          <g className="k-s">
-            <rect x="470" y="168" width="60" height="44" rx="2" />
-            <rect x="306" y="304" width="30" height="8" rx="4" />
-            <rect x="480" y="230" width="64" height="38" rx="2" />
-            <rect x="124" y="380" width="32" height="24" />
-            <rect x="380" y="418" width="88" height="52" rx="4" />
-            <rect x="388" y="426" width="50" height="36" rx="3" />
-            <circle cx="590" cy="401" r="12" />
-            <rect x="690" y="394" width="40" height="28" />
-          </g>
-          <path className="k-s" strokeLinecap="round" d="M406 486H422M492 486H508M577 486H593" />
-
-          {/* The internet, drawn whole and broken by the mask. It drops through the counter, runs
-              along the counter's underside (on its line, so no third line shows inside it) to the
-              cabinets' divider and goes down that seam, so it never crosses a cabinet door; the
-              ticks cross exactly at the break's two ends. */}
-          <path className="k-s" d="M516 470V478H543V572H894" mask={`url(#${uid}-gap)`} />
-          <path
-            className="k-s m-fade"
-            d="M838 577L846 567M870 577L878 567"
-            style={{ ["--at" as string]: "1350ms", ["--for" as string]: "200ms" }}
-          />
-        </g>
-
-        {/* The machines, in the phone list's order so the keyboard meets them as the list reads: the
-            box, then the house from the study round to the living room. The box's own drawing comes
-            after all of them (below), so the riser ends under it; its button here
-            is the hit area and the ring, and the drawing lets the pointer through to it. */}
-        {LIST_ORDER.map((id) => {
-          if (id === "box") {
-            return (
-              <g
-                key={id}
-                className="k-mach"
-                role="button"
-                tabIndex={0}
-                aria-label={readout(MACHINES.box)}
-                data-on={active === "box" || undefined}
-                {...bind("box")}
-              >
-                <HitArea id="box" />
-                <RingBack id="box" />
-                <Ring id="box" />
-              </g>
-            );
+        {/* the two walls that stand, with their windows */}
+        <Bx b={[0, 0, 0, 100, 1.6, WALL_H]} tone="wall" />
+        <path className="i-sky" d={onY(1.6, 40, 54, 12.5, 20)} />
+        <Ln
+          d={
+            line([
+              [47, 1.6, 12.5],
+              [47, 1.6, 20],
+            ]) +
+            line([
+              [40, 1.6, 16.2],
+              [54, 1.6, 16.2],
+            ])
           }
-          const mark = MARK[id];
+        />
+        <path className="i-sky" d={onY(1.6, 74, 88, 12.5, 20)} />
+        <Ln
+          d={line([
+            [81, 1.6, 12.5],
+            [81, 1.6, 20],
+          ])}
+        />
+        <Bx b={[0, 1.6, 0, 1.6, 58.4, WALL_H]} tone="wall" />
+        <path className="i-sky" d={onX(1.6, 8, 21, 12.5, 20)} />
+        <Ln
+          d={line([
+            [1.6, 14.5, 12.5],
+            [1.6, 14.5, 20],
+          ])}
+        />
+        {/* the skirting, where the floor meets them */}
+        <Ln
+          faint
+          d={line([
+            [1.6, 60, 0.6],
+            [1.6, 1.6, 0.6],
+            [100, 1.6, 0.6],
+          ])}
+        />
+
+        {/* ---- back row: the study ---- */}
+        <Bx b={[14, 1.6, 0, 12, 3.6, 16]} />
+        <Ln
+          d={[4, 8, 12]
+            .map((z) =>
+              line([
+                [14, 5.2, z],
+                [26, 5.2, z],
+              ]),
+            )
+            .join("")}
+        />
+        <g className="i-soft">
+          {(
+            [
+              [14.8, 4, 1.2, 3.2],
+              [16.2, 4, 0.9, 2.6],
+              [17.4, 4, 1.4, 3.4],
+              [21, 8, 1, 3],
+              [22.2, 8, 1.3, 3.4],
+              [15, 12, 2.6, 1],
+              [15.2, 13, 2.2, 0.9],
+            ] as const
+          ).map(([x, z, w, h]) => (
+            <Bx key={`${x}-${z}`} b={[x, 2.2, z, w, 2.6, h]} />
+          ))}
+        </g>
+        {/* the desk against the side wall */}
+        <Bx b={[8, 21, 0, 0.8, 0.8, 7]} />
+        <Bx b={[8, 8, 0, 0.8, 0.8, 7]} />
+        <Bx b={[1.6, 8, 7, 7.6, 14, 0.8]} />
+        <Group {...g("macbook")}>
+          <Machine id="macbook" />
+        </Group>
+        {/* the chair */}
+        <Bx b={[12.6, 14.6, 0, 0.6, 0.6, 4.6]} />
+        <Bx b={[11, 13, 4.6, 4.2, 4, 0.7]} tone="soft" />
+        <Bx b={[15.2, 13, 4.6, 0.6, 4, 5]} tone="soft" />
+
+        {/* partition: study | kitchen */}
+        <Bx b={[33.5, 1.6, 0, 1, 10.4, PART_H]} tone="wall" />
+        <Bx b={[33.5, 20, 0, 1, 9.5, PART_H]} tone="wall" />
+
+        {/* ---- back row: the kitchen ---- */}
+        <Bx b={[36, 1.6, 0, 22, 6.4, 8.4]} />
+        <Ln
+          d={[41.5, 47, 52.5]
+            .map((x) =>
+              line([
+                [x, 8, 0.6],
+                [x, 8, 8],
+              ]),
+            )
+            .join("")}
+        />
+        <Ln
+          d={[38.4, 43.9, 49.4, 54.9]
+            .map((x) =>
+              line([
+                [x, 8, 7],
+                [x + 1.8, 8, 7],
+              ]),
+            )
+            .join("")}
+        />
+        <Bx b={[35.6, 1.6, 8.4, 22.8, 7, 0.8]} tone="soft" />
+        {/* the fridge */}
+        <Bx b={[58.4, 1.6, 0, 7.6, 7, 21]} />
+        <Ln
+          d={
+            line([
+              [58.4, 8.6, 13.4],
+              [66, 8.6, 13.4],
+            ]) +
+            line([
+              [59.4, 8.6, 15],
+              [59.4, 8.6, 18],
+            ]) +
+            line([
+              [59.4, 8.6, 8],
+              [59.4, 8.6, 11.6],
+            ])
+          }
+        />
+        {/* the microwave: its window and keypad */}
+        <Bx b={[37, 2.2, 9.2, 7.4, 5.2, 4.4]} />
+        <path className="i-glass" d={onY(7.4, 37.6, 42, 9.9, 12.9)} />
+        <Ln
+          d={line([
+            [42.6, 7.4, 9.6],
+            [42.6, 7.4, 13.2],
+          ])}
+        />
+        <g className="i-dots">
+          {[0, 1, 2].flatMap((r) =>
+            [0, 1].map((c) => {
+              const [x, y] = pt(43.2 + c * 0.6, 7.4, 12.6 - r * 0.8);
+              return <circle key={`${r}-${c}`} cx={x} cy={y} r="0.9" />;
+            }),
+          )}
+        </g>
+        {/* a cutting board, and a pot of herbs by the window */}
+        <Bx b={[53, 3.2, 9.2, 4.2, 3.6, 0.4]} tone="soft" />
+        <Bx b={[54.6, 2.4, 9.6, 1.8, 1.8, 1.6]} />
+        <path className="i-leaf" d={circle("z", [55.5, 3.3, 12.2], 1.5)} />
+
+        {/* the box, the drawing's subject, between the microwave and the board */}
+        <Group {...g("box")}>
+          <g className="k-box">
+            <Bx b={P.box} />
+            <Ln d={onZ(11.4, 47, 50.2, 4, 7)} faint />
+          </g>
+          <circle className="k-light" cx={light[0]} cy={light[1]} r="2.2" />
+        </Group>
+
+        {/* partition: kitchen | office */}
+        <Bx b={[66.5, 1.6, 0, 1, 12.4, PART_H]} tone="wall" />
+        <Bx b={[66.5, 22, 0, 1, 7.5, PART_H]} tone="wall" />
+
+        {/* ---- back row: the home office ---- */}
+        <Bx b={[88.6, 1.6, 0, 0.8, 0.8, 7]} />
+        <Bx b={[88.6, 7.6, 0, 0.8, 0.8, 7]} />
+        <Bx b={[72, 1.6, 7, 18, 6.8, 0.8]} />
+        <Bx b={[72.6, 7.6, 0, 0.8, 0.8, 7]} />
+        <Group {...g("laptop")}>
+          <Machine id="laptop" />
+        </Group>
+        <Bx b={[85.4, 3.6, 7.8, 1.3, 1.3, 1.5]} />
+        <Bx b={[79.4, 12.4, 0, 0.6, 0.6, 4.6]} />
+        <Bx b={[78, 11, 4.6, 4, 4, 0.7]} tone="soft" />
+        <Bx b={[78, 15, 4.6, 4, 0.6, 5]} tone="soft" />
+
+        {/* the wall between the back rooms and the front ones, with its doorways */}
+        {(
+          [
+            [1.6, 8.4],
+            [18, 27],
+            [53, 17],
+            [78, 22],
+          ] as const
+        ).map(([x, w]) => (
+          <Bx key={x} b={[x, 29.5, 0, w, 1, PART_H]} tone="wall" />
+        ))}
+
+        {/* ---- front row: the hall closet's open shelves ---- */}
+        <Bx b={[1.6, 36, 0, 6.4, 0.8, 14]} />
+        <Bx b={[1.6, 36.8, 0, 6.4, 16.4, 0.6]} />
+        <Group {...g("oldpc")}>
+          <Machine id="oldpc" />
+        </Group>
+        <Bx b={[1.6, 36.8, 4.6, 6.4, 16.4, 0.6]} />
+        <g className="i-soft">
+          <Bx b={[2.4, 38, 5.2, 4.8, 5, 3]} />
+          <Bx b={[2.4, 44, 5.2, 4.8, 4, 2]} />
+        </g>
+        <Bx b={[1.6, 36.8, 9.2, 6.4, 16.4, 0.6]} />
+        <Bx b={[2.6, 41, 9.8, 4, 6, 2.4]} tone="soft" />
+        <Bx b={[1.6, 36.8, 13.4, 6.4, 16.4, 0.6]} />
+        <Bx b={[1.6, 53.2, 0, 6.4, 0.8, 14]} />
+        {/* a pair of shoes by the doorway */}
+        <Bx b={[16, 33, 0, 3, 1.4, 0.9]} tone="soft" />
+        <Bx b={[16, 34.8, 0, 3, 1.4, 0.9]} tone="soft" />
+
+        {/* partition: closet | living room */}
+        <Bx b={[33.5, 30.5, 0, 1, 9.5, PART_H]} tone="wall" />
+        <Bx b={[33.5, 48, 0, 1, 12, PART_H]} tone="wall" />
+
+        {/* ---- front row: the living room ---- */}
+        <path className="i-rug" d={onZ(0.05, 39, 59, 42, 54)} />
+        <Ln d={onZ(0.05, 40, 58, 43, 53)} faint />
+        <Bx b={[38, 31.6, 4, 22, 2, 5]} tone="soft" />
+        <Bx b={[38, 31.6, 0, 22, 7.4, 4]} tone="soft" />
+        <Bx b={[38, 33.6, 4, 2.5, 5.4, 2.4]} tone="soft" />
+        <Bx b={[40.5, 33.6, 4, 8.5, 5.4, 1]} tone="soft" />
+        <Bx b={[49, 33.6, 4, 8.5, 5.4, 1]} tone="soft" />
+        <Group {...g("iphone")}>
+          <Machine id="iphone" />
+        </Group>
+        <Bx b={[57.5, 33.6, 4, 2.5, 5.4, 2.4]} tone="soft" />
+        {/* the coffee table */}
+        <Bx b={[44.6, 48.4, 0, 0.6, 0.6, 3.4]} />
+        <Bx b={[52.8, 48.4, 0, 0.6, 0.6, 3.4]} />
+        <Bx b={[44, 44, 3.4, 10, 5, 0.7]} />
+        {/* a plant in the corner */}
+        <Bx b={[62, 31.8, 0, 3, 3, 3.6]} />
+        <path className="i-leaf" d={circle("z", [63.5, 33.3, 7], 2.6)} />
+        <path className="i-leaf" d={circle("z", [62.8, 33.9, 9.4], 1.8)} />
+
+        {/* partition: living room | bedroom */}
+        <Bx b={[66.5, 30.5, 0, 1, 11.5, PART_H]} tone="wall" />
+        <Bx b={[66.5, 50, 0, 1, 10, PART_H]} tone="wall" />
+
+        {/* ---- front row: the bedroom ---- */}
+        <Bx b={[72.6, 36.6, 0, 0.8, 0.8, 7]} />
+        <Bx b={[72, 31.6, 7, 16, 6, 0.8]} />
+        <Bx b={[86.6, 36.6, 0, 0.8, 0.8, 7]} />
+        {/* the monitor, on its stand, and a keyboard */}
+        <Bx b={[79.4, 32.6, 7.8, 1.2, 1.2, 1]} />
+        <Bx b={[75.6, 32.2, 8.8, 8.8, 0.4, 5]} tone="dark" />
+        <path className="i-glass" d={onY(32.6, 76, 84, 9.2, 13.4)} />
+        <Bx b={[77.6, 34.6, 7.8, 4.4, 1.6, 0.25]} tone="soft" />
+        <Group {...g("gaming")}>
+          <Machine id="gaming" />
+        </Group>
+        {/* the bed, headboard to the partition */}
+        <Bx b={[68.6, 45, 0, 1, 12, 8]} />
+        <Bx b={[69.6, 45, 0, 17, 12, 2.2]} />
+        <Bx b={[69.6, 45.2, 2.2, 16.8, 11.6, 2.2]} tone="soft" />
+        <Bx b={[70.4, 46.4, 4.4, 3.4, 9.2, 1]} tone="soft" />
+        <Ln
+          faint
+          d={line([
+            [77, 45.2, 4.4],
+            [77, 56.8, 4.4],
+          ])}
+        />
+      </g>
+
+      {/* every machine's arc to the box, and the box's broken line to the internet */}
+      <g aria-hidden="true" className="k-arcs">
+        {ARCS.map(({ id, at: ms }) => {
+          const [x, y] = pt(...ANCHOR[id]);
           return (
-            <g
-              key={id}
-              className="k-mach"
-              role="button"
-              tabIndex={0}
-              aria-label={readout(MACHINES[id])}
-              data-on={active === id || undefined}
-              {...bind(id)}
-            >
-              <HitArea id={id} />
-              <RingBack id={id} />
-              <MachineArt id={id} />
-              <circle className="k-disc" cx={mark.x} cy={mark.y} r="9" />
-              {/* even-odd, so a mark drawn with a cut-out (the penguin's belly) keeps it */}
-              <path className="k-mark" d={MARKS[mark.os]} fillRule="evenodd" transform={mark.fit} />
-              <Ring id={id} />
+            <g key={id} className="k-arc" data-on={lit(id) || undefined}>
+              <path className="k-arc-line m-draw" pathLength={1} d={arc(ANCHOR[id], AT_BOX, LIFT[id])} style={at(ms, 560)} />
+              <circle className="k-arc-end m-fade" cx={x} cy={y} r="2" style={at(ms, 200)} />
             </g>
           );
         })}
-
-        {/* the box, the drawing's subject: its outline covers 477.5 to 522.5 across and 425.5 to
-            470.5 down, so it stands on the counter's top line and the riser ends under it */}
-        <g aria-hidden="true" className="k-box">
-          <rect className="k-body" x="478.25" y="426.25" width="43.5" height="43.5" />
-          <path className="k-f" d="M484 433H516M484 436H516M484 439H516M484 442H516M484 445H516" />
-          <circle cx="508" cy="462" r="2.4" fill="var(--color-ok)" />
-          <path className="k-s" strokeLinecap="round" d="M513.4 459.9A3 3 0 1 0 517.6 459.9M515.5 458.2V462" />
-        </g>
-
-        <g aria-hidden="true" className="k-labels">
-          <text className="fig-label" x="902" y="576">
-            internet
-          </text>
-          {/* clear of the box's focus ring by 6 */}
-          <text
-            className="fig-label m-fade k-still"
-            x="534"
-            y="466"
-            style={{ ["--at" as string]: "1600ms", ["--for" as string]: "300ms" }}
-          >
-            still on
-          </text>
-          <text className="fig-label" x="380" y="296" textAnchor="middle">
-            upstairs
-          </text>
-          {(
-            [
-              [175, "study"],
-              [300, "home office"],
-              [500, "kitchen"],
-              [715, "living room"],
-              [840, "closet"],
-            ] as const
-          ).map(([x, t]) => (
-            <text key={t} className="fig-label" x={x} y="596" textAnchor="middle">
-              {t}
-            </text>
-          ))}
-        </g>
+        <path className="k-net-line m-draw" pathLength={1} d={arc(AT_BOX, NET_B, NET_LIFT)} style={at(900, 500)} />
+        <path className="k-net-cut m-fade" d={NET_CUT} style={at(1400, 240)} />
+        <text className="k-net-label" x={label[0] + 10} y={label[1] + 4}>
+          Internet
+        </text>
       </g>
     </svg>
   );

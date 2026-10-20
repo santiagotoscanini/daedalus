@@ -1,159 +1,58 @@
 /* ---------------------------------------------------------------- *
  * Vercel, next (components/sections/vercel.tsx, vercel/drawing.tsx).
- * FIG. 3, the one control under it, Pinch's card, then the note and
- * the page's statement. The house state is the static frame;
- * `data-at="vercel"` on .vc-fig moves the lights, `data-moved` on the
- * card swaps the two rows that change, `data-back` shortens every fade
- * for "Move it home".
+ * The drawing, the one control under it, Pinch's card, then the note
+ * and the page's statement. The house state is the static frame;
+ * `data-at="vercel"` on .vc-fig lights the neighbourhood's windows,
+ * `data-moved` on the card swaps the two rows that change, `data-back`
+ * shortens every fade for "Move it home".
  * ---------------------------------------------------------------- */
 
-/* The drawing keeps a 16px gutter of its own rather than the wrap's. The wide one shows only where
- * it fits at 1:1 (a 960 column, from a 992px viewport), so its hairlines always land on whole
- * pixels; below that the narrow one runs as wide as Pinch's card under it (1:1 on a 390 phone),
- * with strokes that keep their width wherever it scales. The wide one is 400 tall: a house and a
- * rack 300 wide, the arc over them, and the labels. */
+/* One isometric drawing (iso.css) at every width, as wide as the kitchen's at most. */
 .vc-draw {
-  container-type: inline-size;
   padding-inline: 16px;
 }
 .vc-svg {
-  display: block;
-  margin-inline: auto;
-  width: 100%;
-  overflow: visible;
-}
-/* Heights rounded to a whole pixel wherever a drawing scales (the SVG letterboxes by under a pixel),
- * so the card and every section below stay on the pixel grid. */
-.vc-wide {
-  display: none;
   max-width: 960px;
-  height: 400px;
-}
-.vc-narrow {
-  max-width: 520px;
-  height: round(calc(min(100cqi, 520px) * 186 / 358), 1px);
-}
-/* the drawing's own strokes only: Pinch's icon inside it is drawn in 1024 units, and its strokes must scale
- * with it (the mask's stroke, measured in path length, too) */
-.vc-narrow > :is(path, rect, circle),
-.vc-narrow > :is(.vc-s, .vc-f, .vc-slot) > * {
-  vector-effect: non-scaling-stroke;
-}
-/* the labels render at about 13px whatever the drawing's scale: 13 units at 1:1, fewer as it grows,
- * more on the narrowest phones */
-.vc-narrow .fig-label {
-  font-size: 13px;
-}
-@container (max-width: 340px) {
-  .vc-narrow .fig-label {
-    font-size: 15.5px;
-  }
-}
-@container (min-width: 420px) {
-  .vc-narrow .fig-label {
-    font-size: 11px;
-  }
-}
-@container (min-width: 470px) {
-  .vc-narrow .fig-label {
-    font-size: 9.5px;
-  }
-}
-/* the rack's label names Vercel only where the longer words fit inside the page (a phone's 13px
- * label, centred under the rack, would run past its right edge) */
-.vc-narrow .vc-long {
-  display: none;
-}
-@container (min-width: 420px) {
-  .vc-narrow .vc-long {
-    display: inline;
-  }
-  .vc-narrow .vc-short {
-    display: none;
-  }
-}
-@container (min-width: 960px) {
-  .vc-wide {
-    display: block;
-  }
-  .vc-narrow {
-    display: none;
-  }
-}
-
-/* the inks: S structure, F faint; the box is the one subject stroke while Pinch runs on it */
-.vc-s {
-  stroke: var(--ink-stroke);
-}
-.vc-f,
-.vc-f-line {
-  stroke: var(--ink-faint);
-}
-/* the route's dashes are attributes (drawing.tsx), fitted to each drawing's crossings */
-.vc-route {
-  stroke: var(--ink-run);
-}
-.vc-trail {
-  stroke: rgba(255, 255, 255, 0.72);
-}
-.vc-chevron {
-  stroke: var(--ink-label);
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  margin-inline: auto;
 }
 .vc-tri {
   fill: var(--color-ink-1);
 }
-.vc-box-sub {
-  stroke: var(--ink-subject);
-  stroke-width: 1.5;
-}
-.vc-box-off {
-  stroke: var(--ink-stroke);
-  opacity: 0;
-}
-.vc-light-home {
+.vc-home-light {
   fill: var(--color-ok);
-  stroke: var(--ink-faint);
-  stroke-opacity: 0;
 }
-/* the slot's phantom line: its dashes are set per side, in the drawing */
-.vc-slot {
-  stroke: var(--ink-label);
+/* roofs a shade lighter than walls, so the houses read at a glance from far off */
+.iso .vc-roof {
+  fill: #23252a;
 }
-.vc-slot-taken {
-  stroke: var(--ink-subject);
-  stroke-width: 1.5;
-  opacity: 0;
+.iso .vc-roof-back {
+  fill: #191b1e;
 }
-.vc-light-rack {
-  fill: var(--color-ok);
-  opacity: 0;
+.vc-route {
+  fill: none;
+  stroke: #3a3d42;
+  stroke-dasharray: 2 4;
 }
-.vc-box-sub,
-.vc-box-off,
-.vc-slot,
-.vc-slot-taken,
-.vc-light-rack {
-  transition: opacity var(--d-2) var(--ease-ui);
+.vc-trail {
+  fill: none;
+  stroke: var(--color-ink-2);
 }
-.vc-light-home {
-  transition:
-    fill-opacity var(--d-2) var(--ease-ui),
-    stroke-opacity var(--d-2) var(--ease-ui);
+/* the neighbourhood is farther off: its edges a step quieter than your house's */
+.iso .vc-far :is(.i-t, .i-l, .i-r, .i-glass) {
+  stroke: #2a2c31;
 }
-.vc-fig[data-at="vercel"] :is(.vc-box-sub, .vc-slot) {
-  opacity: 0;
+/* the neighbourhood's windows: dark until Pinch arrives, then its coral, house by house */
+.iso .vc-win {
+  transition: fill 240ms var(--ease-ui) 0ms;
 }
-.vc-fig[data-at="vercel"] :is(.vc-box-off, .vc-slot-taken, .vc-light-rack) {
-  opacity: 1;
+.vc-fig[data-at="vercel"] .iso .vc-win {
+  fill: #e2583e;
+  stroke: #f07a5f;
+  transition-delay: var(--d, 0ms);
 }
-.vc-fig[data-at="vercel"] .vc-light-home {
-  fill-opacity: 0;
-  stroke-opacity: 1;
-}
-.vc-fig[data-back] :is(.vc-box-sub, .vc-box-off, .vc-slot, .vc-slot-taken, .vc-light-rack, .vc-light-home) {
-  transition-duration: var(--d-1);
+.vc-fig[data-back] .iso .vc-win {
+  transition-duration: 120ms;
+  transition-delay: 0ms;
 }
 
 /* ---- the one control, 24 under the drawing: a page button, not Vercel's, that plays a preview
@@ -391,12 +290,16 @@ html:not([data-js]) .vc-act {
     transition-duration: var(--d-1);
     transition-delay: 0s;
   }
-  .vc-box-sub,
-  .vc-box-off,
-  .vc-slot,
-  .vc-slot-taken,
-  .vc-light-rack,
-  .vc-light-home {
+  .vc-fig[data-at] .iso .vc-win {
     transition-duration: var(--d-1);
+    transition-delay: 0s;
+  }
+}
+
+/* the drawing scales to about 0.4 on a phone; its two labels are set larger there so they still
+ * render near the page's caption size */
+@media (max-width: 639.98px) {
+  .vc-svg text {
+    font-size: 24px;
   }
 }
