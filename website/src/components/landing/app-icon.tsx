@@ -3,8 +3,9 @@
  * outline, a top-lit ground, one whole object lit from above with the same soft shadow straight
  * down in every icon, and a hairline of light along the top edge (all the way round on Backpack's
  * navy, the one ground dark enough to lose its edge on the page). Every size uses the same artwork;
- * below 30px the details too fine to survive drop out (a pencil, a hinge, the ruled lines) and the
- * marks that carry the picture keep a minimum size in screen pixels, so a 20px icon reads as the same
+ * below 30px the details too fine to survive drop out (a pencil, a hinge, the ruled lines) or become
+ * a plainer mark that does the same job (Pinch's title a dash, Sitter's roof a house), and the marks
+ * that carry the picture keep a minimum size in screen pixels, so a 20px icon reads as the same
  * thing as the 256px one.
  *
  * `<AppIcon app size />` renders an `aria-hidden` SVG of `size` px on a 1024 grid. Ids are prefixed
@@ -68,9 +69,18 @@ function Shadow({ id, color, far, near }: { id: string; color: string; far: numb
 /** Grandma's recipe card on the coral ground: an index card turned −8°, the red rule a quarter of the
  * way down with her title written above it, three blue rules, and at 64px and up the faint ring a mug
  * left near its corner. The ring sits wholly on the paper: hung over the card's edge, its cut arc read
- * as a curled corner. The card's shadow is cast from an unturned copy so it falls straight down. */
-function Pinch({ u, size, small, sw }: Art) {
+ * as a curled corner. The card's shadow is cast from an unturned copy so it falls straight down.
+ * Below 40px a pen stroke of the scrawl's weight is a dark bar that fuses with the card's top edge and
+ * reads as a clapperboard, so the title becomes one short dash, the rule moves down to make room for
+ * it, and two blue rules stay (the third has no room): a dash over a red rule over blue lines is
+ * still an index card. */
+function Pinch({ u, size, sw }: Art) {
+  const tiny = size < 40;
   const rule = sw(12.3, 1);
+  const ruleY = tiny ? -202.8 + 133 : -105.5;
+  const dash = sw(14, 0.8);
+  const lines = tiny ? [232, 318] : [171.35, 248.45, 325.55];
+  const lineH = tiny ? sw(6.1, 0.7) : 6.1;
   const card = { x: -338, y: -202.8, width: 676, height: 405.6, rx: 20.5 };
   return (
     <>
@@ -86,19 +96,22 @@ function Pinch({ u, size, small, sw }: Art) {
       </g>
       <g transform="translate(512 481.3) rotate(-8)">
         <rect {...card} fill={`url(#${u}p)`} />
-        <rect x="-338" y={-105.5 - rule / 2} width="676" height={rule} fill="#E2483A" />
-        {!small &&
-          [171.35, 248.45, 325.55].map((y) => (
-            <rect key={y} x="-338" y={-202.8 + y} width="676" height="6.1" fill="#A9C2DE" />
-          ))}
-        <path
-          d={PINCH_HAND}
-          fill="none"
-          stroke="#4A2E1F"
-          strokeWidth={sw(14.3, 0.9)}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <rect x="-338" y={ruleY - rule / 2} width="676" height={rule} fill="#E2483A" />
+        {lines.map((y) => (
+          <rect key={y} x="-338" y={-202.8 + y} width="676" height={lineH} fill="#A9C2DE" />
+        ))}
+        {tiny ? (
+          <rect x="-262" y={-150 - dash / 2} width="270.4" height={dash} rx={dash / 2} fill="#4A2E1F" />
+        ) : (
+          <path
+            d={PINCH_HAND}
+            fill="none"
+            stroke="#4A2E1F"
+            strokeWidth={sw(14.3, 0.9)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
         {size >= 64 && (
           <g transform="rotate(8)">
             <ellipse
@@ -239,8 +252,13 @@ function Pillbox({ u, size, small }: Art) {
   );
 }
 
-/** A babysitter's evening on violet: a crescent moon, one star, and the roof the children sleep under. */
-function Sitter({ u, sw }: Art) {
+/** A babysitter's evening on violet: a crescent moon, one star, and the roof the children sleep under.
+ * An open roof line under a moon is also what a photo placeholder looks like (a mountain under a sun),
+ * so below 34px the roof is a filled house with the moon's own colour in its window, and the chimney
+ * goes. The house is 14 device pixels wide at 20px on a 2x screen, and its walls, eaves and apex sit
+ * on multiples of 25.6 units. */
+function Sitter({ u, size, sw }: Art) {
+  const house = size < 34;
   return (
     <>
       <defs>
@@ -253,31 +271,38 @@ function Sitter({ u, sw }: Art) {
       <g filter={`url(#${u}s)`}>
         <circle cx="430" cy="400" r="168" fill="#FFE9A8" mask={`url(#${u}m)`} />
         <path d="M690 248Q700 290 742 300Q700 310 690 352Q680 310 638 300Q680 290 690 248Z" fill="#fff" />
-        <path
-          d="M200 846L512 640L824 846M690 757.5V690H742V791.9"
-          fill="none"
-          stroke="#fff"
-          strokeWidth={sw(22, 1.2)}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {house ? (
+          <>
+            <path d="M512 640L332.8 768V896H691.2V768Z" fill="#fff" fillOpacity=".95" />
+            <rect x="473.6" y="793.6" width="76.8" height="76.8" fill="#FFE9A8" />
+          </>
+        ) : (
+          <path
+            d="M200 846L512 640L824 846M690 757.5V690H742V791.9"
+            fill="none"
+            stroke="#fff"
+            strokeWidth={sw(22, 1.2)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
       </g>
     </>
   );
 }
 
-/** Below 40px, where the initials are gone: the two height marks the small doorway keeps. Four short
- * ticks in a column at the casing's edge read as a notebook's spiral binding; two lines drawn across
- * the casing's face, far apart, read as pencil marks. Both centres are multiples of 128 units, so the
- * 1px lines sit on whole device pixels at 20px and at 32px on a 2x screen. */
+/** Below 48px, where four ticks would be hairlines: the two height marks the small doorway keeps. Four
+ * short ticks in a column at the casing's edge read as a notebook's spiral binding; two lines drawn
+ * across the casing's face, far apart, read as pencil marks. Both centres are multiples of 128 units,
+ * so the 1px lines sit on whole device pixels at 20px and at 32px on a 2x screen. */
 const SMALL_MARKS = [384, 640] as const;
 
 /** A whole doorway on a warm wall: both casings and the head, the door shut in it with its knob, and
- * on the left casing the children's heights marked in pencil, each with its initials (two plain
- * marks below 40px, see `SMALL_MARKS`). The casing is the object that casts the shadow, so the head
- * darkens the top of the door. The doorway stands on the floor below the icon's edge, centred, and
- * the edges of the casing, the door and the pencil lines sit on multiples of 25.6 units, whole device
- * pixels at 20px and 40px on a 2x screen. */
+ * on the left casing the children's heights marked in pencil as four plain ticks, long and short in
+ * turn (two lines below 48px, see `SMALL_MARKS`). The casing is the object that casts the shadow, so
+ * the head darkens the top of the door. The doorway stands on the floor below the icon's edge,
+ * centred, and the edges of the casing, the door and the pencil lines sit on multiples of 25.6 units,
+ * whole device pixels at 20px and 40px on a 2x screen. */
 function Doorframe({ u, size, small, sw }: Art) {
   const line = sw(12, 1);
   return (
@@ -297,21 +322,20 @@ function Doorframe({ u, size, small, sw }: Art) {
         <path d="M128 1024V76.8H896V1024H716.8V256H307.2V1024Z" fill="#F4E7D3" />
       </g>
       {!small && <path d="M289.2 1024V238H734.8V1024" fill="none" stroke="#E2CDAE" strokeWidth="6" />}
-      {size >= 40
-        ? DOOR_MARKS.map(([y, end, mark]) => (
-            <g key={y}>
-              <path d={`M148 ${y}H${end}`} stroke="#3A3A3A" strokeWidth={line} strokeLinecap="round" />
-              <path
-                d={mark}
-                fill="none"
-                stroke="#3A3A3A"
-                strokeWidth={sw(9, 0.6)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </g>
+      {size >= 48
+        ? DOOR_MARKS.map(([y, length]) => (
+            <path
+              key={y}
+              d={`M148 ${y}h${length}`}
+              stroke="#5A3F22"
+              strokeOpacity=".85"
+              strokeWidth={sw(9, 0.9)}
+              strokeLinecap="round"
+            />
           ))
-        : SMALL_MARKS.map((y) => <rect key={y} x="153.6" y={y - line / 2} width="128" height={line} fill="#3A3A3A" />)}
+        : SMALL_MARKS.map((y) => (
+            <rect key={y} x="153.6" y={y - line / 2} width="128" height={line} fill="#5A3F22" fillOpacity=".85" />
+          ))}
     </>
   );
 }

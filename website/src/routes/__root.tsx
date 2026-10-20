@@ -10,6 +10,9 @@ import { NotFound } from "~/components/not-found";
 import stylesCss from "../styles.css?url";
 import { SITE_URL } from "~/site-head";
 
+const OG_ALT =
+  "daedalus. Your own cloud, at home: two iPhones, a request for a recipe app and the app arriving on Grandma’s phone. Talking to the house like this is next.";
+
 // Only tags that are byte-identical on EVERY page belong here. Anything a
 // page OWNS — title, description, canonical, and the og/twitter pair that
 // carries them — is built by `pageHead` in the route itself. Declared here,
@@ -24,13 +27,14 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "daedalus" },
       { property: "og:image", content: `${SITE_URL}/og.png` },
-      {
-        property: "og:image:alt",
-        content:
-          "daedalus. Your own cloud, at home: two iPhones, a request for a recipe app and the app arriving on Grandma’s phone. Talking to the house like this is next.",
-      },
+      // the card's real size and type, so a crawler lays the preview out without fetching the file first
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:alt", content: OG_ALT },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: `${SITE_URL}/og.png` },
+      { name: "twitter:image:alt", content: OG_ALT },
     ],
     links: [
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },

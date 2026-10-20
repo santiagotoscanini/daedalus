@@ -7,8 +7,8 @@
  * Where the screen is wide enough for both (1200 and up, and landscape screens from 1024) the hero
  * is one composed first screen, like the page's share image: the words on the left, both phones on
  * the right, scaled so the pair always fits under the nav (hero.css). Elsewhere the words stack over
- * the phones; below 768 the phones share one spot, with a pager (and a horizontal swipe on the phone)
- * after the sequence, or a plain swipeable row without script.
+ * the phones; below 768 the phones share one spot, with a labelled two-part switch above them (and a
+ * horizontal swipe on the phone) after the sequence, or a plain swipeable row without script.
  *
  * The sequence plays once, in two acts that each wait until the reader can see them (hero/timeline.ts):
  * your chat once the top of your phone is on screen, Grandma's phone once the top of hers is. Then it
@@ -213,8 +213,8 @@ export function Hero() {
     root()?.setAttribute("data-b", "");
     const E = narrow ? E_DELAY_NARROW : E_DELAY_WIDE;
     if (narrow) setShown("b");
-    // the column settles where the final frame has it as your phone steps aside, or, on a phone,
-    // once Grandma's has covered it
+    // the column settles where the final frame has it as her phone comes in beside yours, or, on a
+    // phone, once Grandma's has covered it
     const f = follow();
     at(narrow ? 500 : 0, () => {
       for (const undo of r.halt.splice(0)) undo();
@@ -329,7 +329,7 @@ export function Hero() {
               row.kind === "me" || row.kind === "home" ? (
                 <li key={i}>{`${row.kind === "me" ? "You" : "Home"}: ${row.text}`}</li>
               ) : row.kind === "card" ? (
-                <li key={i}>Home: Pinch, the family’s recipes, at pinch.rivera.family.</li>
+                <li key={i}>Home: Pinch, the family’s recipes, at pinch.riveras.com.</li>
               ) : null,
             )}
           </ol>
@@ -337,6 +337,16 @@ export function Hero() {
             On Grandma’s iPhone, Pinch installs from TestFlight and opens on her Lentil Soup card: her handwritten
             card, the same recipe typed out below it, and notes from Dad and Sofi.
           </p>
+        </div>
+
+        {/* Below 768 and with script: which phone, in words, above the one spot, so the chat is a named
+            choice on the first screen. It sits in the source before the stage; hidden elsewhere. */}
+        <div className="hero-pager" role="group" aria-label="Phones" data-shown={shown}>
+          {(["a", "b"] as const).map((p) => (
+            <button key={p} type="button" className="hero-seg" aria-pressed={shown === p} onClick={() => pick(p)}>
+              {p === "a" ? "Your iPhone" : "Grandma’s iPhone"}
+            </button>
+          ))}
         </div>
 
         <div className="hero-figure">
@@ -377,27 +387,17 @@ export function Hero() {
             {/* what each act waits for: the top of your screen, then the top of Grandma's */}
             <div ref={watchA} className="hero-watch hero-watch-a" />
             <div ref={watchB} className="hero-watch hero-watch-b" />
+            {/* where her phone will stand, until it arrives (768 and up) */}
+            <div className="hero-ghost" aria-hidden />
           </div>
         </div>
 
-        <div className="hero-pager" role="group" aria-label="Phones">
-          {(["a", "b"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              className="hero-dot"
-              aria-label={p === "a" ? "Show your iPhone" : "Show Grandma’s iPhone"}
-              aria-pressed={shown === p}
-              onClick={() => pick(p)}
-            />
-          ))}
-        </div>
-
-        {/* one sentence a line wherever it takes two (hero.css) */}
+        {/* one sentence a line wherever it takes two (hero.css); where the first wraps it breaks at the comma */}
         <p className="t-caption hero-next">
           <span className="hero-next-1">
             <Coming />
-            Today you ask through Claude Code on the box, from the Claude app on your phone.
+            Today you ask through Claude Code on the box,{" "}
+            <span className="hero-keep">from the Claude app on your phone.</span>
           </span>{" "}
           <span className="hero-next-2">Talking to the house itself, like this, is next.</span>
         </p>

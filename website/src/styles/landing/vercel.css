@@ -7,16 +7,11 @@
  * for "Move it home".
  * ---------------------------------------------------------------- */
 
-/* the intro's two sentences break only inside themselves: a line never ends one and starts the
- * other (it used to balance into "…one family. Then a / cousin asks…") */
-.vc-sentence {
-  display: inline-block;
-}
-
 /* The drawing keeps a 16px gutter of its own rather than the wrap's. The wide one shows only where
  * it fits at 1:1 (a 960 column, from a 992px viewport), so its hairlines always land on whole
  * pixels; below that the narrow one runs as wide as Pinch's card under it (1:1 on a 390 phone),
- * with strokes that keep their width wherever it scales. */
+ * with strokes that keep their width wherever it scales. The wide one is 400 tall: a house and a
+ * rack 300 wide, the arc over them, and the labels. */
 .vc-draw {
   container-type: inline-size;
   padding-inline: 16px;
@@ -32,7 +27,7 @@
 .vc-wide {
   display: none;
   max-width: 960px;
-  height: 296px;
+  height: 400px;
 }
 .vc-narrow {
   max-width: 520px;
@@ -64,6 +59,19 @@
     font-size: 9.5px;
   }
 }
+/* the rack's label names Vercel only where the longer words fit inside the page (a phone's 13px
+ * label, centred under the rack, would run past its right edge) */
+.vc-narrow .vc-long {
+  display: none;
+}
+@container (min-width: 420px) {
+  .vc-narrow .vc-long {
+    display: inline;
+  }
+  .vc-narrow .vc-short {
+    display: none;
+  }
+}
 @container (min-width: 960px) {
   .vc-wide {
     display: block;
@@ -83,10 +91,10 @@
 }
 /* the route's dashes are attributes (drawing.tsx), fitted to each drawing's crossings */
 .vc-route {
-  stroke: var(--ink-faint);
+  stroke: var(--ink-run);
 }
 .vc-trail {
-  stroke: rgba(255, 255, 255, 0.4);
+  stroke: rgba(255, 255, 255, 0.72);
 }
 .vc-chevron {
   stroke: var(--ink-label);
@@ -197,7 +205,9 @@ html:not([data-js]) .vc-act {
 .vc-card {
   max-width: 520px;
   margin: 32px auto 0;
-  padding: 24px;
+  /* no padding under the last row: it is a full row, so the card ends where its wash does */
+  padding: 24px 24px 0;
+  overflow: hidden;
   text-align: left;
 }
 .vc-head {
@@ -245,10 +255,6 @@ html:not([data-js]) .vc-act {
   font: 400 13px/20px var(--font-mono);
   font-variant-ligatures: none;
 }
-/* the last row ends where its line does, so the card's bottom inset is its 24, like the top */
-.vc-row:last-child {
-  height: 33px;
-}
 
 /* a value that changes: the old one out in 200, then the new one in 200 */
 .vc-swap {
@@ -273,7 +279,8 @@ html:not([data-js]) .vc-act {
   transition-delay: 100ms;
 }
 
-/* each changed row is washed once, edge to edge of the card */
+/* each changed row is washed once, edge to edge of the card and from its hairline to the next (the
+ * card clips the last one to its rounded corners) */
 .vc-wash {
   position: absolute;
   inset: -1px -24px 0;
@@ -300,25 +307,31 @@ html:not([data-js]) .vc-act {
   text-wrap: balance;
 }
 
-/* The page's last word before the steps: heading size and ink, a section's air above it and more
- * below (64 at 1024 and up), so the statement closes this section and Start opens a new one rather
- * than reading as its preface. Each sentence is its own block and balances on its own, so a line
- * never ends one and starts the other. */
+/* The page's last word before the steps: a heading's ink and weight at the page's largest, with a
+ * section's air above it and more below (64 at 1024 and up), so the statement closes this section and
+ * Start opens a new one rather than reading as its preface. Each sentence is its own block and
+ * balances on its own, so a line never ends one and starts the other; the second sentence breaks at
+ * its comma first (a clause is one unbreakable unit while it fits) and inside a clause only if it
+ * must. The sizes are whole pixels on a whole-pixel line (the font size plus 4), so everything under
+ * it stays on the pixel grid. Measured in Geist 600: the first sentence is 18.6em wide at -0.04em, the
+ * shortest clause 11.2em at -0.025em; on a phone the size follows the column until that clause fits
+ * with about 2% to spare, and at 1024 and up until the first sentence fits one line. */
 .vc-close {
+  /* the column's own width, not a heading's 960: the first sentence is wider than that at 60px */
+  max-width: none;
   margin-top: 96px;
   margin-bottom: 32px;
-  /* on a phone a heading-size line would break the second sentence mid-phrase ("all of / them"):
-   * at 24 its first clause ("None of them made by a human,", 352 wide) is the longest unbreakable run,
-   * so the size follows the column (a 16px gutter each side) until 24 fits, with about 2% to spare
-   * for glyph advances that round to whole pixels, and each sentence breaks only at its comma */
-  font-size: min(24px, calc((100vw - 32px) * 0.065));
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  font-size: round(down, min(32px, calc((100vw - 32px) * 0.0875)), 1px);
+  line-height: calc(1em + 4px);
+  letter-spacing: -0.025em;
+}
+.vc-close > span,
+.vc-clause {
+  text-wrap: balance;
 }
 .vc-close > span {
   display: block;
 }
-/* the second sentence's two halves break at the comma first, and inside themselves only if they must */
 .vc-clause {
   display: inline-block;
 }
@@ -327,14 +340,11 @@ html:not([data-js]) .vc-act {
     margin-top: 128px;
     margin-bottom: 48px;
     font-size: 32px;
-    line-height: 36px;
-    letter-spacing: -0.025em;
   }
 }
 @media (min-width: 768px) {
   .vc-close {
     font-size: 40px;
-    line-height: 44px;
     letter-spacing: -0.03em;
   }
 }
@@ -342,15 +352,14 @@ html:not([data-js]) .vc-act {
   .vc-close {
     margin-top: 160px;
     margin-bottom: 64px;
-    font-size: 48px;
-    line-height: 52px;
-    letter-spacing: -0.035em;
+    font-size: round(down, min(60px, calc((100vw - 96px) * 0.0525)), 1px);
+    letter-spacing: -0.04em;
   }
 }
 
 @media (max-width: 639px) {
   .vc-card {
-    padding: 20px;
+    padding: 20px 20px 0;
   }
   .vc-wash {
     inset: -1px -20px 0;
@@ -365,14 +374,10 @@ html:not([data-js]) .vc-act {
   .vc-row > :is(dt, dd.vc-mono) {
     padding-top: 0;
   }
-  .vc-row:last-child {
-    height: auto;
-    padding-bottom: 0;
-  }
 }
 @media (max-width: 359px) {
   .vc-card {
-    padding: 16px;
+    padding: 16px 16px 0;
   }
   .vc-wash {
     inset: -1px -16px 0;

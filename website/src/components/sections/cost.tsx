@@ -2,11 +2,12 @@
  * $0–$3,600 scale, each iCloud+ bar cut into its five yearly payments and each box bar into the
  * purchase and five small years of running it, so the reader sees rent recur and the box flatten
  * out. At 2 TB the box bar is the longer one and is drawn the same way: the chart says plainly
- * where renting wins, and the prose under it says what the box is for there and what it costs a
- * month to keep, so a reader never adds that up from three sections. Above the prose, the one thing
- * that is next (one-click photo backup); below it, "How we counted", a native <details> whose every
- * line cites where its number came from, including what the chart leaves out. Below 792px of
- * column the rows stack (label over two full-width bars) in the prose's 620 column. */
+ * where renting wins, and the prose under it says what the box is for there and where Google's
+ * dearer-but-bigger plan beats it. The one thing that is next (one-click photo backup) sits under
+ * the intro, before the chart, so a reader knows what the bars are an offer of before reading
+ * them. Below the prose, "How we counted", a native <details> whose every line cites where its
+ * number came from, including what the chart leaves out. Below 792px of column the rows stack
+ * (label over two full-width bars) in the prose's 620 column. */
 
 import { type CSSProperties, type ReactNode, useRef } from "react";
 import { ChevronRight } from "~/components/icons";
@@ -85,6 +86,8 @@ function Chart() {
   return (
     <div className="cost-figure">
       <div ref={ref} className="cost-chart" role="img" aria-label={SUMMARY}>
+        {/* three keys because the box bar has two tones: what it costs once, then each year of
+            running it */}
         <div className="cost-legend">
           <span>
             <i className="is-rent" />
@@ -92,13 +95,19 @@ function Chart() {
           </span>
           <span>
             <i className="is-box" />
-            Your box, five years
+            The box, bought once
+          </span>
+          <span>
+            <i className="is-run" />A year of running it
           </span>
         </div>
         <div className="cost-rows">
           {ROWS.map((r, i) => (
             <div key={r.size} className="cost-row">
-              <span className="cost-label">{r.size}</span>
+              {/* "of photos" is the label's second line beside the bars, and its own words above them */}
+              <span className="cost-label">
+                {r.size} <span className="cost-unit">of photos</span>
+              </span>
               <div className="cost-pair">
                 <Bars bar={r.rent} kind="rent" row={i} />
                 <Bars bar={r.box} kind="box" row={i} />
@@ -173,7 +182,8 @@ function Item({ src, children, sub }: { src?: SourceId[]; children: ReactNode; s
 /* The second line is the direction's, less "Neither are your iPhones' own backups": the chart
  * does count them, as the iCloud+ 200 GB on the box's side (the seventh line), so saying it does
  * not would contradict the arithmetic three lines further down. The founder approved this wording
- * after round 1. */
+ * after round 1. The first line is the direction's less its Google sentence, which now stands in the
+ * visible paragraph: the one rival that beats the box was a click deep. */
 function HowWeCounted() {
   return (
     <details className="cost-how">
@@ -185,13 +195,12 @@ function HowWeCounted() {
         <ul>
           <Item>
             Both copies of every photo stay in your house, while iCloud keeps its copies in more than one place.
-            Google’s 5&nbsp;TB plan, $199.99 a year with its AI included, costs less than a 6&nbsp;TB box over
-            five&nbsp;years.
           </Item>
           <Item src={["claude", "appleDev"]}>
-            Asking for apps goes through Claude Code, which comes with a Claude plan from $17&nbsp;a&nbsp;month. It
-            isn’t counted here, and neither is Apple’s developer account for iPhone apps, $99&nbsp;a&nbsp;year. A
-            gaming PC you already own can run the house’s own models.
+            Asking for apps goes through Claude Code, which comes with a Claude plan from $17 a&nbsp;month. It isn’t
+            counted here, and neither is Apple’s developer account for iPhone apps, $99 a&nbsp;year. A gaming PC you
+            already own can run the house’s own models. Without one, an app’s AI features use a provider’s API,
+            billed by use, which isn’t counted either.
           </Item>
           <Item src={["icloud"]}>
             iCloud+ prices are Apple’s US prices, published September&nbsp;16, 2026. Every tier can be shared with
@@ -219,11 +228,11 @@ function HowWeCounted() {
           </Item>
           <Item src={["eia", "watts"]}>
             Electricity is counted at 25&nbsp;watts around the clock, the top of what small PCs draw at rest, at the
-            US average of 18.31¢ per kWh (EIA, July 2026): $40.10&nbsp;a&nbsp;year.
+            US average of 18.31¢ per kWh (EIA, July 2026): $40.10 a&nbsp;year.
           </Item>
           <Item src={["icloud", "domain"]}>
-            The box’s side also keeps iCloud+ 200&nbsp;GB ($2.99 a month) for the iPhones’ own backups, and a domain
-            name for the apps’ addresses (a .com is about $10.46&nbsp;a&nbsp;year).
+            The box’s side also keeps iCloud+ 200&nbsp;GB ($2.99 a&nbsp;month) for the iPhones’ own backups, and a
+            domain name for the apps’ addresses (a .com is about $10.46 a&nbsp;year).
           </Item>
           <Item src={["googleA", "googleB"]}>Google’s prices are from press reports.</Item>
           <Item src={["prices", "ssd"]}>Storage and memory prices have roughly doubled since 2025.</Item>
@@ -238,31 +247,31 @@ export function Cost() {
     <Section id="cost">
       <Header
         titleLines={["Rent grows with every photo.", "The box doesn’t."]}
-        /* the rent, balanced on its lines, then the box on a line of its own */
         intro={
           <>
-            iCloud+ charges $9.99 a month for 2&nbsp;TB, $29.99 for 6&nbsp;TB and $59.99 for 12&nbsp;TB, for as long
-            as you keep your photos. <span className="cost-line">A box costs nearly the same at any size.</span>
+            Your photos can live on the box instead. iCloud+ charges $9.99&nbsp;a&nbsp;month for 2&nbsp;TB, $29.99 for
+            6&nbsp;TB and $59.99 for 12&nbsp;TB, for as long as you keep them. A&nbsp;box costs nearly the same at any
+            size.
           </>
         }
       />
-      <div className="wrap after-header">
-        <Chart />
+      {/* what the bars are an offer of, said before them rather than under them */}
+      <div className="wrap">
         <p className="t-caption cost-note">
           <Coming />
           Photo backup runs on the box in the home where daedalus was built.{" "}
           <span>One click for every house is next.</span>
         </p>
-        {/* what the chart means, then what the box costs to keep, every number one the page already
-            gives: the kitchen's electricity, Start's address and Claude plan */}
+      </div>
+      <div className="wrap after-header">
+        <Chart />
+        {/* what the chart means, and where the one rival it does not draw comes out ahead */}
         <div className="t-prose cost-prose">
           <p>
             At 2&nbsp;TB renting is cheaper, so there the box is for the apps and for keeping your family’s things at
-            home. Past that it pays for itself, in under four years at 6&nbsp;TB and under two at 12&nbsp;TB.
-          </p>
-          <p>
-            To run it, count about $1 to $3.50&nbsp;a&nbsp;month in electricity, a web address at about
-            $10&nbsp;a&nbsp;year and, to ask for apps, a Claude plan from $17&nbsp;a&nbsp;month.
+            home. Past that it pays for itself, in under four years at 6&nbsp;TB and under two at 12&nbsp;TB. Google’s
+            5&nbsp;TB plan, $199.99 a&nbsp;year with its AI included, costs less than a&nbsp;6&nbsp;TB box over five
+            years.
           </p>
         </div>
         <HowWeCounted />

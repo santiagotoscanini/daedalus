@@ -4,18 +4,20 @@
  *
  * In order: the layout (the split first screen at 1200 and up and on
  * landscape screens from 1024, the stacked hero elsewhere, one phone
- * spot below 768); the device; Phone A's chat; Phone B's Home Screen,
- * install and Pinch; then the sequence.
+ * spot below 768 with a labelled switch above it); the device; Phone
+ * A's chat; Phone B's Home Screen, install and Pinch; then the
+ * sequence.
  *
  * The phones are drawn at 330 x 690 and scaled as one picture by
- * --s: at 768 and up the scale that fits both phones and their
- * captions under the nav with 48px clear above and below (in the
- * split capped at .86, and below 1200 by the width, so the words keep
- * a column wide enough for the headline; 1 in the stack, .9 on
- * tablets; never under .6, where a screen too short to hold them is
- * better scrolled), so every beat of the sequence happens on screen.
- * tan(atan2(a, b)) is a / b as a plain number, which calc() cannot
- * divide lengths into yet.
+ * --s, so every beat of the sequence happens on screen. In the split
+ * (capped at .86) it is the scale that fits both phones under the
+ * nav with 48px clear above and below, and from 1024 to 1199 also the
+ * width that leaves the words a column for the headline. In the stack
+ * (768 to 1199, capped at .9 on tablets and 1 above) it is the scale
+ * that lands Phone B's foot 24px above the bottom of the screen under
+ * the words (--above), never under .66, where a screen too short to
+ * hold them is better scrolled. tan(atan2(a, b)) is a / b as a plain
+ * number, which calc() cannot divide lengths into yet.
  *
  * The sequence runs in two acts (hero/timeline.ts). Your chat's
  * keyframes are timed from data-played, by each row's --at times
@@ -62,6 +64,7 @@
   .hero .t-hero {
     font-size: 64px;
     line-height: 68px;
+    letter-spacing: -0.036em;
   }
 }
 @media (min-width: 1024px) and (max-height: 820px) {
@@ -128,10 +131,14 @@
   }
 }
 
-/* the stage caption, under the pair (under the pager on phones) */
+/* The stage caption, under the pair. It is the one sentence that says the chat is a preview, so it
+ * reads as a sentence, not a footnote: 14/22 in ink-3, the lead's own grey. */
 .hero-next {
   max-width: 340px;
   margin: 24px auto 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--color-ink-3);
   text-align: center;
   text-wrap: balance;
 }
@@ -140,6 +147,15 @@
     max-width: 620px;
     margin-top: 32px;
   }
+}
+/* Where the first sentence wraps it breaks at the comma, never inside "on the box": its second half
+ * does not break, and the sentence fills a line before it wraps (balancing it would move "box," down
+ * to even the two lines up). */
+.hero-keep {
+  white-space: nowrap;
+}
+.hero-next-1 {
+  text-wrap: wrap;
 }
 /* Each sentence takes its own line wherever there is room for that (phones, and the split's
  * column), and balances within it where there is not. */
@@ -153,10 +169,12 @@
 /* ---------- the split first screen: 1200 and up, and landscape from 1024 ---------- */
 
 /* The words on the left at the page's edge, the pair on the right with its outer edge on the other
- * edge, both in the first screen whatever its height. The words' block is centred on the devices
- * (the pair without its captions, Phone B standing 40 lower); the stage caption sits on the line
- * of "Your iPhone". The headline steps down when its column narrows, so "You just talk to it."
- * always holds one line.
+ * edge, both in the first screen whatever its height. The stage caption sits on the line of "Your
+ * iPhone", at the foot of the column, so the column's ink runs from the headline to that line, and
+ * the words' block is lifted until that whole column is centred on the devices (the pair with its
+ * captions, Phone B standing 40 lower): 162px of lift per unit of scale less 97px, in whole even
+ * pixels so the buttons' flat edges stay crisp. The headline steps down when its column narrows, so
+ * "You just talk to it." always holds one line.
  *
  * From 1024 to 1199 (an iPad held sideways, a small laptop window) the pair also gives way to the
  * words: the scale leaves the column 400px (16px of it for a scrollbar), where a 48px headline
@@ -164,10 +182,15 @@
  * tall enough to show. */
 @media (min-width: 1200px), (min-width: 1024px) and (orientation: landscape) {
   .hero {
-    --s: clamp(0.6, tan(atan2(100vh - 200px, 730px)), 0.86);
+    --s: clamp(0.6, tan(atan2(100svh - 200px, 730px)), 0.86);
     /* whole pixels, so the sections below the hero start on the pixel grid and their hairlines stay crisp */
     --fig: round(730px * var(--s) + 40px, 1px);
-    padding-top: calc(64px + round(clamp(48px, (100vh - 64px - var(--fig)) / 2, 160px), 1px));
+    padding-top: calc(64px + round(clamp(48px, (100svh - 64px - var(--fig)) / 2, 160px), 1px));
+    /* on a tall screen the figure stops growing (.86) and the centring stops at 160, so the hero ends
+     * high and the next heading, 160 below it, would peek into the first screen (1920 x 1080 showed
+     * the top of Made's H2). This keeps that heading at least 48px under the fold; on a laptop the
+     * hero is already longer than this and nothing changes. */
+    min-height: calc(100svh - 112px);
   }
   .hero > .wrap {
     display: grid;
@@ -176,7 +199,8 @@
     align-items: start;
   }
   /* centred on an even height: every line height and gap in the block is even, so it starts on a
-   * whole pixel and the buttons' flat edges stay crisp */
+   * whole pixel and the buttons' flat edges stay crisp; then lifted (see above) by an even number of
+   * pixels, which keeps it on the grid */
   .hero-copy {
     grid-area: 1 / 1;
     display: flex;
@@ -184,6 +208,7 @@
     justify-content: center;
     height: round(730px * var(--s), 2px);
     container: hero-copy / inline-size;
+    transform: translateY(round(min(0px, 97px - 162px * var(--s)), 2px));
   }
   .hero .t-hero {
     max-width: none;
@@ -213,12 +238,16 @@
     grid-area: 1 / 2;
     margin-top: 0;
   }
-  /* on the line of "Your iPhone", every line on the column's edge with the rest of the words: the
-   * ring (8px and its 8px gap) hangs in the margin, like a bullet */
+  /* on the line of "Your iPhone" (its 13/20 caption baseline, which this 14/22 line sits a pixel
+   * above, so the two share a baseline), on a whole pixel, every line on the column's edge with the
+   * rest of the words: the ring (10px and its 6px gap) hangs in the margin, like a bullet. It may
+   * run 40px into the gap before the phones, so its first sentence holds one line at 1440, where
+   * the column is 534 and that sentence 549 */
   .hero-next {
     grid-area: 1 / 1;
-    max-width: 540px;
-    margin: calc(690px * var(--s) + 20px) 0 0;
+    width: calc(100% + 40px);
+    max-width: none;
+    margin: round(690px * var(--s) + 19px, 1px) 0 0;
     text-align: left;
   }
   .hero-next-1 {
@@ -227,17 +256,18 @@
 }
 @media (min-width: 1024px) and (max-width: 1199px) and (orientation: landscape) {
   .hero {
-    --s: clamp(0.6, min(tan(atan2(100vh - 200px, 730px)), tan(atan2(100vw - 552px, 700px))), 0.86);
+    --s: clamp(0.6, min(tan(atan2(100svh - 200px, 730px)), tan(atan2(100vw - 552px, 700px))), 0.86);
   }
   .hero > .wrap {
     column-gap: 40px;
   }
 }
+/* at 64px the sections' -0.045em closes "at" until the crossbar of the t touches the a */
 @container hero-copy (min-width: 484px) {
   .hero .t-hero {
     font-size: 64px;
     line-height: 68px;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.036em;
   }
 }
 /* a short screen draws the phones smaller, and the headline steps down with them */
@@ -259,7 +289,8 @@
 
 /* ---------- the stage ---------- */
 
-.hero-pager {
+.hero-pager,
+.hero-ghost {
   display: none;
 }
 /* the two empty boxes the acts wait for (sized per layout below) */
@@ -299,6 +330,26 @@
   .hero-slide-b {
     transform: translate(185px, 40px);
   }
+  /* Where her phone will stand, until it comes: an outline at the page's faintest edge, so the
+   * first frame is the pair with one side still empty (your phone is on its final spot from the
+   * start, and nothing slides) and not one phone alone in the middle of the column. Only under
+   * motion; it fades as her phone fades in over it. */
+  .hero-ghost {
+    position: absolute;
+    display: block;
+    top: 0;
+    left: 50%;
+    z-index: -1;
+    width: 330px;
+    height: 690px;
+    margin-left: -165px;
+    border-radius: 55px;
+    box-shadow: inset 0 0 0 1px var(--color-edge-2);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(185px, 40px);
+    transition: opacity 400ms var(--ease-ui);
+  }
   .hero-cap {
     margin-top: calc(20px / var(--s));
     font-size: calc(13px / var(--s));
@@ -316,14 +367,29 @@
     height: 312px;
   }
 }
+/* The stack, on a tablet or a tall narrow window: the pair is scaled so that Phone B's foot lands 24px
+ * above the bottom of the screen, under whatever the stack above it measures (--above, to the top of
+ * the figure; the stack there is the same height from 768 to 1199: a one- or two-line headline, a
+ * three-line lead, the buttons and the note), and never under .66: a screen too short for that is
+ * better scrolled than drawn too small to read. The stack above it is also tightened here, so that
+ * a 768 x 1024 iPad in portrait fits the whole pair. */
 @media (min-width: 768px) and (max-width: 1023px) {
   .hero {
-    --s: clamp(0.6, tan(atan2(100vh - 200px, 730px)), 0.9);
+    --above: 486px;
+    --s: clamp(0.66, tan(atan2(100svh - 24px - var(--above), 730px)), 0.9);
+    padding-top: 104px;
+  }
+  .hero-ctas {
+    margin-top: 28px;
+  }
+  .hero-figure {
+    margin-top: 40px;
   }
 }
 @media (min-width: 1024px) and (max-width: 1199px) and (orientation: portrait) {
   .hero {
-    --s: clamp(0.6, tan(atan2(100vh - 200px, 730px)), 1);
+    --above: 554px;
+    --s: clamp(0.66, tan(atan2(100svh - 24px - var(--above), 730px)), 1);
   }
 }
 
@@ -440,11 +506,46 @@
     transform: translateY(12px);
   }
 
+  /* The switch, above the spot (the buttons' own height and radius), so the chat is a named choice
+   * on the first screen. The names sit in it, so the captions under the phones go. */
+  html[data-js] .hero-cap {
+    display: none;
+  }
   html[data-js] .hero-pager {
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    margin-top: 12px;
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: min(100%, 320px);
+    height: 44px;
+    margin: 40px auto 20px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 0 0 1px var(--color-edge-2);
+  }
+  html[data-js] .hero-figure {
+    margin-top: 0;
+  }
+  /* the chosen one: a pill 4px inside its half of the track (radius 22 - 4 = 18), which slides to the other half */
+  html[data-js] .hero-pager::before {
+    content: "";
+    position: absolute;
+    inset: 4px auto 4px 4px;
+    width: calc(50% - 8px);
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 1px var(--color-edge-3);
+    transition: transform 120ms var(--ease-ui);
+  }
+  html[data-motion="on"] .hero-pager::before {
+    transition: transform 300ms var(--ease-out);
+  }
+  html[data-js] .hero-pager[data-shown="b"]::before {
+    transform: translateX(calc(100% + 8px));
+  }
+}
+@media (min-width: 640px) and (max-width: 767px) {
+  html[data-js] .hero-pager {
+    margin-top: 56px;
   }
 }
 /* the smallest phones (320): the device fits the 288px column, and the headline steps down so "You
@@ -479,46 +580,29 @@
   }
 }
 
-/* the pager: 8px dots in 24px targets 4 apart, each reaching 44 x 44 for a finger */
-.hero-dot {
+/* The switch's two halves: each the track's full height (44 to a finger) and half its width, the
+ * name centred; the pill behind the chosen one is the pager's ::before. The ring goes round that
+ * pill, in the 4px of track beside it, not round the whole half. */
+.hero-seg {
   position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  height: 44px;
   border-radius: 9999px;
+  font: 500 15px/20px var(--font-sans);
+  white-space: nowrap;
+  color: var(--color-ink-3);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition: color var(--d-1) var(--ease-ui);
 }
-.hero-dot::before {
-  content: "";
-  position: absolute;
-  inset: -10px -2px -10px -18px;
+.hero-seg:hover,
+.hero-seg[aria-pressed="true"] {
+  color: var(--color-ink-1);
 }
-.hero-dot + .hero-dot::before {
-  inset: -10px -18px -10px -2px;
-}
-.hero-dot::after {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.28);
-  transition: background-color var(--d-1) var(--ease-ui);
-}
-.hero-dot:hover::after {
-  background: rgba(255, 255, 255, 0.5);
-}
-/* the ring goes round the dot, as on the gallery's dots, not round its 24px target */
-.hero-dot:focus-visible {
-  outline: none;
-}
-.hero-dot:focus-visible::after {
-  outline: 2px solid rgba(245, 246, 247, 0.7);
-  outline-offset: 2px;
-}
-.hero-dot[aria-pressed="true"]::after {
-  background: var(--color-ink-1);
+.hero-seg:focus-visible {
+  outline-offset: -4px;
 }
 
 /* ---------- the device: iPhone 16 Pro, 330 x 690 ---------- */
@@ -534,9 +618,11 @@
   height: 100%;
   padding: 2.5px;
   border-radius: 55px;
+  /* a short, soft drop under the foot: a long one on the near-black ground only bands into a dark
+   * smudge beside the phone, where there is nothing to cast onto */
   box-shadow:
     0 0 0 0.5px rgba(0, 0, 0, 0.9),
-    0 40px 80px -30px rgba(0, 0, 0, 0.9);
+    0 24px 48px -20px rgba(0, 0, 0, 0.55);
 }
 .iphone-black .iphone-body {
   background: linear-gradient(145deg, #5a5a5e 0%, #2a2a2d 16%, #1b1b1d 50%, #2b2b2e 84%, #56565a 100%);
@@ -696,9 +782,10 @@
   inset: 0 0 auto;
   z-index: 10;
   height: 104px;
-  background: rgba(24, 24, 26, 0.82);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+  /* iOS's bar colour. Nothing shows through it: the thread is masked under it (.chat-thread), because
+   * a frosted bar over a thread that follows each arrival only works where the backdrop blur does, and
+   * where it does not (a software renderer) a bubble's sharp text lies over the title */
+  background: rgba(24, 24, 26, 0.94);
   box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.1);
   text-align: center;
 }
@@ -749,6 +836,9 @@
   position: absolute;
   inset: 0 0 58px;
   overflow: hidden;
+  /* a row scrolling up is cut at the header's lower edge, as under an opaque bar */
+  -webkit-mask-image: linear-gradient(#0000 104px, #000 104px);
+  mask-image: linear-gradient(#0000 104px, #000 104px);
 }
 /* the final frame: the thread rests on its last row */
 .chat-col {
@@ -952,11 +1042,12 @@
   /* the centre of Pinch's slot, row 2 column 2, so the Home Screen recedes around the app opening */
   transform-origin: 188.5px 230px;
 }
-/* depth of field: everything but Pinch's slot is a step out of focus */
+/* depth of field: everything but Pinch's slot is a step out of focus, by half a pixel: the flat tints
+ * and blank labels already keep it abstract, and more blur only smears the screen at 3x */
 .home-soft {
   position: absolute;
   inset: 0;
-  filter: blur(1.1px);
+  filter: blur(0.5px);
 }
 .home-widget {
   position: absolute;
@@ -1131,21 +1222,14 @@
   backdrop-filter: blur(20px) saturate(180%);
   box-shadow: 0 8px 24px rgba(60, 40, 20, 0.18);
 }
-/* an app icon with no logo on it (no real company's mark belongs on her phone): a cool tile lit
- * from above, with a sheen and a hairline edge, so it reads as glass and not as a missing image */
+/* the notification's app icon: BetaIcon draws its own squircle and edge (no real company's mark belongs
+ * on her phone), so this is only its 30px slot */
 .home-banner-icon {
   position: absolute;
   top: 16px;
   left: 12px;
   width: 30px;
   height: 30px;
-  background:
-    linear-gradient(180deg, #fff, rgba(255, 255, 255, 0) 1px),
-    radial-gradient(90% 70% at 30% 18%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 70%),
-    linear-gradient(180deg, #e8edf5, #bccadc);
-  box-shadow: inset 0 0 0 0.5px rgba(40, 50, 70, 0.14);
-  -webkit-mask: var(--squircle) 0 0 / 100% 100%;
-  mask: var(--squircle) 0 0 / 100% 100%;
 }
 .home-banner-head,
 .home-banner-body {
@@ -1177,6 +1261,20 @@
   font-size: 10px;
   line-height: 15px;
   color: #8a8178;
+}
+/* her finger: 34px, in the empty right third of the banner, clear of the text and of "now". Present
+ * only while the banner is, and only under motion (hero-touch). */
+.home-touch {
+  position: absolute;
+  top: 14px;
+  left: 210px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ---------- Phone B, layer 3: Pinch, open on Lentil Soup ---------- */
@@ -1432,15 +1530,11 @@
     transform: scale(1.04);
   }
 }
-@keyframes hero-aside {
-  from {
-    transform: translateX(0);
-  }
-}
+/* her phone settles into its outline from 16px below */
 @keyframes hero-b-in {
   from {
     opacity: 0;
-    transform: translate(185px, 64px);
+    transform: translate(185px, 56px);
   }
 }
 /* the banner, E+700 to E+2100: comes down out of the island, waits, is pressed, goes back up. It
@@ -1484,17 +1578,42 @@
     stroke-dashoffset: 1;
   }
 }
-/* "Loading…", E+2000 to E+3700: in with the icon, out as "Pinch" comes in */
+/* "Loading…", E+2000 to E+3500: in with the icon, out over the last 100ms before "Pinch" fades in
+ * (E+3500, 200ms). Two different strings in one place must never be on screen together, so the
+ * ramps meet but do not overlap; the pie is already full and the veil is lifting. */
 @keyframes hero-loading {
   0% {
     opacity: 0;
   }
   11.76%,
-  88.24% {
+  82.35% {
     opacity: 1;
+  }
+  88.24%,
+  100% {
+    opacity: 0;
+  }
+}
+/* the touch indicator under the press: lands as the finger does (E+1480 to E+1600), stays through the
+ * press and release (E+1800), then goes with the banner (it rides on the banner, so it also rises
+ * and fades with it) */
+@keyframes hero-touch {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+    animation-timing-function: var(--ease-out);
+  }
+  25% {
+    opacity: 1;
+    transform: none;
+  }
+  66.67% {
+    opacity: 1;
+    transform: none;
   }
   100% {
     opacity: 0;
+    transform: none;
   }
 }
 @keyframes hero-open {
@@ -1561,12 +1680,12 @@ html[data-motion="on"] #top:not([data-b], [data-done]) {
 }
 @media (min-width: 768px) {
   html[data-motion="on"] #top:not([data-b], [data-done]) {
-    & .hero-slide-a {
-      transform: translateX(0);
-    }
     & .hero-slide-b {
       opacity: 0;
-      transform: translate(185px, 64px);
+      transform: translate(185px, 56px);
+    }
+    & .hero-ghost {
+      opacity: 1;
     }
   }
 }
@@ -1631,13 +1750,13 @@ html[data-motion="on"] #top[data-b]:not([data-done]) {
   & .home-layer {
     animation: hero-recede 400ms var(--ease-ios) calc(var(--e) + 4000ms) both;
   }
+  & .home-touch {
+    animation: hero-touch 480ms linear calc(var(--e) + 1480ms) both;
+  }
 }
-/* 768 and up: your phone steps aside as act two begins, and Grandma's comes in beside it */
+/* 768 and up: Grandma's phone comes in beside yours, into its outline */
 @media (min-width: 768px) {
   html[data-motion="on"] #top[data-b]:not([data-done]) {
-    & .hero-slide-a {
-      animation: hero-aside 500ms var(--ease-out) both;
-    }
     & .hero-slide-b {
       animation: hero-b-in 600ms var(--ease-out) var(--e) both;
     }

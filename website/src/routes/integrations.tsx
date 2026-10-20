@@ -40,11 +40,12 @@ const GROUPS: Array<{ id: Group; title: string; note: string }> = [
 function IntegrationsPage() {
   return (
     <main id="main">
-      <header className="wrap pb-4 pt-28 lg:pt-40">
-        <h1 id="integrations-title" className="t-display max-w-[792px]">
+      {/* centred, like the wall under it */}
+      <header className="wrap pb-4 pt-28 text-center lg:pt-40">
+        <h1 id="integrations-title" className="t-display mx-auto max-w-[792px]">
           Everything it touches.
         </h1>
-        <p className="t-lead mt-6 max-w-[588px]">
+        <p className="t-lead mx-auto mt-6 max-w-[588px]">
           What the engine runs, what one house runs beside it, and what it connects to. Hold a mark to see its
           name.
         </p>
@@ -52,11 +53,14 @@ function IntegrationsPage() {
 
       <Universe />
 
-      <div className="wrap grid gap-14 pb-32 md:grid-cols-3 md:gap-6">
+      {/* three columns of three rows each (title, note, list) on a shared grid, so the lists begin on one line
+          however long a note runs */}
+      <div className="wrap grid gap-14 pb-32 md:grid-cols-3 md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:gap-y-0">
         {GROUPS.map((g) => {
           const list = SHOWN.filter((s) => s.group === g.id);
           return (
-            <section key={g.id} aria-labelledby={`int-${g.id}`}>
+            <section key={g.id} aria-labelledby={`int-${g.id}`} className="md:row-span-3 md:grid md:grid-rows-subgrid">
+
               <h2 id={`int-${g.id}`} className="t-body font-medium text-ink-1">
                 {g.title}
               </h2>

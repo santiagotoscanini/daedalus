@@ -1,12 +1,13 @@
 /** Start (#start): the last section, an invitation and then exactly what is true today. Three steps
  * in one column centred on the axis, hairlines between them, each numbered in the margin beside its
  * title, with what it takes now, the ○ line for what is next, and at most one button: the setup
- * notes, the Mac download (the section's one filled button) and, for asking, nothing to click,
- * because asking happens on your phone. Step 2 opens with "Once the box is running", so the bright
- * button never reads as the first thing to do. Its title carries the three systems the app joins,
- * filled and matched by eye rather than by box, the Mac in ink-1 because it is ready and the other
- * two in ink-4 because they are next. No commands anywhere. The close is what daedalus costs
- * (nothing) and what an address for the apps does. */
+ * notes, the Mac download and, for asking, nothing to click, because asking happens on your phone.
+ * The download is the section's one filled button, except where it cannot run: on a phone or a touch
+ * screen the two swap looks, so the filled one is the setup notes and the download says to open the
+ * page on a Mac. Step 2's title carries the three systems the app joins, filled and matched by eye
+ * rather than by box, the Mac in ink-1 because it is ready and the other two in ink-4 because they
+ * are next. No commands anywhere. The close is what daedalus costs (nothing) and what an address
+ * for the apps does. */
 
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -42,12 +43,12 @@ export function Start() {
               Start with a computer you already have.
             </h3>
             <p className="start-text">
-              An old PC or a small new one becomes the box. Today, setting it up takes someone comfortable with a
-              terminal and the setup notes.
+              An old PC or a small new one becomes the box, and an old one is erased first. Today, setting it up takes
+              someone comfortable with a terminal and the setup notes.
             </p>
             <Next>Coming: an installer that takes a few clicks.</Next>
             <div className="start-action">
-              <Link to="/docs" hash="box" activeProps={{}} className="btn btn-secondary">
+              <Link to="/docs" hash="box" activeProps={{}} className="btn btn-secondary start-setup">
                 Read the setup notes
               </Link>
             </div>
@@ -81,10 +82,12 @@ export function Start() {
               install it.
             </Next>
             <div className="start-action">
-              <a href={MAC_DMG} className="btn btn-primary">
+              <a href={MAC_DMG} className="btn btn-primary start-mac">
                 <Mark id="apple" size={16} className="start-apple" />
                 Download for Mac
               </a>
+              {/* where the download cannot run, the page says where it can */}
+              <p className="t-caption start-onmac">Open this page on your Mac to download.</p>
               <p className="t-caption start-req">macOS 13 or newer</p>
             </div>
           </li>
@@ -96,12 +99,16 @@ export function Start() {
               Ask for what you need.
             </h3>
             <p className="start-text">
-              Today you ask through Claude Code on the box, which comes with a Claude plan from $17 a month. iPhone
-              apps also need Apple’s developer account, $99 a year, and are built on GitHub’s Macs for now.
+              Today you ask through{" "}
+              <Link to="/docs" hash="ask" activeProps={{}} className="start-link">
+                Claude Code on the box
+              </Link>
+              , which comes with a Claude plan from $17 a month. iPhone apps also need Apple’s developer account, $99 a
+              year, and are built on GitHub’s Macs for now.
             </p>
             <Next>
-              Coming: a conversation anyone in your family can have with the house, and iPhone apps built on your
-              own Mac.
+              Coming: a conversation anyone in your family can have with the house, and{" "}
+              iPhone&nbsp;apps&nbsp;built&nbsp;on&nbsp;your&nbsp;own&nbsp;Mac.
             </Next>
           </li>
         </ol>

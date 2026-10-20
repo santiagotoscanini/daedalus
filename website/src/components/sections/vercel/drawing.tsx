@@ -1,15 +1,18 @@
 /** FIG. 3, house to rack: where Pinch runs, drawn in the manifesto's ink. A house holds the box on
  * its kitchen counter, with Pinch's icon resting over it and the box's green light on; a data center
- * rack stands under the Vercel triangle with one empty, dashed slot near its top. A faint dashed
- * route marked "one click" leaves the box's top edge, rises through the roof, arches over the axis
- * and drops through the rack's top into the slot, where an open chevron points at it. That is the
- * house state, and the one the prerender, no-JS and reduced motion show.
+ * rack stands with the Vercel triangle sitting on its top edge, as the house has its roof, and one
+ * empty, dashed slot near its top. A dashed route marked "one click" leaves the box's top edge, rises
+ * through the roof, arches over the axis and drops through the rack's top into the slot's left end,
+ * where an open chevron points at it. That is the house state, and the one the prerender, no-JS and
+ * reduced motion show. The house and the rack are each 300 wide: the one figure of the page that
+ * is for the reader who knows what Vercel is, so it is drawn at the weight of the kitchen's.
  *
  * The move (driven from vercel.tsx) flies the icon along the route into the slot while a brighter
  * copy of the route draws in behind it, revealed by the same arc length the icon has travelled, so
  * the icon rides the tip of the trail all the way to the chevron. The icon comes to rest a few units
- * below the tip, on the slot's centre: it sinks there gradually (by the cube of the distance flown),
- * so its path never kinks. Then the light moves: the house's goes hollow, the slot turns solid and a
+ * below the tip, on the slot's centre, at its left end like the first thing on a row, with the
+ * light at the other end: it sinks there gradually (by the cube of the distance flown), so its path
+ * never kinks. Then the light moves: the house's goes hollow, the slot turns solid and a
  * light comes on in the rack. The lights, the box and the slot read `data-at` on an ancestor
  * (vercel.css); the flight and the mask are written per frame through `place`.
  *
@@ -18,12 +21,13 @@
  * percent (`pathLength`) and shifted (`strokeDashoffset`) so both crossings land mid-dash and a dash
  * runs into the chevron's tip; the trail repeats them exactly.
  *
- * Two drawings, one shown at a time by a container query: the wide one (960 x 296), only ever at
+ * Two drawings, one shown at a time by a container query: the wide one (960 x 400), only ever at
  * 1:1, and a narrow one (358 x 186), at 1:1 on a 390 phone and as wide as Pinch's card elsewhere
- * (its strokes stay 1px there). Coordinates are the spec's, nudged onto the pixel grid: a 1px
- * horizontal or vertical stroke sits on a half unit and the 1.5px subject stroke on a quarter, so at
- * 1x and 2x every hairline covers whole device pixels. Each rack holds its units at one pitch with
- * equal margins top and bottom, the slot first, with room above it for the chevron. Every number
+ * (its strokes stay 1px there). The wide one is the spec's drawing at 1.5 times its size, every
+ * coordinate then put on the pixel grid: a 1px horizontal or vertical stroke sits on a half unit and
+ * the 1.5px subject stroke on a quarter, so at 1x and 2x every hairline covers whole device pixels.
+ * Each rack holds its units at one pitch with equal margins top and bottom, the slot first, with room
+ * above it for the chevron; the rack's rail holes are three to a unit, as on a real one. Every number
  * below is a literal, computed once offline (no float drift between prerender and hydration). */
 
 import { type Ref, useId } from "react";
@@ -53,34 +57,34 @@ interface Flight {
 }
 
 const WIDE_FLIGHT: Flight = {
-  p0: [202, 196],
-  c1: [202, -4],
-  c2: [708, 31.9],
-  p1: [790.5, 137.5],
-  cubic: 674.887,
-  total: 693.387,
-  drop: 8,
-  from: 20,
-  to: 12,
+  p0: [258, 229],
+  c1: [258, 60],
+  c2: [540, -50],
+  p1: [654.5, 141],
+  cubic: 532.538,
+  total: 560.038,
+  drop: 12,
+  from: 30,
+  to: 18,
 };
 const NARROW_FLIGHT: Flight = {
   p0: [86, 118],
-  c1: [86, 16],
-  c2: [266.2, 31.8],
-  p1: [294.5, 65.5],
-  cubic: 255.078,
-  total: 267.578,
+  c1: [86, 40],
+  c2: [254, 22],
+  p1: [276.5, 65.5],
+  cubic: 232.749,
+  total: 245.249,
   drop: 6,
   from: 14,
-  to: 8,
+  to: 9,
 };
 
 /** The routes as drawn (the lead-in, then the flights' cubics), their dashes (`pathLength`, offset),
- * and the chevrons: arms 7 (5 narrow) at 32 degrees either side of the end tangent. */
-const WIDE_ROUTE = { d: "M202 214.5V196C202 -4 708 31.9 790.5 137.5", length: 693.03, offset: 5 };
-const NARROW_ROUTE = { d: "M86 130.5V118C86 16 266.2 31.8 294.5 65.5", length: 265.86, offset: 5.82 };
-const WIDE_CHEVRON = "M783.92 135.11L790.5 137.5L789.77 130.54";
-const NARROW_CHEVRON = "M289.74 63.96L294.5 65.5L293.8 60.55";
+ * and the chevrons: arms 9 (5 narrow) at 32 degrees either side of the end tangent. */
+const WIDE_ROUTE = { d: "M258 256.5V229C258 60 540 -50 654.5 141", length: 563.17, offset: 3.45 };
+const NARROW_ROUTE = { d: "M86 130.5V118C86 40 254 22 276.5 65.5", length: 241.67, offset: 0.9 };
+const WIDE_CHEVRON = "M654.67 132L654.5 141L646.49 136.91";
+const NARROW_CHEVRON = "M276.91 60.52L276.5 65.5L272.2 62.95";
 
 /** The icon's resting transform, as rendered: its own size at its resting centre. */
 const rest = (f: Flight) => `translate(${f.p0[0] - f.from / 2} ${f.p0[1] - f.from / 2})`;
@@ -166,7 +170,7 @@ export function place(wide: Movers, narrow: Movers, s: number) {
   placeOne(narrow, NARROW_FLIGHT, s);
 }
 
-const LABEL = "Line drawing: a house holding the box on its counter, and a data center rack under the Vercel triangle, joined by an arc marked one click.";
+const LABEL = "Line drawing: a house holding the box on its counter, and a data center rack with the Vercel triangle on top of it, joined by an arc marked one click.";
 
 /** useId, made safe inside url(#…). */
 const useSafeId = () => useId().replace(/[^\w-]/g, "");
@@ -188,7 +192,7 @@ function Route({
   return (
     <>
       <defs>
-        <mask id={`${u}m`} maskUnits="userSpaceOnUse" x="-20" y="-80" width="1000" height="420">
+        <mask id={`${u}m`} maskUnits="userSpaceOnUse" x="-20" y="-80" width="1000" height="520">
           <path
             ref={trail}
             className="vc-reveal"
@@ -211,13 +215,13 @@ function Route({
 
 /** The empty slot, a phantom line (long, dot, dot) drawn side by side so every corner is a whole
  * dash: each long side starts and ends on half a long dash (its pattern stretched a little to fit,
- * by `pathLength`), and each short side runs dash, dot, dash. The long sides overrun by half a unit
- * so the corner pixels are filled. */
+ * by `pathLength`), and each short side runs dash, dot, dash (a longer one, dash, dot, dash, dot,
+ * dash). The long sides overrun by half a unit so the corner pixels are filled. */
 function Slot({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
   const long = w + 1;
   const fit = 6 + 13 + 25 * Math.round((long - 25) / 25) + 6;
   const short = h - 1;
-  const side = short >= 12 ? "4 2 1 2 4" : `${(short - 2) / 2} 2`;
+  const side = short >= 17 ? `4 2 1 2 ${short - 18} 2 1 2 4` : short >= 12 ? "4 2 1 2 4" : `${(short - 2) / 2} 2`;
   // one path per side: pathLength covers a whole path, and the pattern starts afresh on each
   return (
     <g className="vc-slot">
@@ -234,46 +238,47 @@ function Slot({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
 export function WideDrawing({ icon, trail }: { icon: Ref<SVGGElement>; trail: Ref<SVGPathElement> }) {
   const u = useSafeId();
   return (
-    <svg className="vc-svg vc-wide" viewBox="0 24 960 296" width="960" height="296" fill="none" role="img" aria-label={LABEL}>
+    <svg className="vc-svg vc-wide" viewBox="0 0 960 400" width="960" height="400" fill="none" role="img" aria-label={LABEL}>
       <g className="vc-s">
-        <path d="M40 290.5H920" />
-        <path d="M70.5 290.5V170.5L170.5 90.5L270.5 170.5V290.5" />
-        <path d="M86 250.5H254M86 256.5H254" />
-        <rect x="100.5" y="208.5" width="60" height="42" rx="3" />
-        <rect x="690.5" y="120.5" width="200" height="170" />
+        <path d="M15 370.5H945" />
+        <path d="M60.5 370.5V190.5L210.5 70.5L360.5 190.5V370.5" />
+        <path d="M84 310.5H337M84 319.5H337" />
+        <rect x="105.5" y="247.5" width="90" height="63" rx="4.5" />
+        <rect x="600.5" y="115.5" width="300" height="255" />
       </g>
       <g className="vc-f">
-        <path d="M92.5 256.5V286.5H248.5V256.5" />
-        <rect x="106.5" y="214.5" width="38" height="30" rx="3" />
-        <path d="M702.5 128V286M878.5 128V286" />
-        <path d={TICKS} />
+        <path d="M93.5 319.5V364.5H327.5V319.5" />
+        <rect x="114.5" y="256.5" width="57" height="45" rx="4.5" />
+        <path d="M618.5 127V364M882.5 127V364" />
+        <path d={HOLES} />
         {WIDE_UNITS.map((y) => (
-          <rect key={y} x="714.5" y={y} width="152" height="14" />
+          <rect key={y} x="636.5" y={y} width="228" height="21" />
         ))}
       </g>
       <Route route={WIDE_ROUTE} chevron={WIDE_CHEVRON} u={u} trail={trail} />
       {/* the box: the drawing's one subject stroke while Pinch runs on it, plain ink once it moves */}
-      <rect className="vc-box-sub" x="172.25" y="214.25" width="59.5" height="36" />
-      <rect className="vc-box-off" x="172.5" y="214.5" width="59" height="36" />
-      <path className="vc-f-line" d="M178 220.5H226M178 224.5H226M178 228.5H226" />
-      <circle className="vc-light-home" cx="222" cy="243" r="2.2" />
+      <rect className="vc-box-sub" x="213.25" y="256.25" width="89.5" height="54" />
+      <rect className="vc-box-off" x="213.5" y="256.5" width="89" height="54" />
+      <path className="vc-f-line" d="M222 265.5H294M222 271.5H294M222 277.5H294" />
+      <circle className="vc-light-home" cx="288" cy="299.5" r="3.3" />
       {/* the slot: dashed and waiting, then solid, with the light that says Pinch runs here */}
-      <Slot x={714.5} y={138.5} w={152} h={14} />
-      <rect className="vc-slot-taken" x="714.25" y="138.25" width="152.5" height="14.5" />
-      <circle className="vc-light-rack" cx="858.5" cy="145.5" r="2.2" />
-      <path d={MARKS.vercel} transform="translate(778.5 83.608)" className="vc-tri" />
+      <Slot x={636.5} y={142.5} w={228} h={21} />
+      <rect className="vc-slot-taken" x="636.25" y="142.25" width="228.5" height="21.5" />
+      <circle className="vc-light-rack" cx="852.5" cy="153" r="3.3" />
+      {/* the triangle sits on the rack's top edge as the roof sits on the house, its base on the pixel above the line */}
+      <path d={MARKS.vercel} transform="translate(732.5 81.412) scale(1.5)" className="vc-tri" />
       <g ref={icon} transform={rest(WIDE_FLIGHT)}>
         <AppIcon app="pinch" size={WIDE_FLIGHT.from} />
       </g>
       {/* over the route's highest point, the arc it names, on the page's axis */}
-      <text className="fig-label" x="480" y="40" textAnchor="middle">
+      <text className="fig-label" x="480" y="22" textAnchor="middle">
         one click
       </text>
-      <text className="fig-label" x="170.5" y="312" textAnchor="middle">
+      <text className="fig-label" x="210.5" y="392" textAnchor="middle">
         your kitchen
       </text>
-      <text className="fig-label" x="790.5" y="312" textAnchor="middle">
-        a data center
+      <text className="fig-label" x="750.5" y="392" textAnchor="middle">
+        a data center, vercel
       </text>
     </svg>
   );
@@ -306,7 +311,7 @@ export function NarrowDrawing({ icon, trail }: { icon: Ref<SVGGElement>; trail: 
       <Slot x={256.5} y={66.5} w={76} h={10} />
       <rect className="vc-slot-taken" x="256.25" y="66.25" width="76.5" height="10.5" />
       <circle className="vc-light-rack" cx="326.5" cy="71.5" r="1.4" />
-      <path d="M286.5 42L294.5 28.14L302.5 42Z" className="vc-tri" />
+      <path d="M286.5 52L294.5 38.14L302.5 52Z" className="vc-tri" />
       <g ref={icon} transform={rest(NARROW_FLIGHT)}>
         <AppIcon app="pinch" size={NARROW_FLIGHT.from} />
       </g>
@@ -316,20 +321,25 @@ export function NarrowDrawing({ icon, trail }: { icon: Ref<SVGGElement>; trail: 
       <text className="fig-label" x="64.5" y="189" textAnchor="middle">
         your kitchen
       </text>
-      <text className="fig-label" x="294.5" y="189" textAnchor="middle">
+      {/* on a phone "vercel" would run past the page's edge; where the drawing grows it fits (vercel.css) */}
+      <text className="fig-label vc-short" x="294.5" y="189" textAnchor="middle">
         a data center
+      </text>
+      <text className="fig-label vc-long" x="294.5" y="189" textAnchor="middle">
+        a data center, vercel
       </text>
     </svg>
   );
 }
 
-/** The units under the slot: 14 tall at a pitch of 20 in the wide rack, 10 at 16 in the narrow one
- * (a 6-unit gap in both), leaving the same margin above the slot as below the last unit. */
-const WIDE_UNITS = [158.5, 178.5, 198.5, 218.5, 238.5, 258.5];
+/** The units under the slot: 21 tall at a pitch of 30 in the wide rack, 10 at 16 in the narrow one
+ * (a 9-unit and a 6-unit gap), leaving the same margin above the slot as below the last unit. */
+const WIDE_UNITS = [172.5, 202.5, 232.5, 262.5, 292.5, 322.5];
 const NARROW_UNITS = [82.5, 98.5, 114.5, 130.5, 146.5];
 
-/** The rails' 3-unit inward ticks, every 8 units. */
-const TICKS = Array.from({ length: 20 }, (_, i) => {
-  const y = 132.5 + i * 8;
-  return `M702.5 ${y}h3M878.5 ${y}h-3`;
+/** The wide rack's rail holes, three to a unit (the slot and the six units below it), each a 4-unit
+ * tick in from the rail, centred at a sixth, a half and five sixths of the unit's pitch. */
+const HOLES = Array.from({ length: 21 }, (_, i) => {
+  const y = 147.5 + i * 10;
+  return `M618.5 ${y}h4M882.5 ${y}h-4`;
 }).join("");

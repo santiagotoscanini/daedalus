@@ -6,13 +6,15 @@
  *
  * A switch, "Show what it did", opens the newest entry, the change that added Pinch, into its full
  * record: the commit, the diff to the one file every app is written in, the machine and the app
- * being built, the iPhone build, and an Undo that puts the house back the way it was. The switch is
+ * being built, the iPhone build, and an Undo that puts the house back the way it was. Undone, the
+ * whole entry says so: its header greys like the attempt below it and reads "You undid this just
+ * now", the machine row goes back a generation, and the checks and the diff lose their green. The switch is
  * a native checkbox before the card in the DOM, and `:checked ~` opens the record (and the caption
  * under the card), so it works without script; script only marks the closed record `inert` and
  * runs Undo and Redo (without it the Undo button renders and does nothing). The card is a picture
  * of the product, so its type is product type, set in runs-itself.css. */
 
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { CheckIcon } from "~/components/icons";
 import { type AppId, AppIcon } from "~/components/landing/app-icon";
@@ -37,21 +39,37 @@ const STEPS = [
   { at: "0.4s", step: "plan", detail: "node 24, pnpm, railpack" },
   { at: "38.2s", step: "build", detail: "image built on the box" },
   { at: "39.6s", step: "push", detail: "the box’s own registry" },
-  { at: "45.1s", step: "deploy", detail: "pinch.rivera.family, health check 200" },
+  { at: "45.1s", step: "deploy", detail: "pinch.riveras.com, health check 200" },
 ];
 
-/** The two older entries under Pinch's, newest first. */
+/** The two older entries under Pinch's, newest first. The last one is the claim in the prose made
+ * visible: a change that did not build never went live. */
 const EARLIER: { app: AppId; title: string; when: string; failed?: boolean }[] = [
   { app: "pillbox", title: "Remind Dad at nine, not eight", when: "You asked yesterday" },
   {
     app: "pillbox",
-    title: "Tried: Pillbox on the Apple Watch. It didn’t work, so nobody ever saw it.",
+    title: "Tried: Pillbox on the Apple Watch. It didn’t build, so it never went live.",
     when: "You asked last week",
     failed: true,
   },
 ];
 
 const UNDONE = "Back to how it was before Pinch. Both versions stay in the history.";
+
+/** A line of the record that says something else once the change is undone: the one shown fades in
+ * as the other fades out, and both share the cell so the line never changes size. */
+function Flip({ on, from, to }: { on: boolean; from: ReactNode; to: ReactNode }) {
+  return (
+    <span className="rc-flip">
+      <span data-on={on ? undefined : ""} aria-hidden={on || undefined}>
+        {from}
+      </span>
+      <span data-on={on ? "" : undefined} aria-hidden={on ? undefined : true}>
+        {to}
+      </span>
+    </span>
+  );
+}
 
 /** Rows of the record fade in one after another when it opens: `--i` is the row's place. */
 const nth = (i: number) => ({ "--i": i }) as CSSProperties;
@@ -117,8 +135,8 @@ export function RunsItself() {
             <span className="ri-sentence">He’s right.</span> <span className="ri-sentence">So the box runs itself.</span>
           </>
         }
-        intro="Once it’s set up, nobody in your house has to look after it."
-        prose={"Before the box changes anything, it writes down what changed, why and who\u00a0asked. A change that doesn’t build never goes live, and any change can be undone in one step, even weeks later."}
+        intro="Once it’s set up, it watches itself, and tells you if it ever needs you."
+        prose={"Before the box changes anything, it writes down what changed, why and who asked. A change that doesn’t build never goes live, and any change can be undone in one step, even\u00a0weeks\u00a0later."}
       />
 
       <div className="wrap ri-figure">
@@ -148,7 +166,9 @@ export function RunsItself() {
               <div className="rc-top">
                 <AppIcon app="pinch" size={20} />
                 <p className="rc-title">Add Pinch, the family’s recipes</p>
-                <p className="rc-when tnum">You asked 2 min ago</p>
+                <p className="rc-when tnum">
+                  <Flip on={undone} from="You asked 2 min ago" to="You undid this just now" />
+                </p>
               </div>
 
               <div className="ri-fold">
@@ -179,7 +199,11 @@ export function RunsItself() {
                         <span className="rc-icon rc-ok">
                           <CheckIcon size={12} />
                         </span>
-                        NixOS generation 412, switched after its checks passed
+                        <Flip
+                          on={undone}
+                          from="NixOS generation 412, switched after its checks passed"
+                          to="Back to NixOS generation 411, switched after its checks passed"
+                        />
                       </dd>
                     </div>
                     <div className="rc-row rc-app ri-row" style={nth(4)}>

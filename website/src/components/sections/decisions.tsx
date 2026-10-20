@@ -10,7 +10,7 @@
  * most of the plate has been in view for a beat (motion.ts); after that, Replay and the selector
  * rerun parts of it. Reduced motion, no-JS and the prerender all show the finished frame. */
 
-import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AppIcon } from "~/components/landing/app-icon";
 import { motionOn, useFigure } from "~/components/landing/motion";
@@ -71,15 +71,18 @@ function controller(root: HTMLElement, armed: boolean): Controller {
   let raf = 0;
   let live: { at: (ms: number) => State; len: number } | null = null;
 
+  // while a run is live the drawing is mid-change, so no row has anything to tell (decisions.css)
   const finish = () => {
     cancelAnimationFrame(raf);
     live = null;
     only = null;
+    put(root, "data-live", null);
     draw(done(cur));
   };
   const start = (at: (ms: number) => State, len: number) => {
     cancelAnimationFrame(raf);
     live = { at, len };
+    put(root, "data-live", "");
     only = wideEl.offsetParent ? "w" : narrowEl.offsetParent ? "n" : null;
     let t0 = -1;
     const step = (now: number) => {
@@ -140,9 +143,35 @@ function controller(root: HTMLElement, armed: boolean): Controller {
     dispose() {
       cancelAnimationFrame(raf);
       live = null;
+      put(root, "data-live", null);
       io.disconnect();
     },
   };
+}
+
+/** The sections above can end on a fraction of a pixel, which would put every hairline of the plate
+ * across two device pixels. This adds the missing fraction (under 1px) to the plate's top margin after
+ * paint, so the prerender is unchanged, and everything below the plate lands on whole pixels again.
+ * The margin goes on the plate itself because its request is placed from the plate's edge. */
+function useWholePixelTop(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let pad = 0;
+    const snap = () => {
+      // where the plate would sit without the pad: the pad moves it, so take it back out
+      const top = el.getBoundingClientRect().top + window.scrollY - pad;
+      const frac = top - Math.floor(top);
+      const next = frac < 0.01 || frac > 0.99 ? 0 : Math.round((1 - frac) * 100) / 100;
+      if (next === pad) return;
+      pad = next;
+      el.style.setProperty("--snap", `${pad}px`);
+    };
+    snap();
+    const ro = new ResizeObserver(snap);
+    ro.observe(document.body);
+    return () => ro.disconnect();
+  }, [ref]);
 }
 
 /** Every number the section prints, computed from the drawing: 46,656, and the 9 the house leaves. */
@@ -171,6 +200,7 @@ export function Decisions() {
     dwellMs: 300,
     onPlay: () => ctl.current?.play(),
   });
+  useWholePixelTop(plate);
 
   // Declared after useFigure, so its layout effect has already armed the plate or not: an armed
   // plate is reduced to its sketch before the browser paints it.
@@ -258,11 +288,14 @@ export function Decisions() {
     };
   }, []);
 
-  // The row being read brightens its question and its own leader (the elbows belong to the writer's SVG).
+  // The row being read brightens its question and its own leader (the elbows belong to the writer's SVG),
+  // and shows what runs it (each composition prints it in its own place).
   useEffect(() => {
     const root = plate.current;
     if (!root || hot === null) return;
-    const lines = root.querySelectorAll(`[data-elbow="${hot}"], [data-lead="${hot}"], [data-focus="${hot}"]`);
+    const lines = root.querySelectorAll(
+      `[data-elbow="${hot}"], [data-lead="${hot}"], [data-focus="${hot}"], [data-under="${hot}"]`,
+    );
     lines.forEach((el) => el.setAttribute("data-hot", ""));
     return () => lines.forEach((el) => el.removeAttribute("data-hot"));
   }, [hot]);
@@ -312,7 +345,7 @@ export function Decisions() {
             </div>
             <PlateWide onHot={onHot} onReplay={onReplay} />
             <PlateNarrow onHot={onHot} onReplay={onReplay} />
-            <p className="dc-readout t-under" aria-live="polite">
+            <p className="sr-only" aria-live="polite">
               {hot !== null ? `Under the hood: ${COLUMNS[hot]!.under}` : ""}
             </p>
           </div>

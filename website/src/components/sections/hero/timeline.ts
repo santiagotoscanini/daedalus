@@ -19,14 +19,15 @@ export const NARROW = "(max-width: 767px)";
 export const TEMPO_WIDE = 1;
 export const TEMPO_NARROW = 0.65;
 
-/** The hand-over, in ms from the chat's start: your phone steps aside (768 and up), or gives the
- * spot to Grandma's (below 768, once Pinch's card has been on screen for a third of a second: at
+/** The hand-over, in ms from the chat's start: Grandma's phone comes in beside yours (768 and up),
+ * or takes the spot (below 768, once Pinch's card has been on screen for a third of a second: at
  * that tempo the chat is over by 4.3s, and the second phone is up before a reader moves on). */
 export const HANDOVER_WIDE = 6700;
 export const HANDOVER_NARROW = 4600;
 
-/** From the hand-over to Phone B's entrance, E: it comes in as your phone steps aside (768 and up),
- * or with the swap itself (below 768). */
+/** From the hand-over to Phone B's entrance, E: a beat for the chat's column to settle first (768
+ * and up, where your phone stays on its spot and hers fades in beside it), or the swap itself (below
+ * 768). */
 export const E_DELAY_WIDE = 200;
 export const E_DELAY_NARROW = 0;
 

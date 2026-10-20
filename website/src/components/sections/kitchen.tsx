@@ -1,14 +1,17 @@
 /** "It lives on the kitchen counter.": where the answers run. One drawing of a house in cutaway with
  * the box on the kitchen counter, on the page axis, and a run to it from every other machine in the
- * house; its internet cable is broken and its light still on. Pointing at a machine (or focusing or
- * tapping it) says what it lends the house, in one readout under the drawing. Below 880px of column
- * the drawing crops to the kitchen and the machines become a plain list. One paragraph follows the
- * figure: what owning the box means, and what the other machines lend it; beside the list, which
- * has just said the second part machine by machine, only the first.
+ * house; its internet cable is broken and its light still on. One caption slot under the drawing
+ * says what the break means ("The internet is out. The box and the family's apps are still on."),
+ * and pointing at a machine (or focusing or tapping it) swaps it for what that machine lends the
+ * house. Below 880px of column the drawing crops to the kitchen, with the same caption, and the
+ * machines become a plain list. One paragraph follows the figure: what owning the box means, and
+ * what the other machines lend it; beside the list, which has just said the second part machine by
+ * machine, only the first.
  *
  * Motion (once, when half the figure is in view): the runs draw in, machine by machine, onto the
- * collector above the box; the cable breaks; "still on" appears. The light never changes. Reduced
- * motion, no script and the prerender all show that final frame. */
+ * collector above the box; the cable breaks; "still on" appears, and then the caption turns from
+ * the box to the outage. The light never changes. Reduced motion, no script and the prerender all
+ * show that final frame. */
 
 import {
   type FocusEvent,
@@ -21,30 +24,24 @@ import {
   useRef,
   useState,
 } from "react";
-import { Coming } from "~/components/landing/coming";
+import { Coming, ComingLine } from "~/components/landing/coming";
 import { useFigure } from "~/components/landing/motion";
 import { Header, Prose, Section } from "~/components/landing/section";
-import { MARKS, Mark } from "~/components/marks";
+import { Mark } from "~/components/marks";
 import { KitchenDrawing } from "./kitchen/drawing";
 import { KitchenDrawingNarrow } from "./kitchen/drawing-narrow";
-import { LIST_ORDER, MACHINES, type MachineId, type Os } from "./kitchen/machines";
+import { LIST_ORDER, MACHINES, type MachineId, OUTAGE, type Os } from "./kitchen/machines";
 
 /** A machine's mark in running text, drawn on its own pixel grid at the size it is used (14 in the
- * readout, 16 in the list). The apple and the penguin are the brand paths, the penguin filled even-odd
- * so its belly stays cut out, as in Start. The Windows mark is its four squares set on half pixels
- * (crisp at 2x) and drawn smaller than the box it sits in: a solid square carries far more ink than
- * the apple's or the penguin's silhouette, so at the same size it read as the heaviest mark in the
- * list. The box has no brand, so it is the hero's drawing of it (a case, two vents and its light),
- * 16 wide and 14 tall; in the list it is centred in the row's 16px square. */
+ * readout, 16 in the list). The apple and the penguin are the brand marks (marks.tsx; the penguin is
+ * the filled one Start draws too, even-odd so its belly stays cut out). The Windows mark is its four
+ * squares set on half pixels (crisp at 2x) and drawn smaller than the box it sits in: a solid square
+ * carries far more ink than the apple's or the penguin's silhouette, so at the same size it read as
+ * the heaviest mark in the list. The box has no brand, so it is the hero's drawing of it (a case, two
+ * vents and its light), 16 wide and 14 tall; in the list it is centred in the row's 16px square. */
 function OsMark({ os, size }: { os: Os; size: 14 | 16 }) {
   if (os === "apple") return <Mark id="apple" size={size} className="k-os" />;
-  if (os === "linux") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className="k-os" aria-hidden>
-        <path d={MARKS.linux} fillRule="evenodd" />
-      </svg>
-    );
-  }
+  if (os === "linux") return <Mark id="linux" size={size} className="k-os" />;
   if (os === "box") {
     return (
       <svg
@@ -98,20 +95,28 @@ function useWholePixelTop(ref: RefObject<HTMLElement | null>) {
   }, [ref]);
 }
 
+/** When the caption turns from the box to the outage: as "still on" has finished fading in (it
+ * starts at 1600ms and takes 300). */
+const OUTAGE_AT = 1900;
+
 export function Kitchen() {
   const fig = useRef<HTMLElement>(null);
   // Once the sequence is over (the last fade ends at 1900ms), the figure is disarmed: the keyframes
   // stop applying and the drawing rests on the same final frame. Otherwise switching between the
   // wide and the narrow drawing (an iPad turned) would replay it, because an element shown again
   // after display:none restarts its animations.
-  const settle = useRef(0);
-  useFigure(fig, {
+  const timers = useRef<number[]>([]);
+  const [outage, setOutage] = useState(false);
+  const { armed } = useFigure(fig, {
     threshold: 0.5,
     onPlay: () => {
-      settle.current = window.setTimeout(() => fig.current?.removeAttribute("data-armed"), 2100);
+      timers.current = [
+        window.setTimeout(() => setOutage(true), OUTAGE_AT),
+        window.setTimeout(() => fig.current?.removeAttribute("data-armed"), OUTAGE_AT + 200),
+      ];
     },
   });
-  useEffect(() => () => window.clearTimeout(settle.current), []);
+  useEffect(() => () => timers.current.forEach(window.clearTimeout), []);
   useWholePixelTop(fig);
   const uid = `k${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
@@ -121,7 +126,10 @@ export function Kitchen() {
   const [focused, setFocused] = useState<MachineId | null>(null);
   const pointer = useRef("mouse");
   const active = hovered ?? focused;
-  const shown = active ?? "box";
+  // The caption slot rests on the outage. In the one case where the cable has not broken yet (the
+  // figure is armed and has not played) it rests on the box instead; the prerender, no script and
+  // reduced motion are never armed, so they open on the outage, which is their final frame.
+  const shown = active ?? (armed && !outage ? "box" : "outage");
 
   const bind = useCallback(
     (id: MachineId) => ({
@@ -166,15 +174,23 @@ export function Kitchen() {
     <Section id="kitchen">
       <Header
         title="It lives on the kitchen counter."
-        // "the microwave" is held together, so on two lines the intro breaks at the comma
-        intro={"All of it runs on a quiet little box beside the microwave, for about $1 to $3.50 a month in electricity."}
+        // the microwave is held together, so on two lines the intro breaks at the comma
+        intro="daedalus runs on a quiet little box beside the microwave, for about $1 to $3.50 a month in electricity."
       />
       <div className="wrap">
         <figure ref={fig} className="k-fig after-header">
           <div className="k-wide">
-            <KitchenDrawing uid={uid} active={active} bind={bind} />
+            <div className="k-plate">
+              <KitchenDrawing uid={uid} active={active} bind={bind} />
+            </div>
             {/* each machine's button already carries these words, so the readout is for the eye */}
             <div className="k-readout" aria-hidden="true">
+              <p className="k-read" data-on={shown === "outage" || undefined}>
+                <OsMark os={OUTAGE.os} size={14} />
+                <span>
+                  <span className="k-read-lead">{OUTAGE.lead}</span> {OUTAGE.role}
+                </span>
+              </p>
               {LIST_ORDER.map((id) => {
                 const m = MACHINES[id];
                 return (
@@ -197,6 +213,13 @@ export function Kitchen() {
 
           <div className="k-narrow">
             <KitchenDrawingNarrow uid={uid} />
+            {/* the drawing's own words say "still on" and "internet"; this says what they mean */}
+            <p
+              className="k-outage m-fade"
+              style={{ ["--at" as string]: `${OUTAGE_AT - 200}ms`, ["--for" as string]: "300ms" }}
+            >
+              <span className="k-read-lead">{OUTAGE.lead}</span> {OUTAGE.role}
+            </p>
             <ul className="k-list">
               {LIST_ORDER.map((id) => {
                 const m = MACHINES[id];
@@ -204,17 +227,9 @@ export function Kitchen() {
                   <li key={id} className="k-row">
                     <OsMark os={m.os} size={16} />
                     <div>
-                      <p className="k-row-head">
-                        <span className="k-row-name">{m.name}</span>
-                        <span className="k-row-room">{m.room}</span>
-                      </p>
+                      <p className="k-row-name">{m.lead}</p>
                       <p className="k-row-role">{m.role}</p>
-                      {m.next && (
-                        <p className="k-row-next">
-                          <Coming />
-                          {m.next}
-                        </p>
-                      )}
+                      {m.next && <ComingLine className="k-row-next">{m.next}</ComingLine>}
                     </div>
                   </li>
                 );
@@ -227,8 +242,8 @@ export function Kitchen() {
       <Prose className="k-prose">
         {/* one child, so Prose keeps it one paragraph */}
         <>
-          It’s yours. Your apps and everything in them live on a disk in your own house, so nobody else sets the price
-          or decides who gets to look, and they keep working when the internet doesn’t.
+          It’s yours. Your apps and everything in them live on a disk in your own house, so nobody else decides who gets
+          to look at them, and they keep working when the internet doesn’t.
           <span className="k-more">
             {" "}
             The other computers in the house join it with a small app, and each lends what it’s good at: a gaming PC’s

@@ -11,11 +11,17 @@
  *   sso   the reference host's SSO logo set (the service's own logo)
  *
  * Marks are trademarks of their owners and appear only to say which service is meant. A service with
- * no official mark found is left out (Mojang, GitHub Pages), never given a monogram.
+ * no official mark found is left out (Mojang, GitHub Pages), never given a monogram. The reference box's
+ * download stack (the *arrs, their clients and the VPN they ride) is left out on purpose: the page is
+ * about what daedalus is, and the downloads one house runs beside it are no part of that. MeTube, the
+ * catalog's one downloader, is covered but has no tile for the same reason. Vercel has none either: the
+ * landing says the one-click move to it is not built yet, and a tile among the services the box talks
+ * to would say otherwise.
  *
  * `module` is a catalog module id under nix/modules; the site build fails if a module directory has no
  * entry here or an entry names one that does not exist. `hidden` keeps a module covered without a tile
- * (the apps platform and cloudflared have no mark of their own apart from Daedalus and Cloudflare). */
+ * (the apps platform and cloudflared have no mark of their own apart from Daedalus and Cloudflare, and
+ * MeTube is left off the wall). */
 
 export type IconSource = "app" | "di" | "si" | "sso";
 
@@ -56,7 +62,7 @@ export const SERVICES: Service[] = [
   cat("wg-easy", "wg-easy", "sso", { module: "wg-easy" }),
   cat("factorio", "Factorio", "app", { module: "factorio" }),
   cat("grocy", "Grocy", "app", { module: "grocy" }),
-  cat("metube", "MeTube", "app", { module: "metube" }),
+  cat("metube", "MeTube", "app", { module: "metube", hidden: true }),
   cat("myspeed", "MySpeed", "sso", { module: "myspeed" }),
   cat("stirling-pdf", "Stirling PDF", "app", { module: "stirling-pdf" }),
   cat("intel-gpu", "Intel GPU exporter", "si", { module: "intel-gpu-exporter" }),
@@ -69,18 +75,7 @@ export const SERVICES: Service[] = [
   bes("jellyfin", "Jellyfin", "app", { focus: true }),
   bes("home-assistant", "Home Assistant", "app"),
   bes("minecraft", "Minecraft", "app"),
-  bes("sonarr", "Sonarr", "app"),
-  bes("radarr", "Radarr", "app"),
-  bes("prowlarr", "Prowlarr", "app"),
-  bes("bazarr", "Bazarr", "app"),
-  bes("qbittorrent", "qBittorrent", "app"),
-  bes("nzbget", "NZBGet", "app"),
-  bes("seerr", "Seerr", "app"),
   bes("calibre-web", "Calibre-Web", "app"),
-  bes("shelfmark", "Shelfmark", "app"),
-  bes("cleanuparr", "Cleanuparr", "app"),
-  bes("janitorr", "Janitorr", "app"),
-  bes("recyclarr", "Recyclarr", "app"),
   bes("n8n", "n8n", "app"),
   bes("open-webui", "Open WebUI", "app"),
   bes("litellm", "LiteLLM", "app"),
@@ -89,17 +84,14 @@ export const SERVICES: Service[] = [
   bes("wealthfolio", "Wealthfolio", "app"),
   bes("getbased", "getbased", "app"),
   bes("hermes-agent", "Hermes Agent", "app"),
-  bes("gluetun", "Gluetun", "app"),
 
   // — outside services the control plane or the box's gateway talks to —
   out("cloudflare", "Cloudflare", "app", { focus: true }),
   out("github", "GitHub", "app", { focus: true }),
   out("github-actions", "GitHub Actions", "si"),
-  out("vercel", "Vercel", "di"),
   out("letsencrypt", "Let's Encrypt", "di"),
   out("npm", "npm", "di"),
   out("claude-code", "Claude Code", "app"),
-  out("protonvpn", "Proton VPN", "app"),
   out("ticktick", "TickTick", "si"),
   out("hevy", "Hevy", "app"),
   out("yazio", "Yazio", "app"),

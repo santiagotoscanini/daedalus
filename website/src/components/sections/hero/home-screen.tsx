@@ -5,7 +5,7 @@
  * turns from "Loading…" to Pinch with TestFlight's orange beta dot.
  *
  * Her other apps are left anonymous on purpose (no real company's icon belongs on her phone): plain
- * squircles in warm tints with blank labels, all slightly out of focus, so the eye lands on the one
+ * squircles in warm tints with blank labels, a half pixel out of focus, so the eye lands on the one
  * sharp thing, Pinch. The grid is iOS's at this scale: four 48px columns 22.5 in from the edges, a
  * 72px row pitch, a 2x2 widget top left, a wide one (her photos) in rows 3-4 and one more row of
  * apps under it, so the screen is furnished down to the Search pill. The final frame (prerender,
@@ -13,7 +13,7 @@
  * styles/landing/hero.css, `.home*`. */
 
 import type { CSSProperties } from "react";
-import { AppIcon } from "~/components/landing/app-icon";
+import { AppIcon, BetaIcon } from "~/components/landing/app-icon";
 
 /** The grid: column x (71 apart, half pixels, so every edge is whole at 2x) and row y. */
 const COL = (c: number) => 22.5 + 71 * c;
@@ -106,13 +106,17 @@ export function HomeScreen() {
       </div>
 
       <div className="home-banner">
-        <span className="home-banner-icon" />
+        <span className="home-banner-icon">
+          <BetaIcon size={30} />
+        </span>
         {/* the app's name and the time share a baseline, as iOS sets them */}
         <span className="home-banner-head">
           <span className="home-banner-title">TestFlight</span>
           <span className="home-banner-time">now</span>
         </span>
         <span className="home-banner-body">Pinch is ready to test.</span>
+        {/* her finger: a touch indicator under the press, so the tap reads as a tap (motion only) */}
+        <span className="home-touch" aria-hidden />
       </div>
     </div>
   );

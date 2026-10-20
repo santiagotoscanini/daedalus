@@ -86,11 +86,18 @@
 .record-switch:checked::before {
   transform: translateX(20px);
 }
-/* the label and the hint share a baseline beside the switch */
+/* the label and the hint share a baseline beside the switch. The row is centred as one group, so its
+ * width is made an even number of pixels (the switch and its gap are 63; the words 437.34, set to the
+ * next odd number), which puts the 51px track on whole pixels at any even viewport width. */
 .ri-words {
   display: inline-flex;
   align-items: baseline;
   gap: 12px;
+}
+@media (min-width: 640px) {
+  .ri-words {
+    min-width: 439px;
+  }
 }
 .ri-label {
   font: 500 15px/20px var(--font-sans);
@@ -178,9 +185,40 @@
 .rc-entry[data-failed] .rc-top > svg {
   filter: grayscale(1);
 }
-/* open, the newest entry's line becomes the record's header, its by-line right under the title */
+/* open, the newest entry's line becomes the record's header, its by-line right under the title; undone,
+ * it greys exactly as the attempt that never went live does: the change stays on record, not live */
 .rc-pinch .rc-top {
-  transition: padding-bottom 320ms var(--ease-out);
+  transition:
+    padding-bottom 320ms var(--ease-out),
+    opacity var(--d-2) var(--ease-ui);
+}
+.rc-pinch .rc-top > svg {
+  transition: filter var(--d-2) var(--ease-ui);
+}
+.rc-card[data-undone] .rc-pinch .rc-top {
+  opacity: 0.55;
+}
+.rc-card[data-undone] .rc-pinch .rc-top > svg {
+  filter: grayscale(1);
+}
+
+/* a line that says something else once undone: both phrases share one cell (so the line never
+ * changes size), the old one fading out, then the new one in. The when stays flush right. */
+.rc-flip {
+  display: grid;
+  justify-items: start;
+}
+.rc-when .rc-flip {
+  justify-items: end;
+}
+.rc-flip > span {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transition: opacity 200ms var(--ease-ui);
+}
+.rc-flip > [data-on] {
+  opacity: 1;
+  transition-delay: 200ms;
 }
 .record-switch:checked ~ .rc-card .rc-pinch .rc-top {
   padding-bottom: 2px;
@@ -378,6 +416,10 @@
   .ri-words {
     display: contents;
   }
+  /* alone beside the switch on a phone: 63 + 117 is even, so the track is on whole pixels here too */
+  .ri-label {
+    min-width: 117px;
+  }
   .ri-hint {
     flex-basis: 100%;
     margin-top: 8px;
@@ -393,6 +435,9 @@
     margin: 0;
     padding-top: 0;
     white-space: normal;
+  }
+  .rc-when .rc-flip {
+    justify-items: start;
   }
   .rc-by {
     padding: 4px 16px 13px 48px;
@@ -471,8 +516,14 @@
   }
   .rc-line,
   .rc-plus,
-  .rc-ok {
+  .rc-ok,
+  .rc-pinch .rc-top > svg {
     transition-duration: var(--d-1);
+  }
+  .rc-flip > span,
+  .rc-flip > [data-on] {
+    transition-duration: var(--d-1);
+    transition-delay: 0s;
   }
   .rc-swap {
     transition-duration: var(--d-1), 0s;

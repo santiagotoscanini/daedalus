@@ -1,10 +1,12 @@
-/* Cost (#cost, components/sections/cost.tsx): the paired-bar chart and the text under it.
+/* Cost (#cost, components/sections/cost.tsx): the note above the chart, the paired-bar chart and the
+ * text under it.
  *
  * The chart is laid out on its column, not the viewport: at 792px of column and up it is the 760px
- * chart (labels in a 70px column, so the bars start on the prose column's left edge 70px in, and
- * $3,600 = 608px, so --u is 1px); below, each row's label sits over two full-width bars in the
- * prose's own 620 column (so a tablet has one left edge, not two) and the same scale stretches to
- * that width minus 64px, which leaves room for the longest value outside its bar. */
+ * chart, centred on the page axis like its legend and its baseline (labels in a 70px column, so the
+ * bars start on the prose column's left edge 70px in, and $3,600 = 608px, so --u is 1px); below,
+ * each row's label sits over two full-width bars in the prose's own 620 column (so a tablet has one
+ * left edge, not two) and the same scale stretches to that width minus 64px, which leaves room for
+ * the longest value outside its bar. */
 
 .cost-figure {
   container-type: inline-size;
@@ -53,6 +55,11 @@
 .cost-legend .is-box {
   background: var(--color-ok);
 }
+/* the same tone the five running years take on the bar (cost-seg.is-run) */
+.cost-legend .is-run {
+  background: var(--color-ok);
+  opacity: 0.7;
+}
 
 .cost-rows {
   display: grid;
@@ -67,6 +74,11 @@
   font: 500 15px/20px var(--font-sans);
   font-variant-numeric: tabular-nums;
   color: var(--color-ink-2);
+}
+/* over the bars the label reads "2 TB of photos" on one line, the unit a step quieter */
+.cost-unit {
+  font-weight: 400;
+  color: var(--color-ink-3);
 }
 .cost-pair {
   display: grid;
@@ -153,14 +165,19 @@ html[data-motion="on"] [data-armed][data-played] :is(.cost-seg, .cost-val) {
     padding-right: 16px;
     text-align: right;
   }
+  /* beside the bars the unit is the label's second line, small and quiet, the size above it still
+   * the one the eye reads */
+  .cost-unit {
+    display: block;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-4);
+  }
   .cost-bar {
     height: 16px;
   }
   .cost-val {
     top: 0;
-  }
-  .cost-base {
-    margin-left: 70px;
   }
 }
 
@@ -177,28 +194,33 @@ html[data-motion="on"] [data-armed][data-played] :is(.cost-seg, .cost-val) {
   }
 }
 
-/* the intro's second sentence, the box, on a line of its own under the rent */
-.cost-line {
-  display: block;
-}
-/* A phone cannot set the intro in three centred lines (its first sentence alone takes three at
- * 17px in 358), so there it follows the page's alignment rule: one left-aligned paragraph, on the
- * same left edge as the chart under it. */
-@media (max-width: 639.98px) {
+/* Under 700px the column is narrower than the 620 the intro needs for three lines (it runs to four
+ * at 640 and to five at 360), so there it follows the page's alignment rule and is set as what it
+ * has become, a prose block: left-aligned on the chart's own left edge, in the prose's ink and
+ * size (.t-prose: 17/28 from 640, 16/26 below), so it reads as a paragraph placed on purpose and
+ * not as an intro that lost its centring. */
+@media (max-width: 699.98px) {
   #cost .t-intro {
+    font-size: 16px;
+    line-height: 26px;
+    letter-spacing: 0;
     text-align: left;
     text-wrap: pretty;
+    color: var(--color-ink-2);
   }
-  .cost-line {
-    display: inline;
+}
+@media (min-width: 640px) and (max-width: 699.98px) {
+  #cost .t-intro {
+    font-size: 17px;
+    line-height: 28px;
   }
 }
 
-/* ---- under the chart ---- */
+/* ---- the note above the chart, the prose and the disclosure under it ---- */
 
 .cost-note {
   max-width: 620px;
-  margin: 24px auto 0;
+  margin: 20px auto 0;
   text-align: center;
   text-wrap: balance;
 }
@@ -207,10 +229,7 @@ html[data-motion="on"] [data-armed][data-played] :is(.cost-seg, .cost-val) {
   display: block;
 }
 .cost-prose {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  margin-top: 40px;
+  margin-top: 48px;
 }
 
 /* "How we counted": a native <details>; the summary centred on the axis, the list left-aligned in
@@ -278,10 +297,13 @@ html[data-motion="on"] .cost-how > summary svg {
   font: 400 14px/22px var(--font-sans);
   color: var(--color-ink-3);
 }
+/* Balanced, not pretty: pretty only saves a line from ending on one word, and "one place." and
+ * "a year." are short enough to read as leftovers. A line that is too long to balance (more than
+ * six on a phone) falls back to the browser's own breaks. */
 .cost-how-body li {
   position: relative;
   padding-left: 16px;
-  text-wrap: pretty;
+  text-wrap: balance;
 }
 .cost-how-body li::before {
   content: "";
@@ -327,6 +349,16 @@ html[data-motion="on"] .cost-how > summary svg {
 .cost-srcs a:hover {
   color: var(--color-ink-2);
   text-decoration-color: rgba(200, 202, 207, 0.5);
+}
+/* A finger gets 44px: the link grows to it and the negative margin gives the height back, so the
+ * list keeps its rhythm and only the hit area is larger. */
+@media (max-width: 639.98px), (hover: none) {
+  .cost-srcs a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-block: -12px;
+  }
 }
 /* focused, the tint every text link takes (.link), not a ring that would crowd the next source */
 .cost-srcs a:focus-visible {

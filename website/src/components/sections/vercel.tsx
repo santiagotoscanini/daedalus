@@ -4,11 +4,11 @@
  * overlapping the drawing.
  *
  * The move is not built, so nothing here looks like a button that does it: the control is a page
- * button, "Play the move", with the coming mark in front, and it plays only when pressed. It sits
- * between the drawing and the card, so the arc it plays and the two rows it changes are both in
- * view when it is pressed. The icon rides the route into the rack, the green light follows it, then
- * the two rows that change cross-fade, each washed once; the same button, now "Move it home", plays
- * it back. Vercel's triangle appears only in the drawing and, after the move, in the "Runs on"
+ * button, "Play the move", with the coming mark in front (a solid ring there: the dashed one beside
+ * a verb read as a spinner), and it plays only when pressed. It sits between the drawing and the
+ * card, so the arc it plays and the two rows it changes are both in view when it is pressed. The
+ * icon rides the route into the rack, the green light follows it, then the two rows that change
+ * cross-fade, each washed once; the same button, now "Move it home", plays it back. Vercel's triangle appears only in the drawing and, after the move, in the "Runs on"
  * value. The prerender and reduced motion show the house state; under reduced motion a press swaps
  * instantly, with no flight. Without script the control is hidden (it could do nothing).
  *
@@ -40,6 +40,16 @@ function Triangle({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
       <path d={MARKS.vercel} transform={`translate(0 ${dy.toFixed(3)})`} />
+    </svg>
+  );
+}
+
+/** The coming mark, as a solid ring: the same 10px circle as the dashed one (coming.tsx), for a place
+ * where the dashes would read as a loading spinner, which is any button. */
+function Ring() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="coming">
+      <circle cx="5" cy="5" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.25" />
     </svg>
   );
 }
@@ -168,13 +178,10 @@ export function Vercel() {
     <Section id="vercel">
       <Header
         title="Next: from your kitchen to Vercel, in one click."
-        intro={
-          <>
-            <span className="vc-sentence">Pinch was made for one family.</span>{" "}
-            <span className="vc-sentence">Then a cousin asks for it, and her friends do too.</span>
-          </>
+        intro={["Pinch was made for one family.", "Then a cousin asks for it, and her friends do too."]}
+        prose={
+          "The day something you made could help people outside your house, it should move in one click to Vercel, a cloud made for apps that serve millions, because everything it needs is already written down. It keeps its address and its sign-in. Your house keeps building for you, and Vercel\u00a0serves\u00a0everyone\u00a0else."
         }
-        prose="The day something you made could help people outside your house, it should move in one click to Vercel, a cloud made for apps that serve millions, keeping its address and its sign-in. Your house keeps building for you, and Vercel serves everyone else."
       />
 
       <div className="vc-fig after-header" data-at={at} data-back={back ? "" : undefined}>
@@ -205,7 +212,7 @@ export function Vercel() {
               aria-label={onVercel ? "Move it home (a preview)" : "Play the move to Vercel (a preview)"}
               onClick={press}
             >
-              <Coming />
+              <Ring />
               <span className="vc-labels">
                 <span data-on={onVercel ? undefined : ""}>Play the move</span>
                 <span data-on={onVercel ? "" : undefined}>Move it home</span>
@@ -225,7 +232,7 @@ export function Vercel() {
             <dl className="vc-rows">
               <div className="vc-row">
                 <dt>Address</dt>
-                <dd className="vc-mono">pinch.rivera.family</dd>
+                <dd className="vc-mono">pinch.riveras.com</dd>
               </div>
               <div className="vc-row">
                 <dt>Sign-in</dt>
@@ -267,7 +274,7 @@ export function Vercel() {
 
           <p className="t-caption vc-note">
             <Coming />
-            Not built yet. So far one app has made this move, by hand: lintel, for the hackathon.
+            Not built yet. So far one app has run on Vercel as well as at home, set up by hand: lintel, for the hackathon.
           </p>
         </div>
       </div>

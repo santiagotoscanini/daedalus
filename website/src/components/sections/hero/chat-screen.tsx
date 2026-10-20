@@ -34,8 +34,9 @@ export const THREAD: readonly Row[] = [
   {
     kind: "me",
     text: "Can you make us an iPhone app for Grandma’s recipe cards? Scan them, keep her handwriting, and let the family add notes.",
+    w: 227,
   },
-  { kind: "home", text: "Is it just for the family, or for anyone with a link?", at: 1100, w: 228 },
+  { kind: "home", text: "Is it just for the family, or for anyone with a link?", at: 1100, w: 230 },
   { kind: "me", text: "Just the family. Grandma too.", at: 1600 },
   { kind: "home", text: "Should I type out each card next to her handwriting, so you can search for “lentils”?", at: 2700, w: 226 },
   { kind: "me", text: "Yes please!", at: 3200 },
@@ -45,7 +46,7 @@ export const THREAD: readonly Row[] = [
     kind: "home",
     text: "Pinch is ready. The family’s invites are on their iPhones, Grandma’s too.",
     at: 5900,
-    w: 182,
+    w: 181,
   },
   { kind: "card", at: 6100 },
 ];
@@ -160,7 +161,7 @@ export function ChatScreen({ composerStep = 0 }: { composerStep?: number }) {
                       <span className="chat-open">Open</span>
                     </span>
                     <span className="chat-card-sub">The family’s recipes</span>
-                    <span className="chat-card-url">pinch.rivera.family</span>
+                    <span className="chat-card-url">pinch.riveras.com</span>
                   </span>
                 </div>
               );

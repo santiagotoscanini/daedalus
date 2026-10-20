@@ -8,17 +8,22 @@
  *
  * Each machine is a button that names itself; pointing at one (or at its mark), focusing it or
  * tapping it lights its run, its way down the riser into the box, and its strokes,
- * and the readout under the drawing (kitchen.tsx) says what it does.
+ * and the readout under the drawing (kitchen.tsx) says what it does. At rest the five marks'
+ * discs are a little brighter than the drawing's hidden lines and the pointer is a hand over a
+ * machine: the only cue that they answer, since no sentence asks anyone to point.
  *
  * The inks are the page's drawing tokens mixed opaque against the page colour (kitchen.css), so a
  * line crossing or standing on another never shows a brighter knot where two translucent strokes
  * overlap. Layer order does the rest: hidden lines, then the runs, then structure over them (a run
  * passes behind the attic floor), then the machines, the box last.
  *
- * Pixel grid: at 1440 the drawing is 1:1, so everything sits half a unit off the whole numbers it
- * is written in (one translate), which puts every 1px line on a pixel row at 1x and 2x alike. The
- * box's 1.5px outline is drawn a quarter unit inside its 45-unit square, so at 2x it covers exactly
- * three device pixels. All geometry is literal. */
+ * Pixel grid: wherever the column is 928px or more the drawing is 1:1 (a narrower column crops its
+ * ends: kitchen.css), so everything sits half a unit off the whole numbers it is written in (one
+ * translate), which puts every 1px line on a pixel row at 1x and 2x alike. The box's 1.5px outline
+ * is drawn a quarter unit inside its 45-unit square, and each focus ring's 1.5px a quarter unit
+ * off its whole number, so at 2x they cover exactly three device pixels. The internet cable and its
+ * label end 16 units short of the house's eave so that the longest crop (928 wide, x 36 to 964)
+ * still holds the whole word. All geometry is literal. */
 
 import type { FocusEvent, KeyboardEvent, PointerEvent } from "react";
 import { MARKS } from "~/components/marks";
@@ -142,14 +147,30 @@ function HitArea({ id }: { id: MachineId }) {
   );
 }
 
-/** The keyboard focus ring: the page's ring (2px, ink-1 at 70%). A rectangle round a machine would
- * cut the desk, lamp, shelf or floor it stands on, so a machine's ring circles its mark instead,
- * concentric with the disc and 2 units clear of it. The box's runs 2.5 clear of its outline over
- * its top and down its sides, and stops on the counter it stands on, so it never thickens the
- * counter's line. */
+/** The keyboard focus ring: 1.5px, ink-1 at 70%, round the machine itself (not its mark, which sits
+ * 40 units off) and 4 clear of its outline, with a 6-unit corner (the MacBook's is 3 clear on the
+ * side the lamp leans in from). A machine that stands on a desk, the attic floor or a shelf has its
+ * ring open at the bottom and ending on that surface's top edge, so it never thickens the surface's
+ * line; the box's does the same on its counter, 2.5 clear. The iPhone lies in the sofa, so its ring
+ * is closed. Under the ring goes a page-coloured plate (RingBack, drawn before the machine): it
+ * cuts the lines the ring crosses, as a label's halo does, and clears the room's own lines from
+ * inside it (the sofa's seams round the phone), so nothing makes a brighter knot or a second edge. */
+const RING: Record<MachineId, string> = {
+  box: "M474 469.5V426Q474 422 478 422H522Q526 422 526 426V469.5",
+  macbook: "M141.75 486.5V452.75A6 6 0 0 1 147.75 446.75H198.75A6 6 0 0 1 204.75 452.75V486.5",
+  laptop: "M245.75 486.5V456.75A6 6 0 0 1 251.75 450.75H297.75A6 6 0 0 1 303.75 456.75V486.5",
+  gaming: "M577.75 329.5V271.75A6 6 0 0 1 583.75 265.75H619.75A6 6 0 0 1 625.75 271.75V329.5",
+  oldpc: "M801.75 469.5V455.75A6 6 0 0 1 807.75 449.75H853.75A6 6 0 0 1 859.75 455.75V469.5",
+  iphone:
+    "M729.25 481.75H741.25A6 6 0 0 1 747.25 487.75V505.75A6 6 0 0 1 741.25 511.75H729.25A6 6 0 0 1 723.25 505.75V487.75A6 6 0 0 1 729.25 481.75Z",
+};
+
+function RingBack({ id }: { id: MachineId }) {
+  return <path className="k-ring-back" d={RING[id]} />;
+}
+
 function Ring({ id }: { id: MachineId }) {
-  if (id === "box") return <path className="k-ring" d="M474 470V426Q474 422 478 422H522Q526 422 526 426V470" />;
-  return <circle className="k-ring" cx={MARK[id].x} cy={MARK[id].y} r="12.5" />;
+  return <path className="k-ring" d={RING[id]} />;
 }
 
 /** Each machine's own drawing: its structure (`s`) and its hidden lines (`f`, the graphics card). */
@@ -245,7 +266,7 @@ export function KitchenDrawing({
         {/* the break in the internet cable: a 32-unit gap opened from its centre */}
         <mask id={`${uid}-gap`} maskUnits="userSpaceOnUse" x="0" y="84" width="1000" height="524">
           <rect x="0" y="84" width="1000" height="524" fill="#fff" />
-          <rect className="k-gap" x="858" y="562" width="32" height="20" fill="#000" />
+          <rect className="k-gap" x="842" y="562" width="32" height="20" fill="#000" />
         </mask>
       </defs>
 
@@ -301,10 +322,10 @@ export function KitchenDrawing({
               along the counter's underside (on its line, so no third line shows inside it) to the
               cabinets' divider and goes down that seam, so it never crosses a cabinet door; the
               ticks cross exactly at the break's two ends. */}
-          <path className="k-s" d="M516 470V478H543V572H910" mask={`url(#${uid}-gap)`} />
+          <path className="k-s" d="M516 470V478H543V572H894" mask={`url(#${uid}-gap)`} />
           <path
             className="k-s m-fade"
-            d="M854 577L862 567M886 577L894 567"
+            d="M838 577L846 567M870 577L878 567"
             style={{ ["--at" as string]: "1350ms", ["--for" as string]: "200ms" }}
           />
         </g>
@@ -326,6 +347,7 @@ export function KitchenDrawing({
                 {...bind("box")}
               >
                 <HitArea id="box" />
+                <RingBack id="box" />
                 <Ring id="box" />
               </g>
             );
@@ -342,6 +364,7 @@ export function KitchenDrawing({
               {...bind(id)}
             >
               <HitArea id={id} />
+              <RingBack id={id} />
               <MachineArt id={id} />
               <circle className="k-disc" cx={mark.x} cy={mark.y} r="9" />
               {/* even-odd, so a mark drawn with a cut-out (the penguin's belly) keeps it */}
@@ -361,7 +384,7 @@ export function KitchenDrawing({
         </g>
 
         <g aria-hidden="true" className="k-labels">
-          <text className="fig-label" x="918" y="576">
+          <text className="fig-label" x="902" y="576">
             internet
           </text>
           {/* clear of the box's focus ring by 6 */}

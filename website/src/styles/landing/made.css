@@ -5,7 +5,9 @@
  * the bar together), min(880, 86%) on tablets and the width less 56 on phones, where they
  * start-align behind a 16px gutter so the next one peeks 24. Widths come from the gallery's own
  * inline size (cqi), so a slide and the padding that centres it agree without a
- * scrollbar-dependent 100vw.
+ * scrollbar-dependent 100vw. On phones the tile is also 4:3 and shows one part of its picture
+ * larger (the crop is in made.tsx), because at 334 wide the whole picture puts every label in the
+ * app at 3 or 4px.
  *
  * Dimming, hidden captions and the controls exist only under html[data-js]: the prerender and the
  * no-JS page show every slide at full strength with its caption, and no controls that would do
@@ -71,6 +73,11 @@
   object-position: top;
   -webkit-user-drag: none;
   user-select: none;
+}
+/* The two pictures on a cream ground (sankofa, anansi) are the brightest blocks on a dark page, and
+ * brighter than the hero's own phones: 6% down, which is rgba(8, 9, 10, .06) over them. */
+.made-slide[data-tone="light"] .made-shot img {
+  filter: brightness(0.94);
 }
 
 /* The caption is one link. Its 8/16 padding is the focus ring's room, taken back from the 28px gap,
@@ -339,8 +346,29 @@ html[data-js] .made-controls {
   .made-slide {
     scroll-snap-align: start;
   }
+  /* The tile is 4:3 and shows one part of its 16:10 picture, larger (the crop is in made.tsx, its
+   * numbers arrive as --z, --px, --py): at 334 wide the whole picture would put every label in the
+   * app at 3 or 4px. The image is placed by hand because object-fit can only crop to the tile, and
+   * this zooms past it. Its left and top are object-position's arithmetic: a percentage of the tile,
+   * (1 - z) of the width and (1 - z * 5/6) of the height (the picture is 16:10, the tile 4:3) times
+   * the window's place in the room that is left. */
   .made-shot {
+    aspect-ratio: 4 / 3;
     border-radius: 10px;
+  }
+  @supports (width: round(down, 1px, 1px)) {
+    .made-shot {
+      aspect-ratio: auto;
+      height: round(var(--slide) * 0.75, 1px);
+    }
+  }
+  .made-shot img {
+    position: absolute;
+    left: calc((1 - var(--z, 1.2)) * var(--px, 0) * 100%);
+    top: calc((1 - var(--z, 1.2) * 0.8333333) * var(--py, 0) * 100%);
+    width: calc(var(--z, 1.2) * 100%);
+    max-width: none;
+    height: auto;
   }
   .made-cap {
     align-items: flex-start;

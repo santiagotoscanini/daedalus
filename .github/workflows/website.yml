@@ -87,6 +87,8 @@ jobs:
           # an empty shell. Update alongside any hero rewrite.
           grep -q "You just talk to it." dist/client/index.html
           test -f dist/client/integrations/index.html
+          # the landing's three Start steps link into these notes (#box, #computers, #ask)
+          test -f dist/client/docs/index.html
           test -f dist/client/install.ps1
           test -f dist/client/install.sh
 

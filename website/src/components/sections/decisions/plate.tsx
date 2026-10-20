@@ -3,7 +3,11 @@
  * is a column of options, so the drawing holds every way the app could be built. The house cuts
  * seven columns the same way for every app, the request settles the last two, and the green path
  * is what is left: one way, from your request to your app. Each cut hands its question to a row of
- * the callout stack beside it, on an elbow leader, so the answers read as a list at a glance.
+ * the callout stack beside it, on an elbow leader, so the answers read as a list at a glance: the
+ * question leaves first and the leader and the row follow, so a leader never runs through words.
+ * While the cuts land a dashed ghost keeps the length the line used to be; the app's icon replaces
+ * it at the end, so the finished frame has no tail. What runs the answer under the pointer prints
+ * in the band under the ninth row ("Under the hood").
  *
  * This file also holds what both compositions share: the run (a pure function of time), and the
  * writer that paints it. The prerender is the finished frame for Pinch, so no-JS, reduced motion
@@ -79,7 +83,8 @@ const CUT_AT = [1200, 1560, 1890, 2190, 2470, 2740, 3000, 3900, 4700];
 const CUT_LEN = 560;
 /** The first 30% of a cut is the pick; the rest is the collapse. */
 const PICK = 0.3;
-/* A cut's question leaves before its row arrives, so the two never print over each other. */
+/* A cut's question leaves before its leader and its row arrive, so the elbow never runs through the
+ * words it is replacing and the same question is never printed twice. */
 const Q_OUT = 90;
 const ELBOW_LEN = 240;
 const ROW_IN = 200;
@@ -136,6 +141,8 @@ export type State = {
   pathA: number;
   replay: number;
   count: number;
+  /** The ghost: the dashed length the line used to be, seen while the cuts land and the line has no app yet. */
+  ghost: number;
 };
 
 const keepOf = (r: number) => [...HOUSE_KEEP, ...REQUESTS[r]!.keep];
@@ -155,8 +162,8 @@ export function run(ms: number, r: number, shown = false): State {
     t,
     pick: p.map((v) => OUT(clamp01(v / PICK))),
     qOut: CUT_AT.map((t0) => clamp01((ms - t0) / Q_OUT)),
-    elbow: CUT_AT.map((t0) => ease(ms, t0, ELBOW_LEN)),
-    row: CUT_AT.map((t0) => ease(ms, t0, ROW_IN)),
+    elbow: CUT_AT.map((t0) => ease(ms, t0 + Q_OUT, ELBOW_LEN)),
+    row: CUT_AT.map((t0) => ease(ms, t0 + Q_OUT, ROW_IN)),
     keep: keepOf(r),
     rowReq: r,
     quote: only(r, 1),
@@ -168,6 +175,8 @@ export function run(ms: number, r: number, shown = false): State {
     pathA: 1,
     replay: shown ? 1 : ease(ms, REPLAY_AT, REPLAY_LEN),
     count: crossed < LIT_AT.length ? RUNNING[crossed]! : paths(t),
+    // grows with the cuts (the line is shorter by what they took), gives way to the app at its end
+    ghost: clamp01(t.reduce((a, b) => a + b, 0)) * (1 - ease(ms, ICON_AT, ICON_LEN)),
   };
 }
 
@@ -206,6 +215,8 @@ export function undo(ms: number, r: number): State {
     icon: d.icon.map((x) => x * gone),
     pathA: gone,
     count: paths(counted),
+    // the app leaves the end of the line, and the tail it covered shows until the columns have reopened
+    ghost: clamp01(cuts.reduce((a, b) => a + b, 0)) * (1 - gone),
   };
 }
 
@@ -227,8 +238,8 @@ export function swap(ms: number, a: number, b: number): State {
     pick[c] = open ? OUT(clamp01(p / PICK)) : shut;
     // the questions come back as the columns finish reopening, and leave again at the new cut
     qOut[c] = open ? clamp01((ms - SW_CUT[k]) / Q_OUT) : 1 - clamp01((ms - 280) / 120);
-    elbow[c] = open ? ease(ms, SW_CUT[k], ELBOW_LEN) : 1 - out;
-    row[c] = open ? ease(ms, SW_CUT[k], ROW_IN) : 1 - out;
+    elbow[c] = open ? ease(ms, SW_CUT[k] + Q_OUT, ELBOW_LEN) : 1 - out;
+    row[c] = open ? ease(ms, SW_CUT[k] + Q_OUT, ROW_IN) : 1 - out;
   }
   const drawn = ms >= SW_PATH;
   return {
@@ -327,7 +338,8 @@ export type Comp = {
   dots: El[];
   qs: El[];
   rows: El[];
-  /** The narrow leaders. */
+  /** The narrow leaders (row 1 has two: the straight one and, for the narrowest phones, the jogged one);
+   * each names its row in `data-lead`. */
   leads: El[];
   /** Rows 8 and 9's answer text. */
   answers: El[];
@@ -360,7 +372,7 @@ export function collect(root: Element): Comp {
     dots: indexed("data-dot"),
     qs: indexed("data-q"),
     rows: indexed("data-row"),
-    leads: indexed("data-lead"),
+    leads: all("[data-lead]"),
     answers: indexed("data-answer"),
     icons: indexed("data-icon"),
     labels: indexed("data-label"),
@@ -544,9 +556,10 @@ export function Foot({ onReplay }: { onReplay: () => void }) {
  * The wide composition.
  * ------------------------------------------------------------------ */
 
-/** Plate units above the quote, where the top corner marks sit: the request gets the same air above
- * it as the tree has below. */
-const TOP = 24;
+/** Plate units above the tree's origin: the corner marks and the request sit up here. The request
+ * stays 24 below the top marks (decisions.css), so the 8 over that are air between the request and
+ * the first of its nine answers: the rows read as the answers to a question, not as a tenth row. */
+const TOP = 32;
 /** Callout row k's height (the elbow's run and the row's centre). */
 const rowY = (k: number) => 40 + 24 * k;
 /** The elbows end here; the questions start 10 later, the answers at 642. */
@@ -560,6 +573,12 @@ const END_BASE = 399;
 /** The request's node and its dashed leader share one crisp vertical, half a unit right of the axis's
  * start (60): the edges and the green path leaving it begin under the node, so nothing shows the half. */
 const START_X = crisp(WIDE.axis0);
+/** The green path is 1.5px: centred on a quarter unit past the axis it covers exactly three device
+ * pixels at 2x (a hairline-sized line on the half unit would cover four, two of them soft). The rings
+ * it runs through are 7 units wide, so the quarter is not seen. */
+const PATH_Y = WIDE.cross + 0.25;
+/** The "Under the hood" line: in the empty band under the ninth row, at the questions' column. */
+const UNDER_Y = rowY(8) + 28;
 
 const OPEN_W = frame(ALL_OPEN, keepOf(0), WIDE);
 const F = frame(ALL_CUT, keepOf(0), WIDE);
@@ -625,11 +644,14 @@ export function paintWide(c: Comp, S: State, put: Put) {
     put(c.yourApp, "opacity", r2(S.endA * (1 - clamp01(2 * icon))));
   }
   if (c.path) {
-    put(c.path, "d", `M${WIDE.axis0} ${WIDE.cross}H${ex}`);
+    put(c.path, "d", `M${WIDE.axis0} ${PATH_Y}H${ex}`);
     put(c.path, "stroke-dashoffset", r2(1 - S.path));
     put(c.path, "opacity", r2(S.pathA));
   }
-  if (c.ghost) put(c.ghost, "opacity", r2(clamp01(S.t.reduce((a, b) => a + b, 0))));
+  // The ghost keeps the length the line used to be while the cuts land; the icon arriving at the end
+  // says where the line stopped, so the tail gives way to it. A request swapped after that moves
+  // only the last two columns, and the finished picture does not grow its tail back.
+  if (c.ghost) put(c.ghost, "opacity", r2(S.ghost));
   if (c.ghostLine) put(c.ghostLine, "x1", ex);
   paintCommon(c, S, put);
 }
@@ -675,7 +697,7 @@ export const PlateWide = memo(function PlateWide({ onHot, onReplay }: PlateProps
               />
             ))}
             {/* the request drops into the tree: the leader lands on the start node's edge (r 2.6) */}
-            <path d={`M${START_X} ${r1(WIDE.cross - 2.6)}V32`} strokeDasharray="2 3" />
+            <path d={`M${START_X} ${r1(WIDE.cross - 2.6)}V24`} strokeDasharray="2 3" />
             {EDGES.map((e, i) => {
               const a = F.nodes[e.a]!;
               const b = F.nodes[e.b]!;
@@ -685,14 +707,15 @@ export const PlateWide = memo(function PlateWide({ onHot, onReplay }: PlateProps
           </g>
           <path
             data-path
-            d={`M${WIDE.axis0} ${WIDE.cross}H${END_X}`}
+            d={`M${WIDE.axis0} ${PATH_Y}H${END_X}`}
             stroke={GREEN}
             strokeWidth={1.5}
             pathLength={1}
             strokeDasharray="1 1"
             strokeDashoffset={0}
           />
-          <g data-ghost stroke="var(--ink-faint)">
+          {/* the finished frame has the app's icon at the end of the line, so no tail past it */}
+          <g data-ghost stroke="var(--ink-faint)" opacity={0}>
             <line
               data-ghostline
               x1={END_X}
@@ -761,6 +784,14 @@ export const PlateWide = memo(function PlateWide({ onHot, onReplay }: PlateProps
                   </span>
                 )}
               </div>
+            ))}
+          </div>
+          {/* what runs the answer being read, where the eye already is (the foot is 400 units away) */}
+          <div aria-hidden className="dc-under-at" style={at(466, UNDER_Y)}>
+            {COLUMNS.slice(0, 7).map((col, k) => (
+              <span key={k} data-under={k} className="dc-under">
+                Under the hood: {col.under}
+              </span>
             ))}
           </div>
           {REQUESTS.map((r, i) => (

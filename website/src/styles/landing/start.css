@@ -75,12 +75,19 @@
   text-wrap: pretty;
   color: var(--color-ink-2);
 }
-/* a ComingLine: the ring in a column of its own, so a second line starts under the words */
+@media (min-width: 640px) {
+  .start-text {
+    text-wrap: balance;
+  }
+}
+/* a ComingLine: the ring in a column of its own, so a second line starts under the words. Never
+ * more than three lines, so balanced: the break falls where the line is evenly split, at a
+ * sentence's end where there is one, and no line is left with "install it." alone */
 .start-next {
   margin-top: 12px;
 }
 .start-next .coming-text {
-  text-wrap: pretty;
+  text-wrap: balance;
 }
 /* a link inside a caption: the caption's own grey, underlined, like the sources under the chart,
  * with 2px of air inside it (given back by the margin) for the focus tint */
@@ -99,6 +106,11 @@
 .start-link:hover {
   color: var(--color-ink-2);
   text-decoration-color: rgba(200, 202, 207, 0.5);
+}
+/* in a step's own sentence, which is already ink-2, the hover steps up to ink-1 */
+.start-text .start-link:hover {
+  color: var(--color-ink-1);
+  text-decoration-color: rgba(245, 246, 247, 0.6);
 }
 /* focused, the tint every link inside a sentence takes (.link), never a ring: a ring round words in
  * a sentence crosses their neighbours. The transparent outline is for forced colours. */
@@ -124,6 +136,43 @@
 .start-req {
   margin-top: 10px;
 }
+/* said only where the download cannot run (see the swap below) */
+.start-onmac {
+  display: none;
+  margin-top: 10px;
+}
+.start-onmac + .start-req {
+  margin-top: 0;
+}
+
+/* Where the Mac download is no use (a phone, a tablet, anything held), the filled button is the
+ * one a reader can use there: the setup notes. The two swap looks and keep their markup, so the
+ * page still has one filled button in the viewport and a reader never meets a primary button that
+ * downloads a file their device cannot open. The steps' own selector outranks the button classes. */
+@media (max-width: 767.98px), (pointer: coarse) {
+  .start-steps .start-mac {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-ink-1);
+    box-shadow: inset 0 0 0 1px var(--color-edge-2);
+  }
+  .start-steps .start-mac:hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+  .start-steps .start-setup {
+    background: var(--color-ink-1);
+    color: #08090a;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.6),
+      0 1px 2px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  }
+  .start-steps .start-setup:hover {
+    background: #fff;
+  }
+  .start-onmac {
+    display: block;
+  }
+}
 
 /* each sentence on its own balanced line: the first is about 610px of 15px type */
 .start-close {
@@ -147,6 +196,16 @@
   gap: 8px;
   border-radius: 4px;
   font: 500 14px/20px var(--font-sans);
+}
+/* 20px tall to the eye, 44 to a finger: the link grows to it and the paragraph above gives the
+ * height back, so the column keeps its rhythm */
+@media (max-width: 639.98px), (hover: none) {
+  .start-repo {
+    margin-top: 4px;
+  }
+  .start-repo > a {
+    min-height: 44px;
+  }
 }
 
 /* phones: the same sequence, buttons included. They keep their own width (about 200, so under

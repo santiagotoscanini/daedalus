@@ -33,6 +33,14 @@
   /* the room the chosen one's underline takes under the words */
   padding-bottom: 8px;
 }
+/* The five items and four gaps add up to an odd 509px, so centred in an even column every icon sat
+ * on a half pixel (blurred on a 1x screen). One pixel on the left makes the free space even. On a
+ * phone the strip starts on the gutter instead, so it keeps its edge. */
+@media (min-width: 640px) {
+  .dc-sel {
+    padding-left: 1px;
+  }
+}
 /* an item is its words and nothing else, so its focus ring sits level around them; the underline
  * and the finger's 44 are drawn outside the box */
 .dc-sel-item {
@@ -91,10 +99,6 @@ html:not([data-js]) :is(.dc-label, .dc-strip) {
 html:not([data-js]) .dc-plate {
   margin-top: 0;
 }
-/* and the readout, which only a row under the pointer, finger or keyboard can fill, keeps no room */
-html:not([data-js]) .dc-readout {
-  display: none;
-}
 
 /* ------------------------------------------------------------------ *
  * The plate, shared.
@@ -107,7 +111,8 @@ html:not([data-js]) .dc-readout {
   /* narrow, the plate takes the prose's column (620, or the full width when narrower), so the
    * section keeps one left edge; the drawing is placed in pixels, so only the answers gain the width */
   max-width: 620px;
-  margin: 40px auto 0;
+  /* --snap is the fraction of a pixel script adds so the plate's top lands on a whole one */
+  margin: calc(40px + var(--snap, 0px)) auto 0;
 }
 .dc-quotes {
   display: grid;
@@ -174,10 +179,33 @@ html:not([data-js]) .dc-readout {
   border-radius: 4px;
   outline-offset: 4px;
 }
-.dc-readout {
-  min-height: 16px;
-  margin-top: 20px;
-  text-align: center;
+
+/* "Under the hood": what runs the answer being read. Each composition prints it by the row (the wide
+ * plate in the band under the ninth row, the narrow one in a card under the tapped row). It is
+ * shown by the row's data-hot (decisions.tsx) and never while a run is changing the drawing. */
+.dc-under,
+.dc-n-under {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-variant-ligatures: none;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--d-1) var(--ease-ui),
+    visibility 0s linear var(--d-1);
+  pointer-events: none;
+}
+.dc-under[data-hot],
+.dc-n-under[data-hot] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--d-1) var(--ease-ui);
+}
+.dc-plate[data-live] [data-under] {
+  visibility: hidden;
 }
 
 .dc-caption {
@@ -200,9 +228,9 @@ html:not([data-js]) .dc-readout {
 }
 .dc-stage {
   position: relative;
-  /* the drawing is 1000 x 464 units; its box is rounded up to a whole pixel, so nothing below it on the
+  /* the drawing is 1000 x 472 units; its box is rounded up to a whole pixel, so nothing below it on the
    * page (other sections' hairlines included) lands on half a pixel */
-  height: round(up, 46.4cqw, 1px);
+  height: round(up, 47.2cqw, 1px);
 }
 .dc-svg {
   display: block;
@@ -296,6 +324,22 @@ html:not([data-js]) .dc-readout {
   stroke: rgba(255, 255, 255, 0.6);
 }
 
+/* in the questions' column, 28 under the ninth row's line; two lines at most (the longest runs to
+ * about 590 units) in the band no drawing reaches */
+.dc-under-at {
+  display: grid;
+  width: calc(534 * var(--u));
+  box-sizing: border-box;
+  padding-inline: calc(4 * var(--u));
+}
+.dc-under {
+  grid-area: 1 / 1;
+  font-size: calc(11 * var(--u));
+  line-height: calc(16 * var(--u));
+  color: var(--color-ink-3);
+  text-wrap: balance;
+}
+
 .dc-icon {
   width: calc(40 * var(--u));
   height: calc(40 * var(--u));
@@ -369,13 +413,16 @@ html:not([data-js]) .dc-readout {
   width: 100%;
   height: 100%;
 }
+/* --g is where the words start (plate-narrow.tsx); --top is the row's own, so the first can take
+ * another on the narrowest phones */
 .dc-n-row {
   position: absolute;
+  top: var(--top);
   /* shrink-wrapped, so a focus ring hugs the words instead of running on to the page's edge; a line
    * too long for the column is cut short below. The 4 of padding hold the ring off the glyphs and
    * the margin takes them back, so the words stay where the stage places them */
   width: max-content;
-  max-width: calc(100% - 84px);
+  max-width: calc(100% - var(--g) + 4px);
   margin-left: -4px;
   padding-inline: 4px;
   display: flex;
@@ -384,10 +431,59 @@ html:not([data-js]) .dc-readout {
   -webkit-tap-highlight-color: transparent;
 }
 /* placed, not flowed: every line fits at 360px with Geist; a fallback font is cut short, never overlaps */
-.dc-n-row > * {
+.dc-n-row > :not(.dc-n-under) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* the first answer is the longest: one line from 356px (it needs 264 and the row has 6 more at 358),
+ * two below that, with its row a line higher and its leader jogged to meet it */
+.dc-n-br {
+  display: none;
+}
+.dc-n-svg [data-wrap] {
+  display: none;
+}
+@container dc-fig (max-width: 355.98px) {
+  .dc-n-br {
+    display: inline;
+  }
+  .dc-n-row[data-first] {
+    top: var(--top-wrap);
+  }
+  .dc-n-svg [data-lead="0"]:not([data-wrap]) {
+    display: none;
+  }
+  .dc-n-svg [data-wrap] {
+    display: inline;
+  }
+}
+/* what runs the tapped answer: a card from the plate's left edge, 4 under its row, over the rows
+ * below it (they stay one tap away, since the card takes no pointer). It is two lines of 16 and 8 of
+ * padding, 48 tall, so with the rows 46 apart its bottom edge falls in the air between two rows and
+ * never cuts a line of words in half; the longest answer's 90 characters of mono at 10.5 keep to two
+ * lines down to a 328px column (a 320px phone's runs to three, and shows a sliver of the row under) */
+.dc-n-under {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 4px);
+  left: calc(4px - var(--g));
+  box-sizing: border-box;
+  width: min(100cqw, 420px);
+  /* never shorter than two lines, so a one-line answer's card ends in the same air */
+  min-height: 48px;
+  display: grid;
+  align-content: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--color-raise-2);
+  box-shadow:
+    0 0 0 1px var(--color-edge-3),
+    0 12px 24px -8px rgba(0, 0, 0, 0.7);
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--color-ink-2);
+  text-wrap: balance;
 }
 /* 30 tall to the eye, 44 to a finger: the rows are 46 apart, so no two hit areas meet */
 .dc-n-row::before {
@@ -399,7 +495,7 @@ html:not([data-js]) .dc-readout {
   outline-offset: 1px;
 }
 .dc-n-q {
-  font: 400 11.5px/14px var(--font-sans);
+  font: 400 12px/14px var(--font-sans);
   color: var(--color-ink-4);
 }
 .dc-n-a {
@@ -441,13 +537,13 @@ html:not([data-js]) .dc-readout {
     scrollbar-width: none;
     overscroll-behavior-x: contain;
     --fade-l: 0px;
-    --fade-r: 24px;
+    --fade-r: 32px;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
     mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
   }
   /* script says which ends have more to scroll to */
   .dc-strip[data-more-l] {
-    --fade-l: 24px;
+    --fade-l: 32px;
   }
   .dc-strip[data-at-end] {
     --fade-r: 0px;
@@ -467,12 +563,6 @@ html:not([data-js]) .dc-readout {
   }
   .dc-sel-item::before {
     inset: -16px -12px -8px;
-  }
-  /* the readout follows the narrow plate's left edge, like everything under it, and keeps room for a
-   * second line, so a tap never moves the caption */
-  .dc-readout {
-    min-height: 32px;
-    text-align: left;
   }
 }
 @media (min-width: 640px) {
@@ -495,10 +585,28 @@ html:not([data-js]) .dc-readout {
     text-wrap: pretty;
   }
 }
-/* on a phone the label over the requests starts at the same edge as the strip under it */
+/* on a phone the label over the requests starts at the same edge as the strip under it, and the
+ * request's opening quote mark stays inside the 16px gutter: the mark sits on the edge and every
+ * line's words start half an em in, where the first line's do after the mark */
 @container dc-fig (max-width: 639.98px) {
   .dc-label {
     text-align: left;
+  }
+  /* closer together, so the row stops mid-item at the screen's edge and the next one peeks out of the
+   * fade (at 24 apart the fourth ended on the edge and nothing said there was a fifth); the finger's
+   * 44 stays, now touching its neighbour's instead of overlapping it */
+  .dc-sel {
+    gap: 16px;
+  }
+  .dc-sel-item {
+    gap: 6px;
+  }
+  .dc-sel-item::before {
+    inset: -16px -8px -8px;
+  }
+  .dc-quote {
+    padding-left: 0.5em;
+    text-indent: -0.5em;
   }
 }
 
@@ -509,6 +617,6 @@ html:not([data-js]) .dc-readout {
     font-size: 12px;
   }
   .dc-n-row {
-    max-width: calc(100% - 76px);
+    max-width: calc(100% - var(--g) + 12px);
   }
 }

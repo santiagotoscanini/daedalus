@@ -1,49 +1,60 @@
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { iconUrl } from "~/data/icons";
 import { SHOWN, type Service } from "~/data/services";
 
-/** Everything it touches, as a wall: every integration and hosted app on one grid of glass tiles that
- * drifts, row against row, under the /integrations page's own heading. The wall is plain DOM in the
- * prerender, so the icons are crisp vectors and nothing swaps in after first paint; script only adds
- * the motion and the fade-in once the icons have decoded. One RAF clock drives it: the rows' ambient
- * drift and the scroll's push are summed, never traded, so scrolling cannot fight the drift; sizes
- * are cached and the scroll is read as scrollY, so a frame costs no layout.
+/** Everything it touches, as a wall: every integration and hosted app on one still grid of glass
+ * tiles, under the /integrations page's own heading. The wall is plain DOM in the prerender, so the
+ * icons are crisp vectors and nothing swaps in after first paint; script only fades it in once the
+ * icons have decoded. Nothing on it moves: it is a reference, not a show.
  *
- * Holding a tile (hover, focus, a tap) lifts it, freezes the wall, dims the rest, and shows its name
- * in ONE label that lives outside the wall's clipping and masking, placed from the tile's own box and
- * slid inward at the screen's edges. A tile's repeated copy (the wrap-around of the row) is its own
- * element: holding one highlights that one only.
- * Reduced motion: the same tiles as a still, wrapped grid. */
-
-const SPEEDS = [19, 15, 23, 17, 20];
-
-function rowsOf(list: Service[], n: number) {
-  const rows: Service[][] = Array.from({ length: n }, () => []);
-  list.forEach((s, i) => rows[i % n]!.push(s));
-  return rows;
-}
+ * Holding a tile (hover, focus, a tap) steps its fill, dims the rest, and shows its name in ONE label
+ * that lives outside the wall's clipping, placed from the tile's own box and slid inward at the
+ * screen's edges. */
 
 type Pick = (key: string | null, el?: HTMLElement, name?: string) => void;
 
-function Tile({ s, copy, k, sel, pick, touch }: { s: Service; copy: boolean; k: string; sel: string | null; pick: Pick; touch: boolean }) {
+/** The column count in [lo, hi] whose last row is fullest (a full last row counts as 1, so a count
+ * that divides the tiles evenly wins; a tie goes to the wider grid). The wall steps its columns with
+ * the viewport, and choosing each step's count from the number of tiles means a tile added to or
+ * dropped from services.ts never leaves one or two on a row of their own. */
+function pickCols(n: number, lo: number, hi: number): number {
+  let best = hi;
+  let fill = -1;
+  for (let c = hi; c >= lo; c--) {
+    const f = n % c === 0 ? 1 : (n % c) / c;
+    if (f > fill + 0.001) {
+      best = c;
+      fill = f;
+    }
+  }
+  return best;
+}
+
+/** One count per step of the wall's width (styles.css: phones, then 768, 1024 and 1280 up). */
+const COLS = {
+  "--uv-cols-s": pickCols(SHOWN.length, 5, 6),
+  "--uv-cols-m": pickCols(SHOWN.length, 5, 7),
+  "--uv-cols-l": pickCols(SHOWN.length, 7, 9),
+  "--uv-cols-xl": pickCols(SHOWN.length, 10, 11),
+} as CSSProperties;
+
+function Tile({ s, sel, pick, touch }: { s: Service; sel: string | null; pick: Pick; touch: boolean }) {
   return (
     <button
       type="button"
       className="uv-t"
-      data-on={sel === k ? "" : undefined}
-      aria-label={copy ? undefined : s.name}
-      aria-hidden={copy || undefined}
-      tabIndex={copy ? -1 : 0}
-      title={copy ? undefined : s.name}
+      data-on={sel === s.id ? "" : undefined}
+      aria-label={s.name}
+      title={s.name}
       onPointerEnter={(e) => {
-        if (e.pointerType === "mouse") pick(k, e.currentTarget, s.name);
+        if (e.pointerType === "mouse") pick(s.id, e.currentTarget, s.name);
       }}
       onPointerLeave={(e) => {
         if (e.pointerType === "mouse") pick(null);
       }}
-      onFocus={(e) => pick(k, e.currentTarget, s.name)}
+      onFocus={(e) => pick(s.id, e.currentTarget, s.name)}
       onBlur={() => pick(null)}
-      onClick={(e) => pick(touch && sel === k ? null : k, e.currentTarget, s.name)}
+      onClick={(e) => pick(touch && sel === s.id ? null : s.id, e.currentTarget, s.name)}
     >
       <span className="uv-glass">
         <img src={iconUrl(s.id)} alt="" width={44} height={44} decoding="async" draggable={false} />
@@ -55,17 +66,12 @@ function Tile({ s, copy, k, sel, pick, touch }: { s: Service; copy: boolean; k: 
 export function Universe() {
   const [sel, setSel] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<"static" | "live" | "still">("static");
   const [ready, setReady] = useState(false);
   const [touch, setTouch] = useState(false);
-  const [rowsN, setRowsN] = useState(4);
   const sec = useRef<HTMLElement>(null);
   const wall = useRef<HTMLDivElement>(null);
   const label = useRef<HTMLDivElement>(null);
-  const rowEls = useRef<Array<HTMLDivElement | null>>([]);
-  const selRef = useRef<string | null>(null);
   const selEl = useRef<HTMLElement | null>(null);
-  selRef.current = sel;
 
   const pick: Pick = (key, el, nm) => {
     selEl.current = key ? (el ?? null) : null;
@@ -74,11 +80,13 @@ export function Universe() {
   };
 
   useEffect(() => {
-    const phone = window.matchMedia("(max-width: 767px)").matches;
     setTouch(window.matchMedia("(hover: none)").matches);
-    setRowsN(phone ? 5 : 4);
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setMode(reduced ? "still" : "live");
+    // a tap outside the wall puts the name away
+    const away = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest(".uv-t")) pick(null);
+    };
+    window.addEventListener("pointerdown", away, { passive: true });
+    return () => window.removeEventListener("pointerdown", away);
   }, []);
 
   // the one label: laid out from the held tile's box, inside the screen, never clipped
@@ -114,100 +122,14 @@ export function Universe() {
     return () => {
       off = true;
     };
-  }, [rowsN]);
-
-  useEffect(() => {
-    if (mode !== "live") return;
-    const section = sec.current;
-    if (!section) return;
-    let raf = 0;
-    let visible = true;
-    let last = performance.now();
-    let pt = 0;
-    let fs = -999;
-    let sf = 1;
-    let top = 0;
-    let widths: number[] = [];
-    const measure = () => {
-      widths = rowEls.current.map((r) => (r?.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0);
-      top = section.getBoundingClientRect().top + window.scrollY;
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(section);
-    void document.fonts?.ready.then(measure);
-    const io = new IntersectionObserver(([e]) => {
-      visible = !!e?.isIntersecting;
-    });
-    io.observe(section);
-    const loop = (now: number) => {
-      raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      if (!visible || document.hidden) return;
-      if (selRef.current) {
-        // held: the wall stands still, so the label stays under its tile
-        sf = 0;
-        return;
-      }
-      sf += (1 - sf) * (1 - Math.exp(-dt * 4));
-      pt += dt * sf;
-      const target = (window.scrollY - top) / Math.max(1, window.innerHeight);
-      if (fs < -500) fs = target;
-      fs += (target - fs) * (1 - Math.exp(-dt * 24));
-      const sp = fs * 240;
-      rowEls.current.forEach((row, i) => {
-        const W = widths[i];
-        if (!row || !W) return;
-        const d = i % 2 ? -1 : 1;
-        const p = (SPEEDS[i % SPEEDS.length] ?? 18) * pt + sp * d + i * W * 0.31;
-        const m = ((p % W) + W) % W;
-        row.style.transform = d > 0 ? `translate3d(${(-m).toFixed(2)}px,0,0)` : `translate3d(${(m - W).toFixed(2)}px,0,0)`;
-      });
-    };
-    raf = requestAnimationFrame(loop);
-    // a tap outside the wall puts the name away
-    const away = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement).closest(".uv-t")) pick(null);
-    };
-    window.addEventListener("pointerdown", away, { passive: true });
-    return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-      io.disconnect();
-      window.removeEventListener("pointerdown", away);
-    };
-  }, [mode, rowsN]);
-
-  const rows = rowsOf(SHOWN, rowsN);
+  }, []);
 
   return (
-    <section ref={sec} id="universe" data-mode={mode} aria-label="Every service, as a wall of marks" className="uv relative">
+    <section ref={sec} id="universe" aria-label="Every service, as a wall of marks" className="uv relative">
       <div ref={wall} className="uv-wall" data-ready={ready ? "" : undefined} data-sel={sel ? "" : undefined}>
-        <div className="uv-glow" aria-hidden />
-        <div className="uv-plane">
-          {rows.map((row, i) => (
-            <div key={i} className="uv-rowclip">
-              <div
-                ref={(n) => {
-                  rowEls.current[i] = n;
-                }}
-                className="uv-row"
-              >
-                <div className="uv-copy">
-                  {row.map((s) => (
-                    <Tile key={s.id} s={s} copy={false} k={`${i}:${s.id}:0`} sel={sel} pick={pick} touch={touch} />
-                  ))}
-                </div>
-                {mode !== "still" && (
-                  <div className="uv-copy" aria-hidden>
-                    {row.map((s) => (
-                      <Tile key={s.id} s={s} copy k={`${i}:${s.id}:1`} sel={sel} pick={pick} touch={touch} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+        <div className="uv-plane" style={COLS}>
+          {SHOWN.map((s) => (
+            <Tile key={s.id} s={s} sel={sel} pick={pick} touch={touch} />
           ))}
         </div>
       </div>
@@ -217,7 +139,7 @@ export function Universe() {
       <noscript>
         <style>{".uv-wall{opacity:1!important}"}</style>
       </noscript>
-      <p className="wrap t-small pb-20 pt-6 text-ink-4 sm:pb-28">
+      <p className="wrap t-small pb-16 pt-6 text-center text-ink-4 sm:pb-20">
         Logos are trademarks of their owners, shown only to say which service is meant.
       </p>
     </section>

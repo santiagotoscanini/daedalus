@@ -1,9 +1,11 @@
 /* The kitchen (#kitchen, components/sections/kitchen.tsx and kitchen/*): the cutaway drawing, its
- * readout, the phone list and the prose under them.
+ * caption slot, the phone list and the prose under them.
  *
- * The figure is its own container: from 880px of column it shows the whole house (1000 units, at
- * most 1000px, so at 1440 the box's centre is the page's centre); under that, the kitchen alone and
- * a list of the machines.
+ * The figure is its own container: from 880px of column it shows the house (1000 units, at most
+ * 1000px, so at 1440 the box's centre is the page's centre); under that, the kitchen alone, its
+ * caption and a list of the machines. Between 928 and 1000px the house is still drawn 1:1, with
+ * its two ends cropped by the column (the drawing keeps everything it says inside x 36 to 964):
+ * scaled down instead, every hairline would land on a fraction of a pixel and grey.
  *
  * The drawing's inks are the page's tokens (--ink-stroke .45, --ink-faint .14, --ink-run .30, the
  * label's .50) mixed opaque against the page colour. On the page they are the same colours, but a
@@ -43,9 +45,22 @@
   max-width: 1000px;
   height: round(calc(min(100cqi, 1000px) * 524 / 1000), 1px);
 }
+/* the plate clips the house's ends where the column is narrower than the house is drawn */
+.k-plate {
+  overflow: clip;
+}
+@container (min-width: 928px) and (max-width: 999.98px) {
+  .k-svg-wide {
+    width: 1000px;
+    max-width: none;
+    height: 524px;
+    /* centred on the column, and on a whole pixel so the lines are */
+    margin-inline: round(calc((100cqi - 1000px) / 2), 1px) 0;
+  }
+}
 .k-svg-narrow {
   max-width: 380px;
-  height: round(calc(min(100cqi, 380px) * 260 / 300), 1px);
+  height: round(calc(min(100cqi, 380px) * 282 / 300), 1px);
 }
 /* The close-up is shown at 0.96 to 1.27 a unit, so a label drawn in units would swing between 11 and
  * 14.6px. These sizes keep it at 13 to 14px rendered from a 320 phone to the widest the close-up
@@ -68,7 +83,7 @@
 @container (min-width: 560px) {
   .k-svg-narrow {
     max-width: 456px;
-    height: round(calc(min(100cqi, 456px) * 260 / 300), 1px);
+    height: round(calc(min(100cqi, 456px) * 282 / 300), 1px);
   }
   .k-svg-narrow .fig-label {
     font-size: 9px;
@@ -80,10 +95,10 @@
 .k-svg-narrow :is(path, rect, circle):not(.k-reveal) {
   vector-effect: non-scaling-stroke;
 }
-/* Between 880 and 1000 the whole house is shown a little smaller than it is drawn (.928 at 1024),
+/* Between 880 and 928 the whole house is shown a little smaller than it is drawn (.88 at 880),
  * which would thin every hairline to under a pixel and grey it. Its solid lines keep their 1px. The
  * runs keep scaling: their dashes are written out to fit each run's length in drawing units. */
-@container (min-width: 880px) and (max-width: 999.98px) {
+@container (min-width: 880px) and (max-width: 927.98px) {
   .k-svg-wide :is(path, rect, circle):not(.k-reveal, .k-body, .k-run) {
     vector-effect: non-scaling-stroke;
   }
@@ -146,7 +161,7 @@
 /* ---- the machines (wide only) ---- */
 
 .k-mach {
-  cursor: default;
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 /* The page's focus outline (base layer) would trace the group's whole box, hit areas included; the
@@ -165,9 +180,11 @@
   stroke: var(--k-f);
   transition: stroke var(--d-1) var(--ease-ui);
 }
+/* at rest a shade brighter than the hidden lines, so the mark reads as something to point at */
 .k-disc {
   fill: var(--color-page);
-  stroke: var(--k-f);
+  stroke: color-mix(in srgb, #fff 24%, var(--color-page));
+  transition: stroke var(--d-1) var(--ease-ui);
 }
 .k-mark {
   fill: var(--k-label);
@@ -183,17 +200,33 @@
 .k-mach[data-on] .k-mark {
   fill: var(--color-ink-1);
 }
-.k-ring {
+.k-mach[data-on] .k-disc {
+  stroke: var(--k-s);
+}
+/* the focus ring (drawing.tsx): 1.5px round the machine, over a page-coloured plate that cuts the
+ * lines it crosses and clears the room's own from inside it */
+.k-ring,
+.k-ring-back {
   fill: none;
   stroke: none;
-  stroke-width: 2;
   vector-effect: non-scaling-stroke;
+}
+.k-ring {
+  stroke-width: 1.5;
+}
+.k-ring-back {
+  stroke-width: 5;
 }
 .k-mach:focus-visible .k-ring {
   stroke: rgba(245, 246, 247, 0.7);
 }
+.k-mach:focus-visible .k-ring-back {
+  fill: var(--color-page);
+  stroke: var(--color-page);
+}
 
-/* ---- the readout: every machine's line stacked in one cell, the shown one opaque ---- */
+/* ---- the readout: every line stacked in one cell (the outage, then each machine), the shown one
+ * opaque ---- */
 
 .k-readout {
   position: relative;
@@ -233,14 +266,25 @@
   left: 0;
   right: 0;
   text-align: center;
-  color: var(--color-ink-4);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-ink-3);
 }
 
-/* ---- the phone list ---- */
+/* ---- the phone's caption and list ---- */
 
+/* the readout's outage line, set under the close-up: two balanced lines, centred on the axis */
+.k-outage {
+  max-width: 360px;
+  margin: 24px auto 0;
+  text-align: center;
+  text-wrap: balance;
+  font: 400 15px/24px var(--font-sans);
+  color: var(--color-ink-3);
+}
 .k-list {
   max-width: 620px;
-  margin: 24px auto 0;
+  margin: 32px auto 0;
   border-bottom: 1px solid var(--color-edge-1);
 }
 .k-row {
@@ -254,21 +298,12 @@
   margin-top: 3px;
   color: var(--color-ink-3);
 }
-.k-row-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
+/* the first line is the readout's lead ("Gaming PC upstairs."): the room is said in the sentence,
+ * never as a tag, because the close-up above shows no room but the kitchen */
 .k-row-name {
   font: 500 15px/22px var(--font-sans);
   letter-spacing: -0.01em;
   color: var(--color-ink-1);
-}
-.k-row-room {
-  flex: none;
-  font: 400 13px/22px var(--font-sans);
-  color: var(--color-ink-4);
 }
 /* on the narrowest phones a role takes two lines; balanced, it never leaves "the box." alone */
 .k-row-role {
@@ -278,8 +313,8 @@
 }
 .k-row-next {
   margin-top: 4px;
-  font: 400 13px/20px var(--font-sans);
-  color: var(--color-ink-4);
+  font: 400 14px/20px var(--font-sans);
+  color: var(--color-ink-3);
 }
 
 /* ---- the prose under the figure ---- */
