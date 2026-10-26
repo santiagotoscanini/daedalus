@@ -611,8 +611,10 @@ in
         # `update_strategy` alone is inert: the startup updater is gated on
         # the `pluginsAutoUpdate` feature toggle, which defaults to false.
         # One variable per toggle (the GF_FEATURE_TOGGLES_ENABLE list is
-        # deprecated since 13.2).
-        GF_FEATURE_TOGGLES_PLUGINSAUTOUPDATE = "true";
+        # deprecated since 13.2). The suffix is the toggle name AS WRITTEN:
+        # Grafana keeps its case, so an upper-cased PLUGINSAUTOUPDATE is a
+        # different, unknown toggle and the real one stays false.
+        GF_FEATURE_TOGGLES_pluginsAutoUpdate = "true";
 
         GF_USERS_ALLOW_SIGN_UP = "false";
         GF_SERVER_ROOT_URL = "https://${config.fleet.webApps.grafana.hostname}";
