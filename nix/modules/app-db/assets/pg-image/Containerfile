@@ -13,7 +13,7 @@ ARG BASE
 FROM ${BASE}
 RUN set -eux; \
     apk add --no-cache --virtual .build-deps build-base git; \
-    git clone --branch v0.8.5 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector; \
+    git clone --branch v0.8.7 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector; \
     cd /tmp/pgvector; \
     make OPTFLAGS="" with_llvm=no; \
     make OPTFLAGS="" with_llvm=no install; \

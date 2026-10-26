@@ -50,9 +50,9 @@
 }:
 
 let
-  version = "0.39.0";
-  # railpack v0.39.0's core/mise/version.txt — moves with `version`.
-  miseVersion = "2026.8.16";
+  version = "0.43.0";
+  # railpack v0.43.0's core/mise/version.txt — moves with `version`.
+  miseVersion = "2026.10.14";
 
   railpack = pkgs.stdenvNoCC.mkDerivation {
     pname = "railpack";
@@ -60,8 +60,8 @@ let
 
     src = pkgs.fetchurl {
       url = "https://github.com/railwayapp/railpack/releases/download/v${version}/railpack-v${version}-x86_64-unknown-linux-musl.tar.gz";
-      # = GitHub's asset digest sha256:728407f5cdb9e9bc1cdd07f568419344a20e71b0a5a9fd90a9cfbaca0a6c94f7
-      hash = "sha256-coQH9c256bwc3Qf1aEGTRKIOcbClqf2Qqc+6ygpslPc=";
+      # = GitHub's asset digest sha256:248a8f60f36854aabed6124113631078a802de3461660855fc4de9c26065c1fb
+      hash = "sha256-JIqPYPNoVKq+1hJBE2MQeKgC3jRhZghV/E3pwmBlwfs=";
     };
 
     # The tarball has no top-level directory: LICENSE, README.md, railpack.
@@ -98,8 +98,8 @@ let
 
     src = pkgs.fetchurl {
       url = "https://github.com/jdx/mise/releases/download/v${miseVersion}/mise-v${miseVersion}-linux-x64-musl.tar.gz";
-      # = GitHub's asset digest sha256:1445289f35e1a5a7216e1ffee5b34c5b9bd46793224e7e6c335503de9d9df0b2
-      hash = "sha256-FEUonzXhpachbh/+5bNMW5vUZ5MiTn5sM1UD3p2d8LI=";
+      # = GitHub's asset digest sha256:0f95d528ad0b8c54f7022be2ff22a36be149123ff9b27bdaa216d349a9f59c17
+      hash = "sha256-D5XVKK0LjFT3Aivi/yKja+FJEj/5snvaohbTSan1nBc=";
     };
 
     # Unpacks to mise/ — the same `mise/bin/mise` member railpack extracts.
@@ -133,7 +133,7 @@ in
     fleet.builder = {
       inherit railpack;
       # Same release as `version` above — bumped together, never apart.
-      railpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v${version}@sha256:db24dc37640b6887c3d455b40876ea30f75182964479670cba6e4cde7ffef103";
+      railpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v${version}@sha256:355ef61fae6f2551103cd8b10c710cb07167dd353d561f15c69b8d7ac1c676cc";
       miseBinary = "${mise}/bin/mise";
       misePath = "/tmp/railpack/mise/mise-${miseVersion}";
     };

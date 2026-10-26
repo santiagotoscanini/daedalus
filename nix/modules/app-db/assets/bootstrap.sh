@@ -80,12 +80,15 @@ done
 # cluster superuser in the app db + every extra db. The extension's
 # .so must be present in the pg image — the cluster image ships
 # pgvector (`vector`). Names are eval-validated to a safe identifier
-# shape, but quote defensively. Idempotent.
+# shape, but quote defensively. Idempotent. The UPDATE moves an existing
+# extension to the version the image's .so ships, so a pgvector bump in
+# the image reaches every db's catalog (a no-op when already current).
 for db in "$APP_NAME" $EXTRA_DBS; do
   for ext in $EXTENSIONS; do
     PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
       psql -X -v ON_ERROR_STOP=1 -U postgres -d "$db" \
-      -c "CREATE EXTENSION IF NOT EXISTS \"$ext\""
+      -c "CREATE EXTENSION IF NOT EXISTS \"$ext\"" \
+      -c "ALTER EXTENSION \"$ext\" UPDATE"
   done
 done
 

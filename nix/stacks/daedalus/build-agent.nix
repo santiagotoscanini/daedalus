@@ -99,7 +99,7 @@ let
   # digest, resolved 2026-09-12 with `skopeo inspect --raw
   # docker://docker.io/library/node:24-slim | sha256sum`. Bump by hand, with a
   # candidate build of a Dockerfile-strategy app before any live one.
-  nodeImage = "docker.io/library/node:24-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553";
+  nodeImage = "docker.io/library/node:24-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205";
 
   # The PATH of every process build.sh runs as the build user: its environment
   # is rebuilt from nothing, so this is all it gets.

@@ -110,7 +110,7 @@ let
   # The base pin, bumped by hand in the engine and listed on System ›
   # Updates. A patch or minor is this edit; a MAJOR is not — the data dir
   # needs pg_upgrade first.
-  pgBase = "docker.io/library/postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15";
+  pgBase = "docker.io/library/postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5";
   pgImageBuild = mkLocalImage {
     name = "pg-pgvector";
     bases.BASE = pgBase;

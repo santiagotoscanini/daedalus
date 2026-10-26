@@ -23,10 +23,12 @@
 //
 // How it hooks in
 // ---------------
-// `defineAPI` registers plugin middlewares BEFORE the built-in web router:
+// `defineAPI` (@verdaccio/server) registers plugin middlewares BEFORE the
+// built-in API and web routers:
 //
-//     plugins.forEach((p) => p.register_middlewares(app, auth, storage));
-//     app.use(endpointApi(...));   // <- built-in, first-match-wins loses
+//     for (const plugin of plugins) plugin.register_middlewares(app, auth, storage);
+//     app.use(apiEndpoints(...));   // <- built-in, first-match-wins loses
+//     app.use(await webMiddleware(...));
 //
 // so claiming the two routes here shadows the built-ins. Anything this
 // plugin cannot answer falls through via `next()` to the original handler,
@@ -110,17 +112,21 @@ async function mapPool(items, limit, fn) {
 module.exports = function cachedPackagesPlugin(config, options) {
   const logger = options.logger;
 
-  // The middleware loader runs with legacyMergeConfigs, so `config` is the
-  // whole verdaccio config with this plugin's own section merged on top.
+  // `config` is this plugin's own section only (verdaccio 7 loads
+  // middlewares without legacyMergeConfigs); the whole verdaccio config
+  // arrives as `options.config`.
+  const appConfig = options.config;
   const ttlMs =
     (Number(config.ttl) > 0 ? Number(config.ttl) : DEFAULT_TTL_SECONDS) * 1000;
-  const useGravatar = Boolean(config.web && config.web.gravatar);
-  const descending = Boolean(config.web && config.web.sort_packages === 'desc');
+  const useGravatar = Boolean(appConfig.web && appConfig.web.gravatar);
+  const descending = Boolean(
+    appConfig.web && appConfig.web.sort_packages === 'desc'
+  );
   // Per-package `storage:` overrides are not followed; this reads the one
   // global storage root, which is what a proxy registry writes its cache to.
   const storageDir = path.resolve(
-    path.dirname(config.configPath || config.self_path || ''),
-    config.storage || 'storage'
+    path.dirname(appConfig.configPath),
+    appConfig.storage || 'storage'
   );
 
   let cache = null;
@@ -147,23 +153,34 @@ module.exports = function cachedPackagesPlugin(config, options) {
     return names;
   }
 
-  function readManifest(storage, name, req) {
-    return new Promise((resolve) => {
-      storage.getPackage({
+  // Verdaccio 7's storage is promise-based: getPackage resolves to
+  // [manifest, errors] (a `callback` option is silently ignored, and the
+  // promise would be all that ever settles), and it reads
+  // `requestOptions.remoteAddress` unconditionally.
+  async function readManifest(storage, name, req) {
+    try {
+      const [manifest] = await storage.getPackage({
         name,
-        req,
         // Local read only: never let a UI page view fan out to the uplink.
         uplinksLook: false,
-        callback: (err, manifest) => resolve(err ? null : manifest),
+        requestOptions: {
+          host: req.hostname,
+          protocol: req.protocol,
+          headers: req.headers,
+          remoteAddress: req.ip,
+        },
       });
-    });
+      return manifest;
+    } catch {
+      return null;
+    }
   }
 
   // How many versions are actually HELD, which is not the same as the
   // number of versions the manifest knows about: a cached manifest carries
   // the uplink's entire version history (chalk: 44) while only the fetched
   // tarballs are on disk (chalk: 3). Verdaccio's own `_attachments` agrees
-  // with the disk for every package here, but `getPackage` blanks that
+  // with the disk for every package here, but `getPackage` may blank that
   // field, so count the tarballs instead of paying for a second parse.
   async function countHeldVersions(name) {
     try {
@@ -192,20 +209,15 @@ module.exports = function cachedPackagesPlugin(config, options) {
   // The publish list verdaccio would have shown on its own. Packages
   // published here also live in the storage dir, so this is what separates
   // "ours" from "cached from an uplink" in a storage scan.
-  function readPrivateNames(storage) {
-    return new Promise((resolve) => {
-      try {
-        storage.getLocalDatabase((err, packages) =>
-          resolve(
-            err || !Array.isArray(packages)
-              ? new Set()
-              : new Set(packages.map((pkg) => pkg.name))
-          )
-        );
-      } catch {
-        resolve(new Set());
-      }
-    });
+  async function readPrivateNames(storage) {
+    try {
+      const packages = await storage.getLocalDatabase();
+      return Array.isArray(packages)
+        ? new Set(packages.map((pkg) => pkg.name))
+        : new Set();
+    } catch {
+      return new Set();
+    }
   }
 
   async function rebuild(storage, req) {

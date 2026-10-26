@@ -33,12 +33,9 @@ auth:
 uplinks:
   npmjs:
     url: https://registry.npmjs.org/
-    # Package installs still proxy upstream; only SEARCH is kept local.
-    # npmjs rejects the `text=*` wildcard a catalogue search sends with a
-    # 400, which verdaccio surfaces as a recurring `uplink error` — and what
-    # anything here wants is the count of LOCALLY published packages, which
-    # is exactly what a local-only search returns.
-    search: false
+    # No per-uplink search switch since verdaccio 7: /-/v1/search always
+    # asks npmjs too (6.x's `search: false` is ignored). Nothing on the box
+    # searches any more; daedalus reads /-/cached-packages/stats.
 
 packages:
   '@*/*':
