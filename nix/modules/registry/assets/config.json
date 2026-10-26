@@ -43,7 +43,6 @@
     "auth": {
       "htpasswd": { "path": "/etc/zot/htpasswd" },
       "failDelay": 5,
-      "apikey": true,
       "openid": {
         "providers": {
           "oidc": {

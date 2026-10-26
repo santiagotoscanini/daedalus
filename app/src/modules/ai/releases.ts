@@ -3,7 +3,7 @@ import { CALENDAR_TAG } from '../../lib/release-tags'
 
 // Where the AI containers' release notes live. lemonade-logs is deliberately
 // absent: a stdlib-only bridge.py bind-mounted into an unmodified
-// `python:3.13-alpine`. The code in it is ours and is not in the image; what
+// `python:3.14-alpine`. The code in it is ours and is not in the image; what
 // ages is CPython and the Alpine packages under it. Do not point it at
 // `python/cpython`: that repo publishes no GitHub Releases (only tags —
 // CPython's notes live on python.org), so the panel renders an empty board, a

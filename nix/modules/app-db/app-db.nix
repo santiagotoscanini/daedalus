@@ -10,7 +10,7 @@
 # is non-empty (declaring an entry IS the enable signal — a cluster with no
 # tenant is not started). Materializes:
 #
-#   - One `pg` container (`postgres:18.4-alpine` with pgvector, built on the
+#   - One `pg` container (`postgres:18.6-alpine` with pgvector, built on the
 #     box from assets/pg-image) on the shared `app-db-net` bridge. Data at
 #     <stateRoot>/app-db/postgres, owner 100069:100069 (in-container UID 70
 #     = postgres mapped through the operator's subuid range).

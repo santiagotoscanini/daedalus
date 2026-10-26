@@ -9,9 +9,9 @@
 # which owns /data.
 #
 # Database on the shared app-db cluster (DB=postgres below); /data holds
-# only scratch state. Django migrations run automatically on container
-# start (uwsgi hook-pre-app), and the image's sendalerts/sendreports
-# daemons deliver notifications.
+# only scratch state. The image's run.sh migrates on start, then runs
+# gunicorn beside the sendalerts/sendreports daemons; any of them exiting
+# ends the container (container_up and the gatus probe both see it).
 #
 # SECURE_PROXY_SSL_HEADER makes Django trust traefik's X-Forwarded-Proto so
 # the HTTPS-terminated login POST passes Django's CSRF origin check.

@@ -5,9 +5,10 @@
 # host names — on the reference host, the videos folder of a media library,
 # so anything pulled here surfaces there.
 #
-# UID/GID env vars on this image are `UID`/`GID` (not the linuxserver
-# `PUID`/`PGID`). Container UID 0 maps to the operator in the rootless
-# setup, so UID=0 GID=0 = run as the user that owns the downloads dir.
+# The image reads `PUID`/`PGID` (`UID`/`GID` are its legacy names). Container
+# UID 0 maps to the operator in the rootless setup, so PUID=0 PGID=0 = run as
+# the user that owns the downloads dir; the image's "not recommended to run as
+# root" warning at start is expected.
 #
 # The host brings:
 #   fleet.modules.metube.enable        the switch (default off, as every catalog module)
@@ -90,8 +91,8 @@ in
       ];
 
       environment = {
-        UID = "0";
-        GID = "0";
+        PUID = "0";
+        PGID = "0";
         # Default INFO logs "Sending download history" to stderr on every
         # poll — journald err-priority noise.
         LOGLEVEL = "WARNING";

@@ -577,6 +577,16 @@ in
           "--entrypoints.traefik.address=:8080"
           "--entrypoints.cfweb.address=:8888"
 
+          # A header whose name aliases a managed one (Remote_User, Remote.User for
+          # Remote-User) reaches CGI/WSGI/PHP backends as that header, past the
+          # strip middlewares, which match the canonical spelling only. Delete
+          # them on every entrypoint rather than reject, so an odd client is not
+          # 400d.
+          "--entrypoints.web.http.aliasHeadersStrategy=delete"
+          "--entrypoints.websecure.http.aliasHeadersStrategy=delete"
+          "--entrypoints.traefik.http.aliasHeadersStrategy=delete"
+          "--entrypoints.cfweb.http.aliasHeadersStrategy=delete"
+
           # cloudflared dials cfweb from traefik-net; trust its
           # X-Forwarded-* (proto=https from the CF edge) or OIDC
           # middlewares build http:// redirect URIs and loop. Scoped to the
@@ -587,7 +597,10 @@ in
           # In-process OIDC forward-auth plugin (vendored — see oidcPlugin).
           "--experimental.localPlugins.oidc.moduleName=github.com/sevensolutions/traefik-oidc-auth"
         ]
-        ++ (lib.optional pgwireEnabled "--entrypoints.postgres.address=:5432")
+        ++ (lib.optionals pgwireEnabled [
+          "--entrypoints.postgres.address=:5432"
+          "--entrypoints.postgres.http.aliasHeadersStrategy=delete"
+        ])
         ++ [
 
           # Traefik v3's default readTimeout is 60s for a WHOLE request body, so a

@@ -14,7 +14,7 @@
 # mise is the third artifact of that release. `prepare` resolves versions by
 # running mise ON THE HOST, and railpack gets it by downloading
 # github.com/jdx/mise's release tarball with no checksum into a writable cache
-# (v0.39.0 core/mise/install.go). Its `ensureInstalled` only stats
+# (v0.43.0 core/mise/install.go). Its `ensureInstalled` only stats
 # `<InstallDir>/mise-<Version>` — InstallDir is /tmp/railpack/mise
 # (core/mise/mise.go), Version is core/mise/version.txt — and downloads when
 # the file is absent. So the build agent binds `miseBinary` read-only at
@@ -110,7 +110,7 @@ let
 
     # No `--version` install check: mise looks for updates over the network
     # when asked, and the sandbox has none. Checked by hand at pin time
-    # ("2026.8.16 linux-x64 (2026-08-31)"); railpack never re-checks a present
+    # ("2026.10.14 linux-x64 (2026-10-18)"); railpack never re-checks a present
     # binary.
     installPhase = ''
       runHook preInstall

@@ -23,8 +23,6 @@
 #     clients). A declarative `fleet.ssoClients.zot`; its id+secret come
 #     from the identity provider's render, not env.sops. Callback:
 #     <externalUrl>/zot/auth/callback/oidc.
-#   - apikey extension is on: a logged-in UI user can mint per-purpose
-#     basic-auth API keys if ever needed.
 #
 # Config is RENDERED at boot (mkSecretRender: OIDC id/secret + a
 # bcrypt htpasswd hashed from env.sops) to /run/registry/ — NOT

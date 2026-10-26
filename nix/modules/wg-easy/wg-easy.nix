@@ -462,6 +462,9 @@ in
 
         # Pocket ID SSO — see the header. Client id/secret arrive via the
         # ssoClients consumer env file; everything non-secret is here.
+        # X-Forwarded-Host/-For are honoured only from these (15.5+): traefik's
+        # pinned bridge, the same trust pocket-id's TRUST_PROXY grants.
+        TRUSTED_PROXIES = config.fleet.bridgeSubnets.traefik;
         OAUTH_PROVIDERS = "oidc";
         OAUTH_OIDC_SERVER = config.fleet.sso.issuerUrl;
         OAUTH_OIDC_NAME = "Pocket ID";
