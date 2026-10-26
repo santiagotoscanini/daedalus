@@ -1,10 +1,12 @@
 import type { Ctx } from '../../../core/ctx'
+import { logStacks } from '../../../core/site/switches'
 import { type EngineLock, repoFacts } from '../../../host/contract/domains/repo'
 import { type NixosFacts, siteIdentity } from '../../../host/contract/domains/site'
 import { readCommittedSite } from '../../../host/contract/domains/site-doc'
 import { type EngineUpdateStatus, readEngineUpdateStatus } from '../../../host/engine-update'
 import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../host/image-update'
 import { readWorkspaces, type Workspace, workspaceFor } from '../../../host/workspaces'
+import { type ServiceGroup, serviceGroups } from '../../../lib/dashboard/service-groups'
 import {
   type ContainerRow,
   type ManualRow,
@@ -49,6 +51,11 @@ export type UpdatesData = {
    * bump edits; a configuration base is `updatable`.
    */
   manual: ManualRow[]
+  /**
+   * Every row above, by the service it belongs to (lib/dashboard/service-groups):
+   * the unit the page draws. Keys are `c:<container>` / `m:<pin id>`.
+   */
+  groups: ServiceGroup[]
   /** Rows whose verdict is `tag-moved` or `newer-tag`, updatable or not. */
   behind: number
   /** When the registry probe last ran. Null if it never has. */
@@ -133,12 +140,13 @@ async function loadEngine(ctx: Ctx): Promise<EngineFacts> {
 }
 
 export async function loadUpdates(ctx: Ctx): Promise<UpdatesData> {
-  const [rows, manual, status, engine, site] = await Promise.all([
+  const [rows, manual, status, engine, site, stacks] = await Promise.all([
     updateRows(),
     manualRows(),
     readImageUpdateStatus(ctx),
     loadEngine(ctx),
     siteIdentity(),
+    logStacks(ctx),
   ])
 
   const checked = [...rows, ...manual]
@@ -148,6 +156,15 @@ export async function loadUpdates(ctx: Ctx): Promise<UpdatesData> {
   return {
     rows,
     manual,
+    groups: serviceGroups(stacks, [
+      ...rows.map((r) => ({ kind: 'container' as const, container: r.container })),
+      ...manual.map((r) => ({
+        kind: 'manual' as const,
+        container: r.container,
+        containers: r.containers,
+        engine: r.pinnedIn.repo === 'engine',
+      })),
+    ]),
     behind: rows.filter((r) => r.verdict === 'tag-moved' || r.verdict === 'newer-tag').length,
     checkedAt: checked.length === 0 ? null : (checked.sort().at(-1) ?? null),
     probeMissing: checked.length === 0,

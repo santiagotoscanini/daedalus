@@ -78,6 +78,18 @@ tag_shape() {
 # for the channel pins.
 MAX_CANDIDATES=12
 
+# Calendar and semantic versions share a shape once digits are blanked
+# (`v2026.9.24`, `v0.22.5`), and a calendar number always sorts higher. A
+# project that moved from one scheme to the other (hermes-agent: calver up to
+# v0.21.5, semver since) would have its OLD tags offered as the upgrade. So a
+# candidate keeps the scheme of the pinned tag: a leading year-like run
+# (19xx/20xx) on one side and not the other is a different line.
+same_scheme() {
+  local cal=0
+  [[ $1 =~ ^[^0-9]*(19|20)[0-9]{2}([^0-9]|$) ]] && cal=1
+  awk -v cal="$cal" '{ c = ($0 ~ /^[^0-9]*(19|20)[0-9][0-9]([^0-9]|$)/) ? 1 : 0; if (c == cal) print }'
+}
+
 candidates_for() {
   local repo=$1 tag=$2 shape
   shape=$(tag_shape "$tag")
@@ -94,6 +106,7 @@ candidates_for() {
 
   printf '%s\n' "${tags_cache[$repo]}" |
     grep -xE -- "$shape" |
+    same_scheme "$tag" |
     sort -V |
     tail -n "$MAX_CANDIDATES" |
     tac

@@ -202,12 +202,14 @@ in
     #
     # OnBootSec because /run is tmpfs: without it a reboot erases the file and
     # Persistent=true only covers a missed CALENDAR trigger, so the verdicts
-    # would stay blank for up to a day after every boot.
+    # would stay blank for up to a day after every boot. The random delay
+    # applies to the boot trigger too, so it stays short: at 4h a rebooted
+    # box showed "no verdict" on every row for hours.
     systemd.timers.daedalus-image-freshness = {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnCalendar = "daily";
-        RandomizedDelaySec = "4h";
+        RandomizedDelaySec = "30min";
         OnBootSec = "15min";
         Persistent = true;
       };

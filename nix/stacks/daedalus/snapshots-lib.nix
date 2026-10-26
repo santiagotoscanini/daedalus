@@ -138,6 +138,7 @@ let
       pkgs.jq
       pkgs.gnugrep
       pkgs.gnused
+      pkgs.gawk # same_scheme
       pkgs.coreutils
     ];
     vars = operatorVars // {

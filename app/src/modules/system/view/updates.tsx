@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { AppIcon, Segmented } from '../../../components/controls'
 import { EngineCard } from '../../../components/engine-update'
-import { ImageRow, ImageTableHead } from '../../../components/image-row'
+import { Chevron, ImageRow, ImageTableHead } from '../../../components/image-row'
 import { NixosCard } from '../../../components/nixos-card'
-import { TABLE, TABLE_EMPTY, TableGroup } from '../../../components/table'
+import { CELL_NAME, CELL_QUIET, TABLE, TABLE_EMPTY, TABLE_ROW } from '../../../components/table'
 import { TableSection } from '../../../components/table-section'
 import { FOOT, MONO } from '../../../components/tokens'
+import { Input } from '../../../components/ui/input'
+import { Chip } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
+import { rowKey, type ServiceGroup } from '../../../lib/dashboard/service-groups'
 import { ceremonyFor } from '../../../lib/image-ceremony'
 import type { UpdateRow, UpdatesData } from '../data/updates'
 import { type QueueItem, QueuePanel } from './queue-panel'
@@ -14,23 +19,31 @@ import { type QueueItem, QueuePanel } from './queue-panel'
 // The one page here whose subject is the fleet rather than a service — see
 // ../data/updates.ts for why the tab-less containers need it.
 //
-// ── the row is the unit, and it opens ─────────────────────────────────────
+// ── the service is the unit ───────────────────────────────────────────────
+//
+// A person updates Immich, not four containers: its server, machine learning,
+// postgres and redis are one decision read from one changelog. So the page is
+// a list of SERVICES (lib/dashboard/service-groups.ts), each with its icon and
+// one verdict for the whole set, opening to the pins inside it — containers
+// and, beside them, the bases the box builds that service's images on. A
+// service of one container is that container's row, icon and all: a header
+// over a single row would say its name twice.
+//
+// Services with something behind come first and start open; the settled ones
+// are a quiet list underneath, shut. The filter narrows to what needs doing,
+// and the search finds one service by any name it goes by — its own, a
+// container's, the image's — which is how a person arrives here wanting to
+// update one specific thing.
+//
+// ── the row is the decision, and it opens ─────────────────────────────────
 //
 // Closed, a row is the decision in one line: what is running, what is
 // available, and how confident the verdict is. Open, it is the reason —
 // release notes between the two versions, the tag picker, and the button.
-//
-// That order is the whole argument of the page. Reading what changed is not a
-// step before updating, it IS the update decision, and a button reachable
-// without passing the notes is a button that gets pressed without them. So the
-// control lives INSIDE the disclosure, never in the closed row.
-//
-// Notes load per row, on open — the loader says why.
-//
-// Last, the images built on the box: their bases, the build tools, a source
-// commit. Same rows, same verdicts where a registry can give one, each naming
-// the file a bump edits — and, for a base this configuration pins, the same
-// button and the same queue as a container's.
+// Reading what changed is not a step before updating, it IS the update
+// decision, and a button reachable without passing the notes is a button that
+// gets pressed without them. So the control lives INSIDE the disclosure,
+// never in the closed row. Notes load per row, on open.
 //
 // ── the queue ─────────────────────────────────────────────────────────────
 //
@@ -42,20 +55,103 @@ import { type QueueItem, QueuePanel } from './queue-panel'
 // The queue lives in this component's state and nowhere else. It is a
 // selection, not a commitment — nothing has been asked of the host until the
 // button is pressed, so there is nothing for a reload to lose except the
-// clicking, and persisting it would mean a schema, a stale-entry problem, and
-// two operators' queues to reconcile on a box that has one operator.
-//
-// What it does NOT do is soften the decision. Each entry was armed in its own
-// row, behind that row's changelog and its ceremony prompt if it has one, and
-// the panel restates every warning before the button. The all-or-nothing
-// consequence is stated there too, because it is the one thing batching
-// changes about the outcome: a single bad image reverts the whole commit.
+// clicking. Each entry was armed in its own row, behind that row's changelog
+// and its ceremony prompt if it has one, and the panel restates every warning
+// before the button, with the one thing batching changes: a single bad image
+// reverts the whole commit.
+
+type Filter = 'behind' | 'all'
+
+const isBehind = (r: UpdateRow) => r.verdict === 'tag-moved' || r.verdict === 'newer-tag'
+
+/** A group's worst verdict first: what needs doing, then what cannot be told, then the settled. */
+function rank(rows: UpdateRow[]): number {
+  if (rows.some(isBehind)) return 0
+  if (rows.some((r) => r.verdict === 'unknown')) return 1
+  return 2
+}
+
+/** What a pin is, when it is not a container's own image. */
+function badgeOf(r: UpdateRow): string | undefined {
+  if (r.kind === 'container') return undefined
+  if (r.pinnedIn.repo === 'engine') return 'engine'
+  return r.image === null ? 'source' : 'base'
+}
+
+/** Every name a row answers to, lower-cased, for the search. */
+function haystack(g: ServiceGroup, rows: UpdateRow[]): string {
+  return [g.id, g.label, ...rows.flatMap((r) => [r.container, r.image ?? ''])]
+    .join(' ')
+    .toLowerCase()
+}
+
+/**
+ * A service's logo on a white tile. Logos are drawn for a light page — some
+ * are white (Nextcloud), some black (Pocket ID, Open WebUI) — so a tile of their
+ * own is what keeps every one legible in both themes, the way an integrations
+ * list shows them.
+ */
+function ServiceIcon({ g, size = 24 }: { g: ServiceGroup; size?: number }) {
+  if (g.icon === null) return <AppIcon name={g.label} hasIcon={false} size={size} />
+  return (
+    <span
+      className="grid flex-none place-items-center rounded-md bg-white shadow-[inset_0_0_0_1px_color-mix(in_oklch,black_10%,transparent)]"
+      style={{ width: size, height: size }}
+    >
+      <img
+        className="block object-contain"
+        src={g.icon}
+        alt=""
+        width={size - 6}
+        height={size - 6}
+        loading="lazy"
+        decoding="async"
+      />
+    </span>
+  )
+}
+
+/** The group's one-line verdict, on its header. */
+function GroupVerdict({ rows }: { rows: UpdateRow[] }) {
+  const behind = rows.filter(isBehind).length
+  if (behind > 0) return <Chip tone="warn">{`${String(behind)} behind`}</Chip>
+  if (rows.every((r) => r.verdict === 'unknown')) return <Chip tone="muted">no verdict</Chip>
+  if (rows.some((r) => r.verdict === 'unknown'))
+    return <span className={CELL_QUIET}>current · some unknown</span>
+  return <span className={CELL_QUIET}>current</span>
+}
+
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${String(n)} ${n === 1 ? one : many}`
+}
 
 export function UpdatesView({ d }: { d: UpdatesData }) {
-  const behind = d.rows.filter((r) => r.verdict === 'tag-moved' || r.verdict === 'newer-tag')
-  const rest = d.rows.filter((r) => r.verdict === 'current' || r.verdict === 'unknown')
-
   const [queue, setQueue] = useState<QueueItem[]>([])
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<Filter>('all')
+  // Which groups the person has opened or shut by hand. Absent = the default:
+  // open when something in it is behind.
+  const [toggled, setToggled] = useState<Record<string, boolean>>({})
+
+  const byKey = useMemo(() => {
+    const m = new Map<string, UpdateRow>()
+    for (const r of [...d.rows, ...d.manual]) m.set(rowKey(r), r)
+    return m
+  }, [d.rows, d.manual])
+
+  // Groups with their rows, worst first, then by name — fixed for the page's
+  // life, so a row does not jump while the person is reading it.
+  const groups = useMemo(
+    () =>
+      d.groups
+        .map((g) => {
+          const rows = g.members.map((k) => byKey.get(k)).filter((r) => r !== undefined)
+          return { g, rows, text: haystack(g, rows) }
+        })
+        .filter((x) => x.rows.length > 0)
+        .sort((a, b) => rank(a.rows) - rank(b.rows) || a.g.label.localeCompare(b.g.label)),
+    [d.groups, byKey],
+  )
 
   // Which containers the queue already accounts for, and on whose behalf.
   // A lockstep member is covered by its primary, so queueing immich covers
@@ -91,26 +187,43 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
     }
   }
 
-  const moved = behind.filter((r) => r.verdict === 'tag-moved')
-  const newer = behind.filter((r) => r.verdict === 'newer-tag')
-  const unknown = rest.filter((r) => r.verdict === 'unknown')
-  const current = rest.filter((r) => r.verdict === 'current')
-  // On a phone a group's description stacks under its title instead of colliding.
-  const GROUP_STACK =
-    'max-[40rem]:h-auto max-[40rem]:flex-col max-[40rem]:items-start max-[40rem]:gap-0.5 max-[40rem]:py-2 [&>span:first-child]:whitespace-nowrap'
+  const needle = query.trim().toLowerCase()
+  const behindRows = [...d.rows, ...d.manual].filter(isBehind).length
+  const allRows = d.rows.length + d.manual.length
+  const visible = groups
+    .map(({ g, rows, text }) => {
+      // A search that names the service keeps all of it; one that names a
+      // container keeps that container.
+      const hitGroup =
+        needle === '' || g.label.toLowerCase().includes(needle) || g.id.includes(needle)
+      let shown = rows
+      if (!hitGroup) {
+        shown = text.includes(needle)
+          ? rows.filter((r) => `${r.container} ${r.image ?? ''}`.toLowerCase().includes(needle))
+          : []
+      }
+      if (filter === 'behind') shown = shown.filter(isBehind)
+      return { g, rows: shown, all: rows }
+    })
+    .filter((x) => x.rows.length > 0)
 
-  const group = (rows: UpdateRow[]) =>
-    rows.map((r) => (
-      <ImageRow key={r.container} r={r} status={d.status} queue={bind(r)} table="grouped" />
-    ))
+  const row = (
+    r: UpdateRow,
+    extra: { lead?: React.ReactNode; name?: string; nested?: boolean },
+  ) => (
+    <ImageRow
+      key={rowKey(r)}
+      r={r}
+      status={d.status}
+      queue={r.kind === 'container' || r.updatable ? bind(r) : undefined}
+      table="row"
+      badge={badgeOf(r)}
+      {...extra}
+    />
+  )
 
   return (
     <div className="flex flex-col gap-10">
-      {/* The engine first: the one pin here that is not a container, and the
-            one whose update restarts the page reporting it. Then the release the
-            whole generation stands on. */}
-      <EngineCard e={d.engine} />
-      <NixosCard facts={d.nixos} />
       <QueuePanel
         queue={queue}
         initialStatus={d.status}
@@ -122,16 +235,11 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         }}
       />
 
-      {/* Every container in ONE table, grouped by verdict: the group names the
-          verdict once, so a row carries a chip only where it differs from its
-          group (pinned by policy, queued). Behind first — that is the question
-          the list answers — and the settled ones last, quiet: no target, no
-          chip, nothing to read unless you open one. */}
       <TableSection
         title={
-          d.behind === 0
-            ? 'Every container is on its newest tag'
-            : `${String(d.behind)} containers behind`
+          behindRows === 0
+            ? 'Every service is on its newest tag'
+            : `${plural(behindRows, 'pin')} behind`
         }
         aside={
           d.probeMissing
@@ -139,87 +247,111 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
             : `registry checked ${(d.checkedAt ?? '').slice(0, 10)}`
         }
       >
-        <ul className={TABLE}>
-          <ImageTableHead grouped />
-          {behind.length === 0 && (
-            <li className={TABLE_EMPTY}>
-              Every digest-pinned container is on the newest tag of its shape, and no channel tag
-              has moved since it was pinned.
-            </li>
-          )}
-          {moved.length > 0 && (
-            <TableGroup
-              title={`Tag moved · ${String(moved.length)}`}
-              note="same tag, a new image behind it"
-              className={GROUP_STACK}
+        <div className="mb-3 flex flex-wrap items-center gap-2.5">
+          <div className="min-w-[14rem] flex-1">
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setQuery('')
+                  e.currentTarget.blur()
+                }
+              }}
+              placeholder="Find a service, container or image"
+              aria-label="Find a service, container or image"
             />
-          )}
-          {group(moved)}
-          {newer.length > 0 && (
-            <TableGroup
-              title={`Newer tag · ${String(newer.length)}`}
-              note="a higher release of the same shape is published"
-              className={GROUP_STACK}
-            />
-          )}
-          {group(newer)}
-          {unknown.length > 0 && (
-            <TableGroup
-              title={`No verdict · ${String(unknown.length)}`}
-              note="the registry did not answer, or there is nothing to compare against"
-              className={GROUP_STACK}
-            />
-          )}
-          {group(unknown)}
-          {current.length > 0 && (
-            <TableGroup
-              title={`On the newest tag · ${String(current.length)}`}
-              note="nothing to do"
-              className={GROUP_STACK}
-            />
-          )}
-          {group(current)}
-        </ul>
-        <p className={FOOT}>
-          Pins come from the flake; the verdicts from a daily registry probe. A tag that MOVED is a
-          channel pin like <span className={MONO}>:latest</span> whose image was replaced, so the
-          update is the same tag and a new digest. A NEWER TAG is a frozen release pin with a higher
-          version published beside it, and the notes inside the row are what that version contains.
-        </p>
-        <p className={FOOT}>
-          Open one to read what its current version shipped. “No verdict” means the registry did not
-          answer for it, or the pin names a channel with nothing to compare against. Treat it as
-          unknown.
-        </p>
-      </TableSection>
+          </div>
+          <Segmented<Filter>
+            label="Which pins to show"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: 'behind', label: 'Needs update', count: behindRows },
+              { value: 'all', label: 'All', count: allRows },
+            ]}
+          />
+        </div>
 
-      <TableSection title="Built on the box" aside={`${String(d.manual.length)} pins`}>
         <ul className={TABLE}>
-          <ImageTableHead />
-          {d.manual.length === 0 ? (
+          <ImageTableHead first="Service" iconned />
+          {visible.length === 0 && (
             <li className={TABLE_EMPTY}>
-              Nothing on this box is pinned outside a container image.
+              {needle !== ''
+                ? `Nothing here answers to “${query.trim()}”.`
+                : 'Every pinned image is on the newest tag of its shape, and no channel tag has moved since it was pinned.'}
             </li>
-          ) : (
-            d.manual.map((r) => (
-              <ImageRow
-                key={r.container}
-                r={r}
-                status={d.status}
-                queue={r.updatable ? bind(r) : undefined}
-                table="row"
-              />
-            ))
           )}
+          {visible.map(({ g, rows, all }) => {
+            // A service that is one row is drawn as that row, its icon inline.
+            const solo = all.length === 1 ? rows[0] : undefined
+            if (solo !== undefined) return row(solo, { lead: <ServiceIcon g={g} />, name: g.label })
+            const open = needle !== '' || (toggled[g.id] ?? rank(all) === 0)
+            const containers = all.filter((r) => r.kind === 'container').length
+            const pins = all.length - containers
+            return (
+              <Fragment key={g.id}>
+                <li className={cn(TABLE_ROW, 'min-h-0 p-0')}>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => {
+                      setToggled((t) => ({ ...t, [g.id]: !open }))
+                    }}
+                    className={cn(
+                      'group flex min-h-[3.25rem] w-full cursor-pointer items-center px-5 py-2 text-left text-[0.8125rem] transition-colors duration-100',
+                      'hover:bg-foreground/[0.025] focus-visible:shadow-[inset_0_0_0_2px_var(--brand-dim)] focus-visible:outline-none',
+                    )}
+                  >
+                    <Chevron open={open} />
+                    <span className="mr-2.5 flex flex-none">
+                      <ServiceIcon g={g} />
+                    </span>
+                    <span className={cn(CELL_NAME, 'min-w-0')}>{g.label}</span>
+                    <span className={cn(CELL_QUIET, 'ml-2 truncate')}>
+                      {[
+                        containers > 0 && plural(containers, 'container'),
+                        pins > 0 && plural(pins, 'build pin'),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                    <span className="ml-auto flex flex-none items-center pl-3">
+                      <GroupVerdict rows={all} />
+                    </span>
+                  </button>
+                </li>
+                {open && rows.map((r) => row(r, { nested: true }))}
+              </Fragment>
+            )
+          })}
         </ul>
         <p className={FOOT}>
-          The bases of the images built on this box, the build tools, a source commit. A base this
-          configuration pins has the Update button: it rewrites the pin, rebuilds the image on the
-          new base and checks the container came back carrying it. The rest are commits by hand — an
-          engine pin is an engine commit, then Engine › Update. A commit pin has no registry to ask,
-          so it reads “no verdict” — open it for the commits since.
+          One line per service, opening to its pins: the containers, and the bases this box builds
+          their images on. Pins come from the flake; the verdicts from a daily registry probe. A tag
+          that MOVED is a channel pin like <span className={MONO}>:latest</span> whose image was
+          replaced, so the update is the same tag and a new digest. A NEWER TAG is a frozen release
+          pin with a higher version published beside it, and the notes inside the row are what that
+          version contains. “No verdict” means the registry did not answer for it, or the pin names
+          a channel with nothing to compare against.
+        </p>
+        <p className={FOOT}>
+          A <span className={MONO}>base</span> this configuration pins has the Update button: it
+          rewrites the pin, rebuilds the image on the new base and checks the container came back
+          carrying it. An <span className={MONO}>engine</span> pin is an engine commit, then Engine
+          › Update; a <span className={MONO}>source</span> pin is a commit, read as the commits
+          since.
         </p>
       </TableSection>
+      {/* Then the engine — the one pin that is not an image, and the one whose
+          update restarts the page reporting it — and the release the whole
+          generation stands on. Below the services: they are what this page is
+          opened for. */}
+      <EngineCard e={d.engine} />
+      <NixosCard facts={d.nixos} />
     </div>
   )
 }

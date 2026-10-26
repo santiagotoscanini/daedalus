@@ -136,6 +136,19 @@ export async function moduleSwitches(ctx: Ctx): Promise<ModuleSwitch[]> {
     })
 }
 
+/**
+ * The log-stack registry alone, stack → containers: the one place a
+ * multi-container stack names its members (System › Updates groups by it).
+ */
+export async function logStacks(ctx: Ctx): Promise<Record<string, string[]>> {
+  const switches = await ctx.snapshot({
+    path: ctx.exportPath('switches.json'),
+    decoder: switchesDecoder,
+    fallback: { structural: [], stacks: {} },
+  })
+  return switches.data.stacks
+}
+
 async function moduleSwitch(ctx: Ctx, id: string): Promise<ModuleSwitch | null> {
   return (await moduleSwitches(ctx)).find((m) => m.id === id) ?? null
 }

@@ -1,15 +1,15 @@
+import { ChevronRightIcon } from 'lucide-react'
 import { useState } from 'react'
 import type { ImageUpdateStatus } from '../host/image-update'
 import { cn } from '../lib/cn'
-import type { ManualRow, UpdateRow, UpdateVerdict } from '../lib/dashboard/update-rows'
-import { ENGINE_REPO } from '../lib/engine'
+import type { UpdateRow, UpdateVerdict } from '../lib/dashboard/update-rows'
 import { DASH } from '../lib/format'
 import { errorText } from '../lib/redact'
 import { fetchUpdateNotes } from '../server/updates'
+import { ManualFacts, type Notes, NotesPanel } from './image-row-parts'
 import { UpdateControl } from './image-update'
-import { Changelog } from './release-notes'
 import { CELL_NAME, CELL_QUIET, TABLE_HEAD, TABLE_ROW } from './table'
-import { EMPTY, MONO, MONO_FACE, NOTE } from './tokens'
+import { MONO_FACE } from './tokens'
 import { Chip, type Tone } from './viz'
 
 // One pinned container as a disclosure: closed, the decision in one line —
@@ -66,13 +66,25 @@ const CARD_GRID = '@max-[40rem]/board:grid-cols-[minmax(0,1fr)_auto]'
 const CARD_NARROW = '@max-[40rem]/board:hidden'
 
 /** The head over a `TABLE` of image rows. */
-export function ImageTableHead({ className, grouped }: { className?: string; grouped?: boolean }) {
+export function ImageTableHead({
+  className,
+  grouped,
+  first = 'Container',
+  iconned,
+}: {
+  className?: string
+  grouped?: boolean
+  /** The first column's heading: what each row is named after. */
+  first?: string
+  /** Rows carry a service icon before the name: the heading moves past it. */
+  iconned?: boolean
+}) {
   return (
     <li
       aria-hidden="true"
       className={cn(grouped === true ? IMAGE_GRID_GROUPED : IMAGE_GRID, TABLE_HEAD, className)}
     >
-      <span className="pl-5">Container</span>
+      <span className={iconned === true ? 'pl-[3.625rem]' : 'pl-6'}>{first}</span>
       <span className={NARROW}>Running</span>
       <span className={NARROW}>Available</span>
       {grouped !== true && <span className="text-right">State</span>}
@@ -108,10 +120,35 @@ const SUMMARY = cn(
   'focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--brand-dim)]',
 )
 
-/* The caret, a cell of its own inside the name column — a ::before would be
-   a grid item and push every column one to the right. */
-const CARET =
-  "inline-block w-5 flex-none text-[0.85rem] text-muted-foreground transition-transform duration-[0.12s] group-open:rotate-90 before:content-['▸']"
+/**
+ * The disclosure chevron: one drawn glyph in a fixed 16px box, turning about
+ * its own centre, so a row and a group header open with the same mark at the
+ * same place. A text caret rotated inside a wider box swung off its baseline.
+ * `open` for a header that tracks its own state; inside a `<details>` the
+ * `group-open:` variant turns it instead.
+ */
+export function Chevron({ open, className }: { open?: boolean; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('mr-2 grid size-4 flex-none place-items-center', className)}
+    >
+      <ChevronRightIcon
+        strokeWidth={2.25}
+        className={cn(
+          'size-3.5 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none',
+          open === undefined ? 'group-open:rotate-90' : open && 'rotate-90',
+        )}
+      />
+    </span>
+  )
+}
+
+/** How far a row inside a group indents its NAME CELL, so its chevron sits
+    under the group's label: the header's chevron (16 + 8) and icon (24 + 10).
+    Only the name cell moves, so the version columns stay under their heads;
+    on a phone-width table the indent shrinks to a step, or names truncate. */
+export const NESTED_PAD = 'pl-[3.625rem] @max-[40rem]/table:pl-4'
 
 /**
  * One pinned image.
@@ -127,11 +164,23 @@ export function ImageRow({
   status,
   queue,
   table,
+  lead,
+  name,
+  badge,
+  nested,
 }: {
   r: UpdateRow
   status: ImageUpdateStatus
   queue?: React.ComponentProps<typeof UpdateControl>['queue']
   table?: 'row' | 'grouped'
+  /** Drawn before the name: a service's icon, on a row that is its whole group. */
+  lead?: React.ReactNode
+  /** What the row is called, when that is not the container's id: a service's own name. */
+  name?: string
+  /** A quiet chip beside the name: what kind of pin this is when it is not a container. */
+  badge?: string
+  /** A member of a group whose header carries the icon: indented under it. */
+  nested?: boolean
 }) {
   const v = VERDICT[r.verdict]
   const [notes, setNotes] = useState<Notes | null>(null)
@@ -148,7 +197,12 @@ export function ImageRow({
       className={
         table === undefined
           ? 'border-hairline border-t first:border-t-0'
-          : cn(TABLE_ROW, 'min-h-0 py-0 [&:has(details[open])]:bg-foreground/[0.012]')
+          : cn(
+              TABLE_ROW,
+              'min-h-0 py-0 [&:has(details[open])]:bg-foreground/[0.012]',
+              // A group's members sit on a faint band under their header.
+              nested === true && 'bg-foreground/[0.012]',
+            )
       }
     >
       <details
@@ -172,12 +226,19 @@ export function ImageRow({
             SUMMARY,
             table === 'grouped' ? IMAGE_GRID_GROUPED : IMAGE_GRID,
             table === undefined && cn('min-h-11 px-0.5', CARD_GRID),
+            nested === true && 'min-h-11',
           )}
         >
-          <span className="flex min-w-0 flex-col">
+          <span className={cn('flex min-w-0 flex-col', nested === true && NESTED_PAD)}>
             <span className="flex min-w-0 items-center">
-              <span aria-hidden="true" className={CARET} />
-              <span className={cn(CELL_NAME, 'pr-1')}>{r.container}</span>
+              <Chevron />
+              {lead !== undefined && <span className="mr-2.5 flex flex-none">{lead}</span>}
+              <span className={cn(CELL_NAME, 'pr-1')}>{name ?? r.container}</span>
+              {badge !== undefined && (
+                <Chip tone="muted" className="ml-2 flex-none">
+                  {badge}
+                </Chip>
+              )}
               {/* Pinned and queued sit beside the name where the table has no
                   state column. */}
               {table === 'grouped' && r.kind === 'container' && !r.updatable && (
@@ -257,7 +318,12 @@ export function ImageRow({
         <div
           className={cn(
             'flex flex-col gap-3',
-            table === undefined ? 'px-0.5 pt-1 pb-3 pl-5.5' : 'pt-1 pr-5 pb-5 pl-10',
+            table === undefined
+              ? 'px-0.5 pt-1 pb-3 pl-5.5'
+              : cn(
+                  'pt-1 pr-5 pb-5',
+                  nested === true ? 'pl-[6.375rem] @max-[40rem]/table:pl-15' : 'pl-11',
+                ),
           )}
         >
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />
@@ -294,84 +360,4 @@ export function ImageRow({
       </details>
     </li>
   )
-}
-
-/**
- * What a hand-moved pin says beside (or instead of) the button: the versions
- * that move with it, what a bump takes, and where the literal is.
- *
- * An engine file links to the engine's source on GitHub. A configuration
- * file is named, not linked — that repository is the box's own, and nothing
- * here knows where (or whether) it is published.
- */
-function ManualFacts({ r }: { r: ManualRow }) {
-  const parts = Object.entries(r.parts)
-  const { repo, path } = r.pinnedIn
-  return (
-    <div className="flex flex-col gap-2">
-      {parts.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {parts.map(([name, version]) => (
-            <Chip key={name}>
-              {name} <span className={cn(MONO, 'ml-1')}>{version}</span>
-            </Chip>
-          ))}
-        </div>
-      )}
-      {r.note !== null && <p className={NOTE}>{r.note}</p>}
-      <p className={NOTE}>
-        pinned in {repo} ·{' '}
-        {repo === 'engine' ? (
-          <a
-            className={MONO}
-            href={`https://github.com/${ENGINE_REPO}/blob/main/${path}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {path}
-          </a>
-        ) : (
-          <span className={MONO}>{path}</span>
-        )}
-      </p>
-      {r.image !== null && r.digest !== null && (
-        <p className={cn(MONO_FACE, 'm-0 text-[0.72rem] text-muted-foreground')}>
-          {`${r.image}@${r.digest.slice(0, 19)}…`}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** What one row has fetched, or is fetching. */
-type Notes = {
-  loading: boolean
-  data: Awaited<ReturnType<typeof fetchUpdateNotes>> | null
-  error: string | null
-}
-
-function NotesPanel({ notes, hasNotes }: { notes: Notes | null; hasNotes: boolean }) {
-  if (!hasNotes) {
-    return (
-      <p className={EMPTY}>
-        No release notes: nothing maps this pin to a project whose changelog we can read. The tag
-        delta above is still the real answer to what a re-pull would bring. See
-        <code> lib/dashboard/image-repos.ts</code> for why a guess is not offered instead.
-      </p>
-    )
-  }
-
-  if (notes?.error != null) {
-    return (
-      <p className={cn(EMPTY, 'text-danger')}>
-        Could not read the release notes (close and reopen this row to retry): {notes.error}
-      </p>
-    )
-  }
-
-  if (notes === null || notes.data === null) {
-    return <p className={EMPTY}>Reading the release notes…</p>
-  }
-
-  return <Changelog gap={notes.data.gap} build={notes.data.build} span={12} />
 }
