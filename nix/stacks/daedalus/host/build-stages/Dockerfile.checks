@@ -11,7 +11,7 @@
 #
 # Build args, all passed by build.sh (none has a default on purpose — a
 # missing one fails loudly instead of silently resolving somewhere else):
-#   NODE_IMAGE    node:24-slim pinned by digest (build-agent.nix)
+#   NODE_IMAGE    a node slim image pinned by digest (build-agent.nix)
 #   APP           the app's name, only to key the cache mount per app
 #   REGISTRY_URL  the npm registry (the box's mirror, or npmjs), for corepack's pnpm download
 #   CHECKS        the contract's script names, space-separated
@@ -34,10 +34,13 @@ WORKDIR /app
 # variable it goes straight to npmjs and skips the proxy. The dependency
 # registry itself is the repo's choice, read by
 # pnpm from pnpm-workspace.yaml as in every other build of that repo.
+# Node stopped bundling corepack at 25: it is installed first, pinned, through
+# the same registry.
 ENV CI=true \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     COREPACK_NPM_REGISTRY=${REGISTRY_URL}
-RUN corepack enable
+RUN npm install --global --no-audit --no-fund --registry="${REGISTRY_URL}" corepack@0.36.0 \
+ && corepack enable
 
 # The bracket globs make the optional files optional: a wildcard source that
 # matches nothing copies nothing, where a plain name would fail the build.

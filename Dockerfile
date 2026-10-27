@@ -42,11 +42,15 @@ FROM ${NODE_IMAGE} AS build
 ARG NPM_REGISTRY=https://registry.npmjs.org/
 
 # corepack fetches the pnpm that package.json's packageManager names, and
-# would go to npmjs for it regardless of the registry above.
+# would go to npmjs for it regardless of the registry above. Node stopped
+# bundling corepack at 25, so it is installed first, pinned, from the same
+# registry.
+ARG COREPACK_VERSION=0.36.0
 ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY} \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     CI=true
-RUN corepack enable
+RUN npm install --global --no-audit --no-fund --registry="${NPM_REGISTRY}" "corepack@${COREPACK_VERSION}" \
+ && corepack enable
 
 WORKDIR /src/app
 
@@ -79,8 +83,13 @@ FROM ${NODE_IMAGE} AS runtime
 
 # Shims only, a few symlinks: the dev branch fetches the pnpm its mounted tree
 # names. This, and node itself, is all of the toolchain the image carries —
-# dev dependencies come from the mounted tree's own install.
-RUN corepack enable
+# dev dependencies come from the mounted tree's own install. corepack itself
+# is installed as in the build stage (node 25+ does not bundle it).
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG COREPACK_VERSION=0.36.0
+RUN npm install --global --no-audit --no-fund --registry="${NPM_REGISTRY}" "corepack@${COREPACK_VERSION}" \
+ && npm cache clean --force \
+ && corepack enable
 
 # Not /app: that is where a source tree is mounted, and the mount must not
 # hide the bundle the entrypoint falls back to.
