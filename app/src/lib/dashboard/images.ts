@@ -263,6 +263,14 @@ export type ImageFreshness = {
    * this whole module is organised against.
    */
   stale: boolean
+  /**
+   * The pin moved to a tag this probe never listed — a new shape, as when
+   * `24-slim` became `26.12.1-slim`. Nothing the probe recorded can be
+   * measured against it, so the row has no verdict until the next run: the
+   * old run's `newerTag` was the top of a list the new tag is not on, and
+   * keeping it read "behind" on a pin that had just been updated.
+   */
+  unplaced: boolean
 }
 
 const freshnessShape = recordOf(
@@ -283,6 +291,7 @@ const freshnessShape = recordOf(
     // Never written by the probe — reconcileFreshness computes it against the
     // live pin. Decoded with a default so the shape stays total.
     stale: optional(bool, false),
+    unplaced: optional(bool, false),
   }),
 )
 
@@ -360,19 +369,21 @@ export function reconcileFreshness(
     sameRef && f.error === null && f.remoteDigest !== null && f.remoteDigest !== pin.digest
 
   const at = f.candidates.indexOf(pin.tag)
-  const newerTag =
-    at === 0
+  const unplaced = !sameRef && at < 0
+  const newerTag = unplaced
+    ? null
+    : at === 0
       ? // Top of its own shape — the answer regardless of which tag the probe
         // happened to ask about.
         null
       : at > 0
         ? (f.candidates[0] ?? null)
-        : // Not in the list at all: an operator-chosen tag the probe has not
-          // seen, or a channel pin with no candidates. The only claim still
-          // checkable is the trivial one.
+        : // Not in the list, on the tag the probe asked about: a channel pin
+          // with no candidates. The only claim still checkable is the trivial
+          // one.
           f.newerTag === pin.tag
           ? null
           : f.newerTag
 
-  return { ...f, pinnedDigest: pin.digest, moved, newerTag, stale: !sameRef }
+  return { ...f, pinnedDigest: pin.digest, moved, newerTag, stale: !sameRef, unplaced }
 }

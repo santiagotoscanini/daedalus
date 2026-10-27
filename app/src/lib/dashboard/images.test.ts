@@ -26,6 +26,7 @@ const probe = (over: Partial<ImageFreshness> = {}): ImageFreshness => ({
   checkedAt: '2026-08-13T04:00:00-03:00',
   error: null,
   stale: false,
+  unplaced: false,
   ...over,
 })
 
@@ -74,11 +75,34 @@ describe('a probe answer is spent by the update it prompted', () => {
   })
 
   it('a tag the probe has never seen makes no claim either way', () => {
-    // An operator-chosen tag outside the shortlist: index -1, so the only
-    // checkable claim is the trivial one.
+    // An operator-chosen tag outside the shortlist: 3.6.3 is the top of a
+    // list 4.0.0-rc1 is not on, so it says nothing about the new pin.
     const r = reconcileFreshness(probe(), { tag: '4.0.0-rc1', digest: 'sha256:rc' })
-    expect(r.newerTag).toBe('3.6.3')
+    expect(r.newerTag).toBeNull()
     expect(r.stale).toBe(true)
+    expect(r.unplaced).toBe(true)
+  })
+
+  it('a pin that changed shape is not still "behind" the old shape', () => {
+    // 2026-10-26: node:24-slim moved to 26.12.1-slim. The run before it had
+    // recommended 26-slim from the `NN-slim` list, and the page went on
+    // reading "newer tag" beside a pin that had just taken it.
+    const f = probe({
+      image: 'docker.io/library/node:24-slim',
+      tag: '24-slim',
+      newerTag: '26-slim',
+      candidates: ['26-slim', '25-slim', '24-slim'],
+    })
+    const r = reconcileFreshness(f, { tag: '26.12.1-slim', digest: 'sha256:new' })
+    expect(r.newerTag).toBeNull()
+    expect(r.moved).toBe(false)
+    expect(r.unplaced).toBe(true)
+  })
+
+  it('a pin still on the probed tag is never unplaced', () => {
+    const r = reconcileFreshness(probe({ candidates: [] }), { tag: '3.6.2', digest: 'sha256:old' })
+    expect(r.unplaced).toBe(false)
+    expect(r.newerTag).toBe('3.6.3')
   })
 
   it('being top of the shortlist beats a stale newerTag', () => {

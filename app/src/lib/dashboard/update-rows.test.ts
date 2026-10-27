@@ -78,6 +78,7 @@ const probe = (over: Partial<ImageFreshness> = {}): ImageFreshness => ({
   checkedAt: '2026-09-26T04:00:00Z',
   error: null,
   stale: false,
+  unplaced: false,
   ...over,
 })
 

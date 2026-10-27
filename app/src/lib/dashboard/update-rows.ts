@@ -105,7 +105,8 @@ function targetOf(verdict: UpdateVerdict, tag: string, f: ImageFreshness | null)
 }
 
 function verdictOf(f: ImageFreshness | null): UpdateVerdict {
-  if (f === null || f.error !== null) return 'unknown'
+  // `unplaced`: the pin moved to a tag the last run never listed — no claim.
+  if (f === null || f.error !== null || f.unplaced) return 'unknown'
   if (f.moved) return 'tag-moved'
   if (f.newerTag !== null) return 'newer-tag'
   return 'current'
