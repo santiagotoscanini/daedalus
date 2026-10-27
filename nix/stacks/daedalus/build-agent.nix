@@ -96,10 +96,10 @@ let
   buildGroup = config.users.users.${builder.user}.group;
 
   # The Dockerfile checks target's base image. Pinned by the multi-arch index
-  # digest, resolved 2026-09-12 with `skopeo inspect --raw
-  # docker://docker.io/library/node:24-slim | sha256sum`. Bump by hand, with a
+  # digest (`skopeo inspect --no-tags --format '{{.Digest}}'
+  # docker://docker.io/library/node:<tag>`). Bump by hand, with a
   # candidate build of a Dockerfile-strategy app before any live one.
-  nodeImage = "docker.io/library/node:24-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205";
+  nodeImage = "docker.io/library/node:26.12.1-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec";
 
   # The PATH of every process build.sh runs as the build user: its environment
   # is rebuilt from nothing, so this is all it gets.
