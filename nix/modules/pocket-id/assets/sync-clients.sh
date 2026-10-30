@@ -1,4 +1,5 @@
-# Converge the Pocket ID OIDC clients declared in `fleet.ssoClients`.
+# Converge the Pocket ID OIDC clients declared in `fleet.ssoClients`, then
+# the APIs in `fleet.ssoApis` (APIS: store JSON) and their client grants.
 #
 # Sourced by the wrapper in ../clients.nix, which sets: MANIFEST (store
 # JSON, non-secret desired state), IDP_ENV (/run/secrets/pocket-id-env,
@@ -182,4 +183,39 @@ jq -c '.[]' "$MANIFEST" | while read -r client; do
     [ "$code" = "204" ] || { echo "$key: logo upload failed (HTTP $code): ${out%$'\n'*}" >&2; exit 1; }
     echo "$key: uploaded logo"
   fi
+done
+
+# ── the APIs (fleet.ssoApis) ─────────────────────────────────────────────
+#
+# After the clients, because a grant names one. An API is keyed by its
+# resource, which Pocket ID will not change (every token minted for it
+# names it): found by resource, created when absent, renamed in place.
+# Each declared client gets user-delegated access and nothing else — no
+# client-only tokens, no custom permissions. Like the clients, nothing is
+# pruned: an API or a grant dropped here stays until deleted by hand.
+api GET '/api/apis?pagination%5Blimit%5D=100'
+[ "$API_CODE" = "200" ] || { echo "listing APIs failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
+apis_json=$(cat "$RESP")
+
+jq -c '.[]' "$APIS" | while read -r declared; do
+  key=$(printf '%s' "$declared" | jq -r '.key')
+  resource=$(printf '%s' "$declared" | jq -r '.resource')
+  api_id=$(printf '%s' "$apis_json" | jq -r --arg r "$resource" '[.data[] | select(.resource == $r) | .id][0] // empty')
+
+  if [ -z "$api_id" ]; then
+    api POST '/api/apis' "$(printf '%s' "$declared" | jq -c '{name, resource}')"
+    [ "$API_CODE" = "201" ] || { echo "API $key: create failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
+    api_id=$(jq -r '.id' < "$RESP")
+    echo "API $key: created for $resource"
+  else
+    api PUT "/api/apis/$api_id" "$(printf '%s' "$declared" | jq -c '{name}')"
+    [ "$API_CODE" = "200" ] || { echo "API $key: update failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
+  fi
+
+  while read -r client; do
+    [ -n "$client" ] || continue
+    api PUT "/api/apis/$api_id/clients/$client" \
+      '{"userDelegatedAccess":true,"clientAccess":false,"userDelegatedPermissionIds":[],"clientPermissionIds":[]}'
+    [ "$API_CODE" = "200" ] || { echo "API $key: granting client $client failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
+  done <<< "$(printf '%s' "$declared" | jq -r '.clients[]')"
 done

@@ -244,4 +244,60 @@
       )
     );
   };
+
+  options.fleet.ssoApis = lib.mkOption {
+    default = { };
+    description = ''
+      APIs (OAuth resource servers) at the identity provider, converged by
+      the stack that runs it beside `fleet.ssoClients`. An API is what an
+      RFC 8707 `resource` names: a client may ask for a token for it only
+      when the API exists and the client is granted it, and the token's
+      audience is then the resource itself, so a resource server can tell
+      a token minted for it from one minted for anything else. MCP clients
+      (claude.ai's connectors among them) always send the server's URL as
+      the resource. Never pruned: a dropped API stays at the IdP until
+      deleted by hand, like a dropped client.
+    '';
+    example = lib.literalExpression ''
+      {
+        notes-mcp = {
+          resource = "https://gateway.example.org/notes/mcp";
+          clients = [ "my-connector" ];
+        };
+      }
+    '';
+    type = lib.types.attrsOf (
+      lib.types.submodule (
+        { name, ... }:
+        {
+          options = {
+            displayName = lib.mkOption {
+              type = lib.types.str;
+              default = lib.toSentenceCase name;
+              description = "Name on the identity provider's APIs page (at most 50 characters).";
+            };
+            resource = lib.mkOption {
+              type = lib.types.strMatching "https://[^#?]*[^/#?]";
+              description = ''
+                The resource identifier, as clients send it and as the token's
+                audience carries it: an https URL with no fragment, query or
+                trailing slash. It cannot change once created (every token
+                minted for it names it); a new value is a new API.
+              '';
+            };
+            clients = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                `fleet.ssoClients` keys whose users may ask for tokens for this
+                API (user-delegated access only: no client-only tokens, no
+                custom permissions). Which users may sign in is still each
+                client's `allowedGroups`.
+              '';
+            };
+          };
+        }
+      )
+    );
+  };
 }

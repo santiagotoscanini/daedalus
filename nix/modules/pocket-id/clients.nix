@@ -177,6 +177,18 @@ let
     )
   );
 
+  # The APIs (fleet.ssoApis), converged by the same run after the clients
+  # they grant, since a grant names the client.
+  apisManifest = pkgs.writeText "sso-apis.json" (
+    builtins.toJSON (
+      lib.mapAttrsToList (n: a: {
+        key = n;
+        name = a.displayName;
+        inherit (a) resource clients;
+      }) config.fleet.ssoApis
+    )
+  );
+
   syncScript = pkgs.writeShellApplication {
     name = "pocket-id-clients-sync";
     runtimeInputs = [
@@ -187,6 +199,7 @@ let
     ];
     text = ''
       MANIFEST=${manifest}
+      APIS=${apisManifest}
       IDP_ENV=${config.sops.secrets."pocket-id-env".path}
       SECRETS=${secretsFile}
       # Statically linked (musl), so it runs in the IdP's container
@@ -267,14 +280,21 @@ in
           };
         };
 
-        assertions = lib.mapAttrsToList (n: c: {
-          assertion = c.traefikForwardAuth -> (config.fleet.webApps.${n}.auth or "none") == "oidc";
-          message = ''
-            fleet.ssoClients.${n}: `traefikForwardAuth` is set but
-            fleet.webApps.${n}.auth is not "oidc" — the creds would be
-            rendered for a middleware that is never generated.
-          '';
-        }) cfg;
+        assertions =
+          lib.mapAttrsToList (n: a: {
+            assertion = lib.all (c: cfg ? ${c}) a.clients;
+            message = "fleet.ssoApis.${n}: grants a client that is not in fleet.ssoClients: ${
+              toString (lib.filter (c: !(cfg ? ${c})) a.clients)
+            }";
+          }) config.fleet.ssoApis
+          ++ lib.mapAttrsToList (n: c: {
+            assertion = c.traefikForwardAuth -> (config.fleet.webApps.${n}.auth or "none") == "oidc";
+            message = ''
+              fleet.ssoClients.${n}: `traefikForwardAuth` is set but
+              fleet.webApps.${n}.auth is not "oidc" — the creds would be
+              rendered for a middleware that is never generated.
+            '';
+          }) cfg;
 
         systemd.services.pocket-id-clients = lib.mkIf (cfg != { }) {
           description = "Converge Pocket ID OIDC clients from fleet.ssoClients";
