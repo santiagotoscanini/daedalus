@@ -125,6 +125,9 @@ export const apps = pgTable(
     storage: boolean('storage').notNull().default(false),
     litellm: boolean('litellm').notNull().default(false),
     prometheus: boolean('prometheus').notNull().default(false),
+    // The box's mail relay (`mail.enable`): SMTP_* + NOTIFY_EMAIL_TO, the
+    // password in a rendered env file (nix/modules/apps/apps.nix).
+    mail: boolean('mail').notNull().default(false),
 
     // The freeze switch (registry schema v2, `deploy.enable`): OFF stops the
     // 2-minute deploy timer AND removes the app from the host trigger's

@@ -9,6 +9,7 @@
       "storage": false,
       "litellm": false,
       "prometheus": false,
+      "mail": false,
       "deploy": {
         "enable": true
       },

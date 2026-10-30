@@ -109,6 +109,7 @@ export const EDITABLE_FIELDS = [
   'storage',
   'litellm',
   'prometheus',
+  'mail',
   'deployEnable',
   'authMode',
   'authHealthPath',
@@ -237,6 +238,7 @@ export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
       case 'storage':
       case 'litellm':
       case 'prometheus':
+      case 'mail':
       case 'deployEnable':
         if (typeof v !== 'boolean') bad(k, 'a boolean')
         clean[k as 'postgres'] = v as boolean

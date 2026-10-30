@@ -38,6 +38,7 @@ export function toRow(entry: ManifestEntry) {
     storage: entry.storage,
     litellm: entry.litellm,
     prometheus: entry.prometheus,
+    mail: entry.mail ?? false,
     authMode: entry.auth.mode,
     authHealthPath: entry.auth.healthPath ?? null,
     authIsolated: entry.auth.isolated ?? false,
@@ -134,6 +135,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     storage: record.storage,
     litellm: record.litellm,
     prometheus: record.prometheus,
+    mail: record.mail,
     authMode: record.authMode,
     authHealthPath: record.authHealthPath,
     authIsolated: record.authIsolated,
@@ -160,6 +162,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     storage: manifest.storage,
     litellm: manifest.litellm,
     prometheus: manifest.prometheus,
+    mail: manifest.mail ?? false,
     authMode: manifest.auth.mode,
     authHealthPath: manifest.auth.healthPath ?? null,
     authIsolated: manifest.auth.isolated ?? false,
@@ -209,6 +212,7 @@ export function toRegistryExport(records: AppRecord[]): {
             storage: r.storage,
             litellm: r.litellm,
             prometheus: r.prometheus,
+            mail: r.mail,
             // Always emitted (schema v2): every registry entry is explicit
             // about whether it auto-deploys, so a freeze is visible in the
             // committed file rather than inferred from a default.

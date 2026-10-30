@@ -114,6 +114,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
       storage: record.storage,
       litellm: record.litellm,
       prometheus: record.prometheus,
+      mail: record.mail,
       // From Nix, not the record: the file's presence is the setting, so
       // there is no column for this and nothing that could drift from it.
       operatorSecrets: manifest?.operatorSecrets ?? false,

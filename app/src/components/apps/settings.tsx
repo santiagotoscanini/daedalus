@@ -67,6 +67,15 @@ export function Settings({
           label="Prometheus scrape"
           hint="Only turn on once the app actually serves /metrics. Otherwise it is a permanently-down target."
         />
+        <Toggle
+          checked={app.mail}
+          disabled={readOnly}
+          onChange={(v) => {
+            patch({ mail: v })
+          }}
+          label="Mail relay"
+          hint="Injects SMTP_HOST, SMTP_PORT, SMTP_USER and NOTIFY_EMAIL_TO; SMTP_PASS arrives in a rendered env file."
+        />
         <Facts
           list
           rows={[

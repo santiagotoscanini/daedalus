@@ -39,6 +39,7 @@ export const ENV_GROUP_ORDER = [
   'auth',
   'sso',
   'litellm',
+  'mail',
   'observability',
   'runtime',
   'other',
@@ -96,6 +97,12 @@ export const PLATFORM_KEYS: Record<string, EnvGroup> = {
   LITELLM_BASE_URL: 'litellm',
   LITELLM_API_KEY: 'litellm',
 
+  SMTP_HOST: 'mail',
+  SMTP_PORT: 'mail',
+  SMTP_USER: 'mail',
+  SMTP_PASS: 'mail',
+  NOTIFY_EMAIL_TO: 'mail',
+
   PROMETHEUS_URL: 'observability',
   LOKI_URL: 'observability',
 }
@@ -122,6 +129,11 @@ export const GROUP_LABELS: Record<EnvGroup, { title: string; icon: string; hint:
     hint: 'Native OIDC. Present only in auth.mode = native.',
   },
   litellm: { title: 'LiteLLM gateway', icon: '✦', hint: 'The AI gateway, when the toggle is on.' },
+  mail: {
+    title: 'Mail relay',
+    icon: '✉',
+    hint: 'The box’s outbound SMTP account, when the toggle is on.',
+  },
   observability: {
     title: 'Observability',
     icon: '◎',

@@ -56,6 +56,22 @@ describe('manifestEntries', () => {
     ])
   })
 
+  it('reads an entry written before the mail switch as off, and a set one as written', async () => {
+    await writeFile(
+      join(dir, 'applied.json'),
+      JSON.stringify({
+        schemaVersion: REGISTRY_SCHEMA_VERSION,
+        apps: { iris: app('live'), plutus: { ...app('lab'), mail: true } },
+      }),
+    )
+    await publishApps({ nixManaged: {}, operatorSecretApps: [] })
+    const entries = await manifestEntries()
+    expect(entries.map((e) => [e.name, e.mail])).toEqual([
+      ['iris', false],
+      ['plutus', true],
+    ])
+  })
+
   it('fails loudly on a malformed export rather than dropping daedalus', async () => {
     await publishApps({ nixManaged: { daedalus: { stage: 'lab' } } })
     await expect(manifestEntries()).rejects.toThrow('/export/apps.json')

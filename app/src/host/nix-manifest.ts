@@ -84,6 +84,8 @@ export type ManifestApp = {
   storage: boolean
   litellm: boolean
   prometheus: boolean
+  /** The mail relay. Optional so an apps.json predating the field still parses. */
+  mail?: boolean
   /** null = `<name>.<baseDomain>`. Exactly one label under it — asserted in nix/modules/apps/apps.nix. */
   hostname?: string | null
   /**
@@ -155,6 +157,7 @@ export const manifestApp: Decoder<ManifestApp> = obj({
   storage: bool,
   litellm: bool,
   prometheus: bool,
+  mail: optional(bool, false),
   hostname: ns,
   deploy: optional(nullable(obj({ enable: bool })), null),
   image: ns,

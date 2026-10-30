@@ -49,6 +49,9 @@
       storage.enable = a.storage;
       litellm.enable = a.litellm;
       prometheus.enable = a.prometheus;
+      # `or` like `resources` below: an apps.json written before the field
+      # still evaluates.
+      mail.enable = a.mail or false;
 
       auth = {
         inherit (a.auth) mode;

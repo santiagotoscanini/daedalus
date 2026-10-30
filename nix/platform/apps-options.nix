@@ -367,6 +367,22 @@ in
               '';
             };
 
+            mail.enable = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Opt-in: the box's outbound mail relay (platform/mail), for an
+                app that sends its own notifications. Sets `SMTP_HOST`,
+                `SMTP_PORT` (`fleet.mail.smtpHost`/`smtpPort`, STARTTLS),
+                `SMTP_USER` (`fleet.mail.sender`, the relay account) and
+                `NOTIFY_EMAIL_TO` (`fleet.mail.alertTo`) in the app's
+                environment, and `SMTP_PASS`, the relay password, in an env
+                file rendered from the relay secret, so it never sits in
+                /nix/store. Off by default: an app that sends no mail never
+                sees the password.
+              '';
+            };
+
             # Auto-deploy — the "push to main and it's live" half of the platform.
             # See modules/apps/apps.nix's header and its assets/deploy.sh.
             deploy = {

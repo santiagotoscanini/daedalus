@@ -1,0 +1,1 @@
+ALTER TABLE "apps" ADD COLUMN "mail" boolean DEFAULT false NOT NULL;
