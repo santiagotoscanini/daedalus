@@ -22,6 +22,10 @@
 # boot and every rebuild that changes it) — restart app-db-claude-ro by
 # hand if a brand-new app DB needs reading today.
 #
+# Except the databases of an app marked `private` (appDatabases.<n>.private):
+# there CONNECT is revoked on every run, so a chat archive or a device's keys
+# on the cluster stay out of the MCP client's reach however it is asked.
+#
 # Rotation: change the password inside the host's encrypted MCP file
 # (`sops <file>`, mind --input-type binary), rebuild, then
 # `systemctl restart app-db-claude-ro` — the unit text doesn't change on
@@ -37,6 +41,15 @@
   ...
 }:
 
+let
+  # Every database of an app marked `private` (app-db.nix): the role never
+  # connects to them.
+  privateDbs = lib.concatLists (
+    lib.mapAttrsToList (
+      name: db: lib.optionals db.private ([ name ] ++ db.extraDatabases)
+    ) config.fleet.appDatabases
+  );
+in
 {
   config = lib.mkIf (config.fleet.modules.app-db.enable && config.fleet.claude.mcpSopsFile != null) {
     systemd.services.app-db-claude-ro = {
@@ -88,9 +101,14 @@
         psql_pg "GRANT pg_read_all_data TO claude_ro"
 
         # CONNECT on every current database (PUBLIC's CONNECT is revoked
-        # on the per-app DBs).
+        # on the per-app DBs), except those of a `private` app, from which
+        # it is revoked.
+        PRIVATE=" ${lib.concatStringsSep " " privateDbs} "
         for db in $(psql_pg "SELECT datname FROM pg_database WHERE NOT datistemplate"); do
-          psql_pg "GRANT CONNECT ON DATABASE \"$db\" TO claude_ro"
+          case "$PRIVATE" in
+            *" $db "*) psql_pg "REVOKE CONNECT ON DATABASE \"$db\" FROM claude_ro" ;;
+            *) psql_pg "GRANT CONNECT ON DATABASE \"$db\" TO claude_ro" ;;
+          esac
         done
         echo "claude-ro: converged"
       '';

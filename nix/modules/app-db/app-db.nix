@@ -129,6 +129,7 @@ let
     export APP_NAME=${lib.escapeShellArg name}
     export EXTRA_DBS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.extraDatabases)}
     export EXTENSIONS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.extensions)}
+    export COLLATION=${lib.escapeShellArg cfg.${name}.collation}
     export ENV_BASE=${lib.escapeShellArg envBase}
     export CLUSTER_ENV=${lib.escapeShellArg clusterEnv}
     export APP_ENV_FILE=${lib.escapeShellArg (appEnvFile name)}
@@ -176,6 +177,34 @@ in
               extension's `.so` must be present in the pg image — the
               cluster image ships pgvector (`vector`). Idempotent;
               dropping a name here does NOT drop the extension.
+            '';
+          };
+          options.private = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Keep this app's databases out of the read-only `claude_ro`
+              role (claude-ro.nix): it gets no CONNECT on them, and one
+              granted before is revoked. For data the operator's MCP
+              client must never read in bulk: private messages, the keys
+              of a linked device. `pg_read_all_data` still covers the
+              tables; CONNECT is the gate, since PUBLIC's is revoked on
+              every per-app database.
+            '';
+          };
+          options.collation = lib.mkOption {
+            type = lib.types.enum [
+              "default"
+              "C"
+            ];
+            default = "default";
+            description = ''
+              The collation and ctype this app's databases are CREATED
+              with. "C" builds them from template0 with LC_COLLATE and
+              LC_CTYPE 'C' (Synapse refuses any other). Applied at
+              creation only: the bootstrap fails, naming the database,
+              when an existing one disagrees, because changing it means
+              a dump and a restore.
             '';
           };
           options.consumers = lib.mkOption {

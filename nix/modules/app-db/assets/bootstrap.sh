@@ -7,6 +7,8 @@
 #                    same role (may be empty; e.g. sonarr_log)
 #   EXTENSIONS     — space-separated extensions to CREATE in the app db
 #                    + extra dbs (may be empty; e.g. vector)
+#   COLLATION      — "default", or "C": the databases are created from
+#                    template0 with LC_COLLATE/LC_CTYPE C (Synapse)
 #   ENV_BASE       — <machineState>/app-db
 #   CLUSTER_ENV    — $ENV_BASE/cluster/env  (POSTGRES_PASSWORD line)
 #   APP_ENV_FILE   — $ENV_BASE/$APP_NAME/env (per-app env we emit)
@@ -33,6 +35,14 @@ else
   APP_PWD=$(openssl rand -hex 32)
 fi
 
+# A database created for COLLATION=C comes from template0 with C collation
+# and ctype; the default template is the cluster locale. Quoted for the
+# format() string below, hence the doubled quotes.
+CREATE_OPTS=
+if [ "$COLLATION" = C ]; then
+  CREATE_OPTS=" TEMPLATE template0 ENCODING ''UTF8'' LC_COLLATE ''C'' LC_CTYPE ''C''"
+fi
+
 # Read the cluster superuser password.
 SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "$CLUSTER_ENV" | head -1 | cut -d= -f2-)
 [ -n "$SUPER_PWD" ] || { echo "empty POSTGRES_PASSWORD in $CLUSTER_ENV" >&2; exit 1; }
@@ -57,7 +67,7 @@ SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', '${APP_NAME}', :'qpwd')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_NAME}')
 \gexec
 ALTER ROLE ${APP_NAME} PASSWORD :'qpwd';
-SELECT format('CREATE DATABASE %I OWNER %I', '${APP_NAME}', '${APP_NAME}')
+SELECT format('CREATE DATABASE %I OWNER %I${CREATE_OPTS}', '${APP_NAME}', '${APP_NAME}')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${APP_NAME}')
 \gexec
 REVOKE ALL ON DATABASE ${APP_NAME} FROM PUBLIC;
@@ -68,13 +78,28 @@ SQL
 for db in $EXTRA_DBS; do
   PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
     psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres <<SQL
-SELECT format('CREATE DATABASE %I OWNER %I', '${db}', '${APP_NAME}')
+SELECT format('CREATE DATABASE %I OWNER %I${CREATE_OPTS}', '${db}', '${APP_NAME}')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${db}')
 \gexec
 REVOKE ALL ON DATABASE ${db} FROM PUBLIC;
 GRANT  ALL ON DATABASE ${db} TO ${APP_NAME};
 SQL
 done
+
+# CREATE_OPTS only applies to a database this run created; one that existed
+# keeps whatever it was made with. Say so rather than hand the app a
+# collation it refuses (or, worse, accepts and indexes wrongly).
+if [ "$COLLATION" = C ]; then
+  for db in "$APP_NAME" $EXTRA_DBS; do
+    got=$(PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
+      psql -X -tA -v ON_ERROR_STOP=1 -U postgres -d postgres \
+      -c "SELECT datcollate || '/' || datctype FROM pg_database WHERE datname = '${db}'")
+    [ "$got" = "C/C" ] || {
+      echo "database ${db} has collation/ctype ${got}, not C/C: dump it, drop it, and this bootstrap recreates it" >&2
+      exit 1
+    }
+  done
+fi
 
 # Extensions requested for this app (may be empty). Created as the
 # cluster superuser in the app db + every extra db. The extension's
