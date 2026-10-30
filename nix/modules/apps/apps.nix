@@ -55,7 +55,7 @@
 #   - litellm.enable    → injects LITELLM_BASE_URL (fleet.litellmBaseUrl)
 #   - prometheus.enable → /metrics scrape + per-app Grafana dashboard
 #   - mail.enable       → the box's mail relay: SMTP_HOST/PORT/USER +
-#                         NOTIFY_EMAIL_TO, SMTP_PASS in a rendered env file
+#                         MAIL_TO, SMTP_PASSWORD in a rendered env file
 #   - auth.mode         → SSO against Pocket ID, either shape (below)
 #   - …future features follow the same pattern (off by default,
 #     env injection conditional on opt-in).
@@ -90,13 +90,13 @@
 #   environmentFiles = [
 #     <machineState>/apps/<name>/env    # always (AUTH_SECRET)
 #     <machineState>/app-db/<name>/env  # when postgres=true
-#     /run/app-<name>-smtp/env          # when mail.enable (SMTP_PASS)
+#     /run/app-<name>-smtp/env          # when mail.enable (SMTP_PASSWORD)
 #     <user-supplied per-app overlays>             # via .environmentFiles
 #   ];
 #   environment = {
 #     APP_NAME, APP_HOSTNAME, APP_PUBLIC_URL, PORT     # always
 #     LITELLM_BASE_URL = fleet.litellmBaseUrl          # when litellm.enable
-#     SMTP_HOST, SMTP_PORT, SMTP_USER, NOTIFY_EMAIL_TO # when mail.enable
+#     SMTP_HOST, SMTP_PORT, SMTP_USER, MAIL_TO         # when mail.enable
 #     <user-supplied static env>                       # via .env
 #   };
 #
@@ -756,17 +756,17 @@ let
           ++ (lib.optional mailEnabled "${cName}-smtp-env.service");
         };
       }
-      # SMTP_PASS is the shared relay password from platform/mail, rendered
+      # SMTP_PASSWORD is the shared relay password from platform/mail, rendered
       # from that one sops source rather than copied, so a rotation touches
       # one file (then restart the app: the render is PartOf it).
       // lib.optionalAttrs mailEnabled {
         "${cName}-smtp-env" = mkSecretRender {
-          description = "Render SMTP_PASS for ${cName} from the shared mail relay secret";
+          description = "Render SMTP_PASSWORD for ${cName} from the shared mail relay secret";
           gates = [ "podman-${cName}.service" ];
           dir = mailEnvDir;
           file = mailEnvFile;
-          prep = "SMTP_PASS=$(cat ${config.sops.secrets."mail-relay-password".path})";
-          content = "SMTP_PASS=$SMTP_PASS";
+          prep = "SMTP_PASSWORD=$(cat ${config.sops.secrets."mail-relay-password".path})";
+          content = "SMTP_PASSWORD=$SMTP_PASSWORD";
         };
       }
       // lib.listToAttrs (
@@ -912,13 +912,13 @@ let
             // (lib.optionalAttrs (app.litellm.enable && config.fleet.litellmBaseUrl != null) {
               LITELLM_BASE_URL = config.fleet.litellmBaseUrl;
             })
-            # The mail relay. The password is NOT here: SMTP_PASS arrives in
+            # The mail relay. The password is NOT here: SMTP_PASSWORD arrives in
             # the rendered env file above, so it never sits in /nix/store.
             // (lib.optionalAttrs mailEnabled {
               SMTP_HOST = config.fleet.mail.smtpHost;
               SMTP_PORT = toString config.fleet.mail.smtpPort;
               SMTP_USER = config.fleet.mail.sender;
-              NOTIFY_EMAIL_TO = config.fleet.mail.alertTo;
+              MAIL_TO = config.fleet.mail.alertTo;
             })
             # Native OIDC. The client secret is NOT here — it arrives as
             # OIDC_CLIENT_SECRET in a rendered env file that

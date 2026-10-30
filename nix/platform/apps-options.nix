@@ -375,8 +375,8 @@ in
                 app that sends its own notifications. Sets `SMTP_HOST`,
                 `SMTP_PORT` (`fleet.mail.smtpHost`/`smtpPort`, STARTTLS),
                 `SMTP_USER` (`fleet.mail.sender`, the relay account) and
-                `NOTIFY_EMAIL_TO` (`fleet.mail.alertTo`) in the app's
-                environment, and `SMTP_PASS`, the relay password, in an env
+                `MAIL_TO` (`fleet.mail.alertTo`) in the app's
+                environment, and `SMTP_PASSWORD`, the relay password, in an env
                 file rendered from the relay secret, so it never sits in
                 /nix/store. Off by default: an app that sends no mail never
                 sees the password.

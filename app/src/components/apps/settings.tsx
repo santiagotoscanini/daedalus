@@ -74,7 +74,7 @@ export function Settings({
             patch({ mail: v })
           }}
           label="Mail relay"
-          hint="Injects SMTP_HOST, SMTP_PORT, SMTP_USER and NOTIFY_EMAIL_TO; SMTP_PASS arrives in a rendered env file."
+          hint="Injects SMTP_HOST, SMTP_PORT, SMTP_USER and MAIL_TO; SMTP_PASSWORD arrives in a rendered env file."
         />
         <Facts
           list

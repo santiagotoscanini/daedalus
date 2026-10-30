@@ -100,8 +100,8 @@ export const PLATFORM_KEYS: Record<string, EnvGroup> = {
   SMTP_HOST: 'mail',
   SMTP_PORT: 'mail',
   SMTP_USER: 'mail',
-  SMTP_PASS: 'mail',
-  NOTIFY_EMAIL_TO: 'mail',
+  SMTP_PASSWORD: 'mail',
+  MAIL_TO: 'mail',
 
   PROMETHEUS_URL: 'observability',
   LOKI_URL: 'observability',
