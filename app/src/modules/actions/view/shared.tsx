@@ -200,8 +200,8 @@ export function SampleRows({ rows }: { rows: [string, string][] }) {
 /**
  * A per-day column chart that is two charts: the whole window on a screen
  * wide enough for it, and the last fourteen days on a phone, where thirty
- * bars are six pixels each and the failure hairline is gone. The same data,
- * the rest of it one wider screen away.
+ * bars are six pixels each and a failed run's red foot is a speck. The same
+ * data, the rest of it one wider screen away.
  */
 export function DayColumns({
   points,

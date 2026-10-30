@@ -80,7 +80,7 @@ function grafanaLogsEmbed(
 ): string {
   return (
     `${site.grafanaUrl}/d-solo/container-logs/container-logs` +
-    `?panelId=1&var-selector=${encodeURIComponent(`${label(source)}="${value(source)}"`)}` +
+    `?panelId=1&var-selector=${encodeURIComponent(`${label(source)}${op(source)}"${value(source)}"`)}` +
     `&from=${from}&to=now&theme=${theme}`
   )
 }
@@ -90,7 +90,7 @@ function grafanaLogsFull(site: Site, source: LogSource, from = 'now-7d'): string
   return (
     `${site.grafanaUrl}/a/grafana-lokiexplore-app/explore` +
     `?from=${from}&to=now&var-ds=loki-default` +
-    `&var-filters=${encodeURIComponent(`${label(source)}|=|${value(source)}`)}`
+    `&var-filters=${encodeURIComponent(`${label(source)}|${op(source)}|${value(source)}`)}`
   )
 }
 
@@ -103,20 +103,34 @@ function grafanaLogsFull(site: Site, source: LogSource, from = 'now-7d'): string
  * `app-db`), and also covers streams with no container at all — `kernel`, and
  * `lemonade`, which a bridge pushes into Loki from another machine. `unit` is
  * a systemd unit: native services (`pihole-ftl.service`, `ddclient.service`)
- * and the oneshots around a stack. `job` is a log FILE a stack ships beside its
- * journal (alloy `job` label: an agent's own gateway/errors files). A union rather
- * than optional fields, so a caller cannot pass two and leave the query to guess.
+ * and the oneshots around a stack. `units` is a family of units, a regex over
+ * the same label: a templated unit logs each instance under its own name
+ * (`notify-email@<unit>.service`, one per unit it reported on). `job` is a log
+ * FILE a stack ships beside its journal (alloy `job` label: an agent's own
+ * gateway/errors files). A union rather than optional fields, so a caller
+ * cannot pass two and leave the query to guess.
  */
 export type LogSource =
   | { container: string }
   | { stack: string }
   | { unit: string }
+  | { units: string }
   | { job: string }
 
 const label = (s: LogSource) =>
   'container' in s ? 'container' : 'stack' in s ? 'stack' : 'job' in s ? 'job' : 'unit'
 const value = (s: LogSource) =>
-  'container' in s ? s.container : 'stack' in s ? s.stack : 'job' in s ? s.job : s.unit
+  'container' in s
+    ? s.container
+    : 'stack' in s
+      ? s.stack
+      : 'job' in s
+        ? s.job
+        : 'units' in s
+          ? s.units
+          : s.unit
+/** Equality for one stream, a regex match for a family of them. */
+const op = (s: LogSource) => ('units' in s ? '=~' : '=')
 
 /**
  * The ranges worth one click.
@@ -235,7 +249,7 @@ export type LogNeighbour = {
 
 /** A stable React key for a neighbour, whichever kind of source it is. */
 function sourceKey(s: LogSource): string {
-  return 'container' in s ? s.container : 'unit' in s ? s.unit : 'job' in s ? s.job : s.stack
+  return `${label(s)}${op(s)}${value(s)}`
 }
 
 /**

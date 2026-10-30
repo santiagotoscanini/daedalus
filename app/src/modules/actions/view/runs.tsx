@@ -72,7 +72,7 @@ function RunsPerDayBoard({ f }: { f: RunsFacts }) {
       title="Runs per day"
       icon="clock"
       span={8}
-      aside={<span className={NOTE}>a hairline marks a day with a failure</span>}
+      aside={<span className={NOTE}>failed runs in red</span>}
     >
       <DayColumns points={d.days} unit="runs" empty="no runs in the window" />
     </Board>

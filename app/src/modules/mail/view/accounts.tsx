@@ -99,7 +99,11 @@ function AccountRow({ u }: { u: BridgeAccount }) {
         </span>
       </div>
       {shown.length > 0 && (
-        <p className={cn(CAPTION, '-mt-2 font-mono text-[0.75rem]')}>
+        // One line: the addresses are identifiers, and every one of them is on the hover.
+        <p
+          className={cn(CAPTION, '-mt-2 truncate font-mono text-[0.75rem]')}
+          title={u.addresses.join(', ')}
+        >
           {shown.join(', ')}
           {more > 0 && <span className="font-sans"> and {num(more)} more</span>}
         </p>

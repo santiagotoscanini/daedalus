@@ -84,12 +84,12 @@ function EventRow({ e }: { e: BridgeEvent }) {
         </span>
         {/* On a phone the detail is this line, wrapping rather than cut. */}
         {e.detail !== '' && (
-          <span className="hidden text-[0.75rem] text-muted-foreground [overflow-wrap:anywhere] @max-[40rem]/table:block">
+          <span className="hidden text-[0.75rem] text-muted-foreground [overflow-wrap:break-word] @max-[40rem]/table:block">
             {e.detail}
           </span>
         )}
       </span>
-      <span className={cn(CELL_QUIET, 'detail py-1 [overflow-wrap:anywhere]')}>{e.detail}</span>
+      <span className={cn(CELL_QUIET, 'detail py-1 [overflow-wrap:break-word]')}>{e.detail}</span>
       <span className={cn(CELL_QUIET, 'py-1 text-right')}>
         <Ago at={e.at} />
       </span>

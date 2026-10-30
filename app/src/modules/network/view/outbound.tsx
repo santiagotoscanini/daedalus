@@ -238,11 +238,15 @@ function StayingUpBoard({
       />
 
       <Columns
+        // Each column is the whole day and its red foot the share of it down.
+        // A near-full column is the normal state, so a column only as tall as
+        // its uptime would leave a bad day to a difference of a pixel; the
+        // foot is never thinner than 2px.
         points={t.daily.map((d) => ({
           label: d.date.slice(5),
-          value: d.uptime,
-          display: `${pct(d.uptime * 100, 2)} up`,
-          flag: d.uptime < 0.999,
+          value: 1,
+          failed: 1 - d.uptime,
+          display: `${pct(d.uptime * 100, 2)} up${d.uptime < 1 ? ` · ${pct((1 - d.uptime) * 100, 2)} down` : ''}`,
         }))}
         height={112}
         empty="no history yet"
@@ -250,18 +254,14 @@ function StayingUpBoard({
       {t.daily.length > 0 && (
         <p className={AXIS}>
           <span>{t.daily[0]?.date.slice(5)}</span>
-          <span>share of the day connected</span>
+          <span>each day, the share down in red</span>
           <span>{t.daily[t.daily.length - 1]?.date.slice(5)}</span>
         </p>
       )}
 
       <p className={FOOT}>
-        {/* A near-full column is the normal state, so the axis starting at
-            zero is the honest choice AND the useless one — the flag is what
-            carries a bad day. */}
-        gluetun reports its own tunnel state every 30 seconds; this is the share of each day it said
-        it was connected. Columns are near-full by design, so a day that dropped at all is
-        underlined in red rather than left to a difference of a pixel.
+        gluetun reports its own tunnel state every 30 seconds; a column is one day, and its red foot
+        the share of that day the tunnel said it was down. A day that dropped at all shows one.
       </p>
       <p className={CAPTION}>
         The WireGuard key expires <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead,

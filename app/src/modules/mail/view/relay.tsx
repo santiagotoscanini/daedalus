@@ -1,5 +1,6 @@
 import { Ago } from '../../../components/ago'
-import { EMPTY } from '../../../components/tokens'
+import { LogBoard, type LogNeighbour } from '../../../components/logs'
+import { EMPTY, FOOT, MONO } from '../../../components/tokens'
 import { BoardGrid, Stat, StatStrip } from '../../../components/viz'
 import { num } from '../../../lib/format'
 import { DeliveriesTable } from './relay-deliveries'
@@ -53,17 +54,68 @@ export function RelayView({ data: d }: { data: Relay }) {
           )}
         </StatStrip>
       )}
+      {/* Full-width rows, the way the service tabs set a page: what the relay
+          carried, who sent it and every attempt, then how the account is set up
+          and who else uses it, then the log. Nothing here shares a row with a
+          board of another height. */}
       <BoardGrid>
         {log !== null && (
           <FrequencyBoard days={d.days} total={log.deliveries.length} window={d.windowDays} />
         )}
-        <SmtpBoard d={d} />
         {log !== null && <CallersTable callers={d.callers} window={d.windowDays} />}
-        <UsersBoard d={d} />
         {log !== null && (
           <DeliveriesTable log={log} failing={d.relay.failing} window={d.windowDays} />
         )}
+        <SmtpBoard d={d} />
+        <UsersBoard d={d} />
+        <RelayLogs system={d.system} />
       </BoardGrid>
     </>
+  )
+}
+
+/**
+ * The relay keeps no log of its own: msmtp is a sendmail binary run inside
+ * whichever unit had news, and journald files its line under that unit. The
+ * failure notifier is the one sender that only ever mails, so its units are
+ * the relay's stream (each line one attempt, and msmtp's own error when it
+ * failed); smartd and ZED, the other two system mailers, are one fold away.
+ */
+function RelayLogs({ system }: { system: Relay['system'] }) {
+  const neighbours: LogNeighbour[] = [
+    ...(system.smartd === true
+      ? [
+          {
+            source: { unit: 'smartd.service' },
+            label: 'smartd',
+            role: 'mails when a disk is failing',
+            note: 'smartd hands a warning to sendmail and logs whether it went; msmtp’s line for that send lands here, not under the failure notices.',
+          },
+        ]
+      : []),
+    ...(system.zed === true
+      ? [
+          {
+            source: { unit: 'zfs-zed.service' },
+            label: 'ZFS ZED',
+            role: 'mails on a pool fault or a scrub with errors',
+            note: 'The ZFS event daemon’s zedlets mail through sendmail, so a pool notice and msmtp’s line for it land here.',
+          },
+        ]
+      : []),
+  ]
+  return (
+    <LogBoard
+      source={{ units: 'notify-email@.+' }}
+      title="Failure notice logs"
+      neighbours={neighbours}
+      foot={
+        <p className={FOOT}>
+          Every <span className={MONO}>notify-email@</span> unit: one per unit whose failure was
+          mailed, and each of its lines one attempt as msmtp logged it, with the reason when the
+          relay refused. The deliveries above read the same lines from every unit that sends.
+        </p>
+      }
+    />
   )
 }

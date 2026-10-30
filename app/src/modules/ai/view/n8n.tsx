@@ -136,7 +136,7 @@ function RunsBoard({ f }: { f: N8nFacts }) {
           label: d.date.slice(5),
           value: d.runs,
           display: `${num(d.runs)} run${d.runs === 1 ? '' : 's'}${d.failed > 0 ? ` · ${num(d.failed)} failed` : ''}`,
-          flag: d.failed > 0,
+          failed: d.failed,
         }))}
         height={112}
         empty={data.note ?? 'no executions in the window'}
@@ -164,8 +164,8 @@ function RunsBoard({ f }: { f: N8nFacts }) {
 
       <p className={FOOT}>
         Counted from n8n’s own execution history, which it prunes on a schedule, so this window is
-        what n8n still holds. An empty column early on may be forgetting rather than silence. A day
-        that saw a failure is underlined in red; the stack trace is behind the Executions tab.
+        what n8n still holds. An empty column early on may be forgetting rather than silence. Failed
+        runs are the red foot of their day’s column; the stack trace is behind the Executions tab.
       </p>
       {data.partial && (
         <p className={CAPTION}>

@@ -48,7 +48,7 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
           display:
             `${num(d.requests)} requests · ${num(d.tokens)} tokens` +
             (d.failed > 0 ? ` · ${num(d.failed)} failed` : ''),
-          flag: d.failed > 0,
+          failed: d.failed,
         }))}
         height={112}
         tone="muted"
@@ -88,7 +88,7 @@ export function TrafficBoard({ f }: { f: LitellmFacts }) {
       )}
       <p className={FOOT}>
         Counted from the gateway’s own ledger, which survives a restart. Its Prometheus counters do
-        not. A day that saw a failure is underlined in red.
+        not. The red foot of a column is the requests that failed that day.
       </p>
     </Board>
   )

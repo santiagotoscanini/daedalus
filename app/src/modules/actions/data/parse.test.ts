@@ -196,7 +196,7 @@ describe('runs', () => {
     expect(runSeconds(run({ status: 'in_progress', conclusion: null }), now)).toBe(300)
   })
 
-  it('buckets by day, flagging failures', () => {
+  it('buckets by day, counting failures', () => {
     const now = Date.parse('2026-09-23T15:00:00Z')
     const b = dayBuckets(
       [
@@ -208,10 +208,10 @@ describe('runs', () => {
       3,
       now,
     )
-    expect(b.map((x) => [x.label, x.value, x.flag])).toEqual([
-      ['9/21', 1, false],
-      ['9/22', 0, false],
-      ['9/23', 2, true],
+    expect(b.map((x) => [x.label, x.value, x.failed])).toEqual([
+      ['9/21', 1, 0],
+      ['9/22', 0, 0],
+      ['9/23', 2, 1],
     ])
   })
 

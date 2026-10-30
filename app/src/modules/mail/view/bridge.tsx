@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react'
 import { Ago } from '../../../components/ago'
-import { FOOT, MONO, SUB } from '../../../components/tokens'
+import { FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, Chip, Facts } from '../../../components/viz'
-import { cn } from '../../../lib/cn'
 import { bytes } from '../../../lib/format'
 import type { BridgeReport, BridgeSettings, BridgeStatus } from '../data/bridge'
 
@@ -30,7 +29,9 @@ export function BridgeBoard({ report }: { report: BridgeReport }) {
 
   return (
     <Board title="Bridge" span={4} spanMd={12}>
-      <Facts list rows={rows} />
+      {/* Short readings, so they sit two or three to a line rather than one
+          per line: the board then stands as tall as the account beside it. */}
+      <Facts rows={rows} />
       <p className={FOOT}>
         <b>Proton</b> is Bridge&rsquo;s own verdict: it opens its IMAP listener only while
         Proton&rsquo;s servers answer. The ports are local to Bridge, and SSL means the listener
@@ -81,23 +82,28 @@ export function SettingsBoard({ status: s }: { status: BridgeStatus }) {
       : [
           { k: 'Message store', v: bytes(s.disk.messageStoreBytes) },
           { k: 'Search index', v: bytes(s.disk.indexBytes) },
-          { k: 'Measured', v: <Ago at={s.disk.measuredAt} /> },
         ]
-  if (settings.length === 0 && disk.length === 0) return null
+  const rows = [...settings, ...disk]
+  if (rows.length === 0) return null
 
   return (
-    <Board title="Settings and storage" span={4} spanMd={12}>
-      {settings.length > 0 && <Facts list rows={settings} />}
-      {disk.length > 0 && (
-        <>
-          <p className={cn(SUB, settings.length === 0 && 'mt-0')}>On disk</p>
-          <Facts list rows={disk} />
-        </>
-      )}
+    <Board
+      title="Settings and storage"
+      span={12}
+      aside={
+        s.disk === null ? undefined : (
+          <span className={NOTE}>
+            sizes read <Ago at={s.disk.measuredAt} />
+          </span>
+        )
+      }
+    >
+      {/* One grid, so the two sizes fall into the settings' columns. */}
+      <Facts rows={rows} />
       <p className={FOOT}>
         The keychain is where Bridge keeps each account&rsquo;s session. Alternative routing reaches
-        Proton through third-party networks when its own servers are blocked. On disk is the local
-        copy of every message Bridge has synced, and the index it searches.
+        Proton through third-party networks when its own servers are blocked. The message store is
+        the local copy of every message Bridge has synced, and the search index what it searches.
       </p>
     </Board>
   )

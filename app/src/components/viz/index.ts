@@ -23,4 +23,5 @@
 export type { Tone } from '../../lib/tone'
 export * from './board'
 export * from './charts'
+export * from './columns'
 export * from './stats'

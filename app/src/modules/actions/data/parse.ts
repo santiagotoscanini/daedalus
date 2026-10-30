@@ -359,9 +359,9 @@ export function cronWords(cron: string): string {
 
 /* ── buckets and rates ────────────────────────────────────────────────── */
 
-export type DayBucket = { label: string; value: number; flag: boolean }
+export type DayBucket = { label: string; value: number; failed: number }
 
-/** One column per day, oldest first, with a flag on days that had a failure. */
+/** One column per day, oldest first; `failed` is the weight of the runs that failed or timed out. */
 export function dayBuckets(
   runs: readonly Run[],
   days: number,
@@ -375,7 +375,7 @@ export function dayBuckets(
     return {
       label: `${String(d.getUTCMonth() + 1)}/${String(d.getUTCDate())}`,
       value: 0,
-      flag: false,
+      failed: 0,
     }
   })
   for (const r of runs) {
@@ -384,7 +384,7 @@ export function dayBuckets(
     const b = out[i]
     if (b === undefined) continue
     b.value += weight(r)
-    if (r.conclusion === 'failure' || r.conclusion === 'timed_out') b.flag = true
+    if (r.conclusion === 'failure' || r.conclusion === 'timed_out') b.failed += weight(r)
   }
   return out
 }
@@ -445,7 +445,7 @@ export function dayMinutes(
     return {
       label: `${String(d.getUTCMonth() + 1)}/${String(d.getUTCDate())}`,
       value: perDay.get(d.toISOString().slice(0, 10)) ?? 0,
-      flag: false,
+      failed: 0,
     }
   })
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { DAY_TIME, LocalTime } from '../../../components/ago'
-import { QuietState, SECTION_SPAN } from '../../../components/modules/parts'
+import { QuietState, SECTION_SPAN, TABLE_NONE } from '../../../components/modules/parts'
 import {
   CELL_QUIET,
   TABLE,
@@ -34,9 +34,8 @@ const GRID =
 const NARROW = 'hidden @max-[56rem]/table:block'
 const PHONE = 'hidden @max-[36rem]/table:inline'
 
-/** An identifier that wraps rather than truncating: an address list, a reply with an id in it. */
-const WRAP_MONO =
-  'min-w-0 py-1 font-mono text-[0.72rem] text-muted-foreground [overflow-wrap:anywhere]'
+/** An identifier on one line, cut with an ellipsis: the whole of it is on the hover. */
+const ID_MONO = 'min-w-0 truncate py-1 font-mono text-[0.72rem] text-muted-foreground'
 
 export function DeliveriesTable({
   log,
@@ -63,7 +62,7 @@ export function DeliveriesTable({
       className={SECTION_SPAN[12]}
     >
       {rows.length === 0 ? (
-        <p className={CELL_QUIET}>msmtp logged no delivery in {num(window)} days.</p>
+        <p className={TABLE_NONE}>msmtp logged no delivery in {num(window)} days.</p>
       ) : (
         <ul className={TABLE} aria-label="Deliveries">
           <li className={cn(GRID, TABLE_HEAD)}>
@@ -102,14 +101,15 @@ export function DeliveriesTable({
 }
 
 function Caller({ d }: { d: RelayDelivery }) {
-  return d.about === null ? (
-    <span className="font-mono text-[0.76rem] text-foreground [overflow-wrap:anywhere]">
-      {unitName(d.unit)}
-    </span>
-  ) : (
-    <span className="[overflow-wrap:anywhere]" title={d.unit}>
-      <span className="font-mono text-[0.76rem] text-foreground">{d.about}</span>{' '}
-      <span className="text-[0.75rem] text-muted-foreground">failed</span>
+  return (
+    <span className="block truncate font-mono text-[0.76rem] text-foreground" title={d.unit}>
+      {d.about === null ? (
+        unitName(d.unit)
+      ) : (
+        <>
+          {d.about} <span className="font-sans text-[0.75rem] text-muted-foreground">failed</span>
+        </>
+      )}
     </span>
   )
 }
@@ -125,7 +125,7 @@ function Row({ d, current }: { d: RelayDelivery; current: boolean }) {
       <span className="flex min-w-0 flex-col gap-0.5 py-1">
         <Caller d={d} />
         {/* On a narrow table the columns it lost are this line. */}
-        <span className={cn(CELL_QUIET, NARROW, '[overflow-wrap:anywhere]')}>
+        <span className={cn(CELL_QUIET, NARROW, 'truncate')} title={to}>
           <span className={PHONE}>
             <LocalTime at={d.at} opts={DAY_TIME} />
             {' · '}
@@ -137,7 +137,7 @@ function Row({ d, current }: { d: RelayDelivery; current: boolean }) {
         {d.error !== null && (
           <span
             className={cn(
-              'text-[0.75rem] [overflow-wrap:anywhere]',
+              'text-[0.75rem] [overflow-wrap:break-word]',
               current ? 'text-danger/90' : 'text-muted-foreground',
             )}
           >
@@ -145,11 +145,15 @@ function Row({ d, current }: { d: RelayDelivery; current: boolean }) {
           </span>
         )}
       </span>
-      <span className={cn(WRAP_MONO, 'wide')}>{to}</span>
+      <span className={cn(ID_MONO, 'wide')} title={to}>
+        {to}
+      </span>
       <span className={cn(CELL_QUIET, 'wide py-1 text-right')}>
         {d.bytes === null ? null : bytes(d.bytes)}
       </span>
-      <span className={cn(WRAP_MONO, 'wide')}>{reply}</span>
+      <span className={cn(ID_MONO, 'wide')} title={reply ?? undefined}>
+        {reply}
+      </span>
       <span className="py-1 text-right">
         {d.ok ? (
           <QuietState>sent</QuietState>

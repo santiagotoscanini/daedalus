@@ -1,4 +1,5 @@
 import { Ago } from '../../../components/ago'
+import { LogBoard } from '../../../components/logs'
 import { useLiveValue } from '../../../components/poll'
 import { Changelog } from '../../../components/release-notes'
 import { compareOf, ServiceHead, verdictOf } from '../../../components/service-head'
@@ -55,7 +56,11 @@ export function ProtonView({ data: d }: { data: Proton }) {
         lede="Proton’s encrypted mailbox, served on this box over local IMAP and SMTP."
         actions={<Reporting report={report} />}
       />
-      <Strip d={d} report={report} />
+      <Strip d={d} />
+      {/* The house order: the subject's state first (the account and Bridge,
+          paired because both are a few lines tall), then the mail itself as
+          full-width rows that grow with the mailbox, then what happened, how it
+          is set up, the release notes and the log. */}
       <BoardGrid>
         <AccountsBoard report={report} />
         <BridgeBoard report={report} />
@@ -68,9 +73,9 @@ export function ProtonView({ data: d }: { data: Proton }) {
             />
           ),
         )}
-        {s !== null && <SettingsBoard status={s} />}
-        {d.logs !== null && <BridgeLogsTable logs={d.logs} />}
         {report.status !== null && <EventsTable events={report.status.events} />}
+        {d.logs !== null && <BridgeLogsTable logs={d.logs} />}
+        {s !== null && <SettingsBoard status={s} />}
         <Changelog
           gap={d.gap}
           span={12}
@@ -79,6 +84,17 @@ export function ProtonView({ data: d }: { data: Proton }) {
               Proton&rsquo;s own releases, from the running version to the newest. Proton retires
               old versions on its servers without notice, and a retired version has every request
               refused until it is updated (the <b>Update required</b> event).
+            </p>
+          }
+        />
+        <LogBoard
+          source={{ stack: 'proton-bridge' }}
+          title="Proton Mail Bridge logs"
+          foot={
+            <p className={FOOT}>
+              Everything the container wrote: Bridge&rsquo;s own log, its levels in colour, and the
+              lines of what runs beside it. Warnings and errors above groups the last day of
+              Bridge&rsquo;s own warnings from the same stream.
             </p>
           }
         />
@@ -100,42 +116,14 @@ function Reporting({ report }: { report: BridgeReport }) {
   )
 }
 
-/** The mailbox's totals and the container's, each cell there only when its reading is. */
-function Strip({ d, report }: { d: Proton; report: BridgeReport }) {
-  const boxes = (report.reporting ? (report.status?.users ?? []) : []).flatMap((u) =>
-    u.mailbox === null ? [] : [u.mailbox],
-  )
-  const inbox = boxes.flatMap((m) => m.folders.filter((f) => f.name === 'INBOX'))
-  const days = boxes.flatMap((m) => m.days)
-  const partial = boxes.some((m) => m.windowCapped) ? 'at least ' : ''
-  const sum = <T,>(xs: T[], f: (x: T) => number) => xs.reduce((n, x) => n + f(x), 0)
+/**
+ * The container around Bridge, each cell there only when its reading is. The
+ * mailbox's own totals head the chart they sum, below.
+ */
+function Strip({ d }: { d: Proton }) {
   const { cpu, memory, oomKills: oom } = d.resources
 
   const cells = [
-    inbox.length > 0 && (
-      <Stat
-        key="inbox"
-        label="Inbox"
-        value={num(sum(inbox, (f) => f.messages))}
-        sub={`${num(sum(inbox, (f) => f.unseen))} unread`}
-      />
-    ),
-    days.length > 0 && (
-      <Stat
-        key="received"
-        label="Received"
-        value={num(sum(days, (x) => x.received))}
-        sub={`${partial}in 30 days`}
-      />
-    ),
-    days.length > 0 && (
-      <Stat
-        key="sent"
-        label="Sent"
-        value={num(sum(days, (x) => x.sent))}
-        sub={`${partial}in 30 days`}
-      />
-    ),
     cpu.used !== null && (
       <Stat
         key="cpu"

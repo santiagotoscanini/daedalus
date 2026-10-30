@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Ago } from '../../../components/ago'
 import { KeyValue } from '../../../components/modules/parts'
 import { CAPTION, FOOT, MONO, SUB } from '../../../components/tokens'
-import { Board, Chip, Facts } from '../../../components/viz'
+import { Board, Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { Relay } from './shared'
@@ -50,8 +50,8 @@ export function SmtpBoard({ d }: { d: Relay }) {
   if (rows.length === 0) return null
 
   return (
-    <Board title="SMTP" span={4} spanMd={12}>
-      <Facts list rows={rows} />
+    <Board title="SMTP" span={12}>
+      <KeyValue rows={rows} />
       <p className={FOOT}>
         msmtp is the box&rsquo;s <span className={MONO}>sendmail</span>: every program that mails
         through it sends from this account to this recipient. The settings are the ones nix wrote
@@ -139,7 +139,7 @@ export function UsersBoard({ d }: { d: Relay }) {
   if (viaMsmtp.length === 0 && ownClient.length === 0) return null
 
   return (
-    <Board title="Who uses this account" span={6}>
+    <Board title="Who uses this account" span={12}>
       {viaMsmtp.length > 0 && (
         <>
           <p className={cn(SUB, 'mt-0')}>Through sendmail</p>

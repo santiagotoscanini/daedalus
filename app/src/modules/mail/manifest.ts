@@ -11,7 +11,7 @@ export const manifest = {
   // about the watchers on Monitoring.
   order: 55,
   section: 'Infrastructure',
-  boardSpans: [8, 4, 12, 6, 6],
+  boardSpans: [12, 12, 12],
   tabs: [
     // The relay is the platform's and exists on every box, so its tab has no
     // `nix` and comes first. It is named after the provider the box relays
@@ -24,7 +24,7 @@ export const manifest = {
       icon: 'mail',
       brand: 'mail-relay',
       head: false,
-      boardSpans: [8, 4, 12, 6, 6],
+      boardSpans: [12, 12, 12],
     },
     // Proton Mail Bridge, while the box runs the `proton-bridge` stack. No
     // dot: nothing probes it from outside, and its page is the check.

@@ -35,7 +35,7 @@ export function BridgeLogsTable({ logs }: { logs: BridgeLogs }) {
       title="Warnings and errors"
       aside={`last ${String(logs.windowHours)} hours`}
       note={`${at}${num(logs.warnings)} warning${logs.warnings === 1 ? '' : 's'} · ${num(logs.errors)} error${logs.errors === 1 ? '' : 's'}${logs.routine > 0 ? ` · ${num(logs.routine)} routine` : ''}`}
-      className={SECTION_SPAN[8]}
+      className={SECTION_SPAN[12]}
     >
       {logs.groups.length === 0 ? (
         <p className={TABLE_NONE}>Nothing at warning or above in the last day.</p>
@@ -89,7 +89,7 @@ function Row({ g }: { g: BridgeLogGroup }) {
       <span className="flex min-w-0 flex-col gap-0.5 py-1">
         <span
           className={cn(
-            'text-[0.8125rem] [overflow-wrap:anywhere]',
+            'text-[0.8125rem] [overflow-wrap:break-word]',
             quiet ? 'text-muted-foreground' : 'text-foreground',
           )}
         >
@@ -100,7 +100,7 @@ function Row({ g }: { g: BridgeLogGroup }) {
           </span>
         </span>
         {g.detail !== null && (
-          <span className="font-mono text-[0.72rem] text-muted-foreground [overflow-wrap:anywhere]">
+          <span className="font-mono text-[0.72rem] text-muted-foreground [overflow-wrap:break-word]">
             {g.detail}
           </span>
         )}
