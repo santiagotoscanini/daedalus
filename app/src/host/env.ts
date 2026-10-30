@@ -224,6 +224,12 @@ export const SCHEMA = {
     about: 'The DHCP reservations pi-hole renders.',
     source: 'stacks/pihole fleet.dashboard.pihole.env',
   },
+  PROTON_BRIDGE_STATUS_FILE: {
+    kind: 'path',
+    about:
+      'The status Proton Mail Bridge’s supervisor writes: accounts, sync, events. Never a password.',
+    source: 'stacks/proton-bridge fleet.dashboard.proton-bridge.env',
+  },
   GITHUB_TOKEN_PATH: {
     kind: 'path',
     about: 'The GitHub App’s minted installation token.',
@@ -440,6 +446,11 @@ export const SCHEMA = {
     kind: 'string',
     about: 'The Playwright the shotter image carries.',
     source: 'stacks/shotter fleet.dashboard.shotter.env',
+  },
+  PROTON_BRIDGE_VERSION: {
+    kind: 'string',
+    about: 'The Proton Mail Bridge release the box builds.',
+    source: 'stacks/proton-bridge fleet.dashboard.proton-bridge.env',
   },
 
   // ── service credentials — read through host/keys.ts ──────────────────────

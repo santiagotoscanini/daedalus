@@ -6,7 +6,7 @@ import { MODULES, moduleById, resolveModuleTab } from './registry'
 // directory has to keep, not a fixture.
 
 describe('the module registry', () => {
-  it('finds the ten modules, in rail order', () => {
+  it('finds the eleven modules, in rail order', () => {
     expect(MODULES.map((m) => m.id)).toEqual([
       'ai',
       'media',
@@ -14,6 +14,7 @@ describe('the module registry', () => {
       'health',
       'gaming',
       'network',
+      'mail',
       'system',
       'database',
       'actions',

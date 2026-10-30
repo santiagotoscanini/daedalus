@@ -9,7 +9,17 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 // the operator, the release and the rest of what the box calls itself
 // (Settings › General).
 
-export type MailIdentity = { sender: string; alertTo: string }
+/**
+ * Who the box's mail is from and to, and the relay it leaves through
+ * (`fleet.mail`). `smtpHost` '' and `smtpPort` null: an export written before
+ * the relay was part of it.
+ */
+export type MailIdentity = {
+  sender: string
+  alertTo: string
+  smtpHost: string
+  smtpPort: number | null
+}
 
 /** A git author the box can commit as. */
 export type GitIdentity = { name: string; email: string }
@@ -91,10 +101,15 @@ const shape = obj({
   ),
   registryUrl: optional(str, ''),
   grafanaUrl: optional(str, ''),
-  mail: optional(obj({ sender: optional(str, ''), alertTo: optional(str, '') }), {
-    sender: '',
-    alertTo: '',
-  }),
+  mail: optional(
+    obj({
+      sender: optional(str, ''),
+      alertTo: optional(str, ''),
+      smtpHost: optional(str, ''),
+      smtpPort: optional(nullable(num), null),
+    }),
+    { sender: '', alertTo: '', smtpHost: '', smtpPort: null },
+  ),
   controlPlane: obj({
     label: nullable(str),
     previousLabel: nullable(str),
@@ -120,7 +135,7 @@ const NO_SITE: SiteIdentity = {
   operator: { user: '', group: '', uid: null },
   registryUrl: '',
   grafanaUrl: '',
-  mail: { sender: '', alertTo: '' },
+  mail: { sender: '', alertTo: '', smtpHost: '', smtpPort: null },
   controlPlane: { label: null, previousLabel: null, hostname: null, aliases: [] },
   git: { box: NO_GIT, operator: NO_GIT },
 }

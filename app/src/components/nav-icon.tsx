@@ -31,6 +31,7 @@ export type NavIconName =
   // GitHub Actions: the play mark inside a ring, which is the platform's own
   // glyph reduced to a stroke — a run is the thing this page is about.
   | 'actions'
+  | 'mail'
   | 'claude'
   | 'menu'
   | 'close'
@@ -116,6 +117,13 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8.6" />
       <path d="m10.2 8.9 4.6 3.1-4.6 3.1Z" />
+    </>
+  ),
+  // An envelope: the flap is the whole sign at 19px.
+  mail: (
+    <>
+      <rect x="3.2" y="5.4" width="17.6" height="13.2" rx="2.2" />
+      <path d="m3.9 7.2 8.1 5.9 8.1-5.9" />
     </>
   ),
 

@@ -561,8 +561,15 @@ in
           operator = {
             inherit (cfg.operator) user group uid;
           };
+          # The relay beside the two addresses: the Email page says where the
+          # box's mail leaves from.
           mail = {
-            inherit (cfg.mail) sender alertTo;
+            inherit (cfg.mail)
+              sender
+              alertTo
+              smtpHost
+              smtpPort
+              ;
           };
           # The git identities site.json's `commits.author` chooses between,
           # for the picker on Settings › Site. The host agents carry the same

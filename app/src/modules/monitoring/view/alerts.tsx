@@ -70,15 +70,9 @@ function alertsFacts({ data: d }: { data: Alerts }) {
     `${num(d.rules)} rules`,
     ...d.byFolder.map((x) => `${x.label} ${num(x.value)}`),
   ].join(' · ')
-  // Present tense only when it is true in the present: a failure NEWER than
-  // the newest success means the relay may be broken right now; failures the
-  // relay has since recovered from are history, worth listing but not a
-  // headline. Failures arrive newest first.
-  const newestFailure = d.mail.failures[0]
-  const mailFailing =
-    newestFailure !== undefined &&
-    (d.mail.lastSend === null || newestFailure.agoSeconds < d.mail.lastSend.agoSeconds)
-  return { d, newestFailure, mailFailing, ruleLine }
+  // Present tense only when it is true in the present: `failing` is a
+  // failure newer than the newest success (lib/dashboard/mail-relay.ts).
+  return { d, mailFailing: d.mail.failing, ruleLine }
 }
 
 type AlertsFacts = NonNullable<ReturnType<typeof alertsFacts>>

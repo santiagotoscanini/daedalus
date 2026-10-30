@@ -36,8 +36,8 @@ loaded. They are not repeated here.
   through the MCP tools at `/mcp` (`host/mcp/`) — those are the two
   doors onto a flow.
 - **The dashboard modules — `src/modules/<id>/`**: one directory per
-  category page (actions, ai, database, gaming, health, home, media, monitoring,
-  network, system),
+  category page (actions, ai, database, gaming, health, home, mail, media,
+  monitoring, network, system),
   found by `import.meta.glob`, never listed. Each holds `manifest.ts`
   (pure data: label, lede, rail `order`, the tabs with their probes,
   spans and the `nix` module ids each tab fronts), `releases.ts` when it
@@ -86,7 +86,7 @@ loaded. They are not repeated here.
   builtin, the database, or `process.env`) or statically imports
   something that does; `src/lib/`'s top level is pure and a component
   may import values from it. `lib/repo/**` (drizzle), `lib/dashboard/**`
-  (the cross-module readers: images, github, host facts) and
+  (the cross-module readers: images, github, host facts, the mail relay) and
   `lib/apps/**` are server-only too and stay in `lib/` because their
   own names already say so; `src/modules/*/data/**` is a server region
   by the same rule, and `src/modules/*/view/**` is client code. **New rule for
