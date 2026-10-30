@@ -184,7 +184,7 @@ let
       lib.mapAttrsToList (n: a: {
         key = n;
         name = a.displayName;
-        inherit (a) resource clients;
+        inherit (a) resource clients cimd;
       }) config.fleet.ssoApis
     )
   );

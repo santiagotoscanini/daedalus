@@ -218,4 +218,11 @@ jq -c '.[]' "$APIS" | while read -r declared; do
       '{"userDelegatedAccess":true,"clientAccess":false,"userDelegatedPermissionIds":[],"clientPermissionIds":[]}'
     [ "$API_CODE" = "200" ] || { echo "API $key: granting client $client failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
   done <<< "$(printf '%s' "$declared" | jq -r '.clients[]')"
+
+  # CIMD clients (`cimd`): on or off, no custom permissions. The switch is
+  # this API's; which metadata URLs Pocket ID admits at all is its own
+  # application setting (the CIMD URL allowlist).
+  cimd_body=$(printf '%s' "$declared" | jq -c '{enabled: .cimd, permissionIds: []}')
+  api PUT "/api/apis/$api_id/cimd-access" "$cimd_body"
+  [ "$API_CODE" = "200" ] || { echo "API $key: setting CIMD access failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
 done

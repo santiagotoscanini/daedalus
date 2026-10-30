@@ -295,6 +295,20 @@
                 client's `allowedGroups`.
               '';
             };
+            cimd = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Also let Client ID Metadata Document clients ask for tokens
+                for this API: clients that identify by an https URL instead
+                of a registration, which is how MCP clients such as Claude's
+                sign in without one. Which URLs count is the identity
+                provider's CIMD allowlist (an application setting, not this
+                option). A CIMD client is not limited by any client's
+                `allowedGroups`, so whatever serves the API must check who
+                the user is itself.
+              '';
+            };
           };
         }
       )
