@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LokiStream } from '../../host/loki'
-import { relayDeliveries } from './mail-relay'
+import { msmtpFields, parseDeliveries, relayDeliveries } from './mail-relay'
 
 // What the relay's own log lines say. msmtp writes one line per attempt,
 // filed under the unit that was sending; these are that line's two shapes.
@@ -91,5 +91,70 @@ describe('relayDeliveries', () => {
     const line = 'host=smtp.example.org tls=on exitcode=EX_TEMPFAIL'
     const r = relayDeliveries([stream('x.service', [[ns(1), line]])], now)
     expect(r.failures[0]?.error).toBe(line)
+  })
+})
+
+describe('msmtpFields', () => {
+  it('reads every key, quoted values whole', () => {
+    expect(msmtpFields(OK('alice@example.org'))).toEqual({
+      host: 'smtp.example.org',
+      tls: 'on',
+      auth: 'on',
+      user: 'box@example.org',
+      from: 'box@example.org',
+      recipients: 'alice@example.org',
+      mailsize: '812',
+      smtpstatus: '250',
+      smtpmsg: '250 2.0.0 OK',
+      exitcode: 'EX_OK',
+    })
+  })
+
+  it('runs a quoted value to the next key, quote inside and all', () => {
+    const f = msmtpFields(
+      "host=smtp.example.org errormsg='the server can't be reached: timeout' exitcode=EX_TEMPFAIL",
+    )
+    expect(f.errormsg).toBe("the server can't be reached: timeout")
+    expect(f.exitcode).toBe('EX_TEMPFAIL')
+  })
+
+  it('keeps double spaces inside a reply', () => {
+    const f = msmtpFields(
+      "host=smtp.example.org smtpstatus=250 smtpmsg='250 2.0.0 OK  1700000000 abc - gsmtp' exitcode=EX_OK",
+    )
+    expect(f.smtpmsg).toBe('250 2.0.0 OK  1700000000 abc - gsmtp')
+  })
+})
+
+describe('parseDeliveries', () => {
+  it('reads each attempt, newest first, and names what a failure notice was about', () => {
+    const d = parseDeliveries([
+      stream('smartd.service', [[ns(600), OK('alice@example.org,bob@example.org')]]),
+      stream('notify-email@backup@a1b2.service', [[ns(60), FAIL('timeout')]]),
+    ])
+    expect(d.map((x) => [x.unit, x.about, x.ok])).toEqual([
+      ['notify-email@backup@a1b2.service', 'backup@a1b2', false],
+      ['smartd.service', null, true],
+    ])
+    expect(d[0]).toMatchObject({
+      at: now - 60 * 60_000,
+      recipients: ['alice@example.org'],
+      bytes: null,
+      smtpStatus: null,
+      exitCode: 'EX_NOPERM',
+      error: 'timeout',
+    })
+    expect(d[1]).toMatchObject({
+      recipients: ['alice@example.org', 'bob@example.org'],
+      bytes: 812,
+      smtpStatus: 250,
+      smtpMessage: '250 2.0.0 OK',
+      error: null,
+    })
+  })
+
+  it('files a line with no unit label under ?', () => {
+    const d = parseDeliveries([{ stream: {}, values: [[ns(1), OK('alice@example.org')]] }])
+    expect(d[0]?.unit).toBe('?')
   })
 })

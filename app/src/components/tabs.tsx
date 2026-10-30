@@ -20,6 +20,8 @@ type TabItem<Id extends string = string> = {
   muted?: boolean
   /** A mark before the label. */
   icon?: NavIconName
+  /** A service's own mark (a path under public/), drawn where `icon` would be. */
+  logo?: string
 }
 
 export function TabBar<Id extends string>({
@@ -118,7 +120,17 @@ export function TabBar<Id extends string>({
               replace
             >
               {t.extra}
-              {t.icon !== undefined && <NavIcon name={t.icon} size={15} />}
+              {t.logo !== undefined ? (
+                <img
+                  src={t.logo}
+                  alt=""
+                  width={15}
+                  height={15}
+                  className="block size-[15px] flex-none object-contain"
+                />
+              ) : (
+                t.icon !== undefined && <NavIcon name={t.icon} size={15} />
+              )}
               {t.label}
             </Link>
           </Fragment>

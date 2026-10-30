@@ -562,15 +562,31 @@ in
             inherit (cfg.operator) user group uid;
           };
           # The relay beside the two addresses: the Email page says where the
-          # box's mail leaves from.
-          mail = {
-            inherit (cfg.mail)
-              sender
-              alertTo
-              smtpHost
-              smtpPort
-              ;
-          };
+          # box's mail leaves from, how msmtp speaks to it (read off msmtp's
+          # own settings, platform/mail, so the page and the relay cannot
+          # disagree), and which system mailers hand it their mail.
+          mail =
+            let
+              msmtp = config.programs.msmtp;
+              account = msmtp.accounts.default or { };
+            in
+            {
+              inherit (cfg.mail)
+                sender
+                alertTo
+                smtpHost
+                smtpPort
+                ;
+              tls = msmtp.defaults.tls or false;
+              starttls = msmtp.defaults.tls_starttls or false;
+              trustFile = msmtp.defaults.tls_trust_file or null;
+              auth = account.auth or false;
+              user = account.user or null;
+              notifiers = {
+                smartd = config.services.smartd.enable && config.services.smartd.notifications.mail.enable;
+                zed = config.boot.zfs.enabled;
+              };
+            };
           # The git identities site.json's `commits.author` chooses between,
           # for the picker on Settings › Site. The host agents carry the same
           # two values baked in (stacks/daedalus/host/lib.sh `commit_name`);

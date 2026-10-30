@@ -74,7 +74,10 @@ loaded. They are not repeated here.
   (`fleet.modules.<id>.enable`; an id it does not name is a module the
   box does not import) and `lib/modules/active.ts` derives
   the rail from it: a tab is offered while any of its `nix` modules is
-  enabled, a module while it has a tab left.
+  enabled, a module while it has a tab left. The same copy carries what a
+  `brand`ed tab is called on this box (`fetchActiveModules` resolves it:
+  Email's relay tab takes its provider's name and mark from
+  `lib/mail-providers.ts`), and the tab row and the palette read it.
 - `core/identity/pocket-id.ts` is the Pocket ID reader two modules share
   (clients, accounts, groups, settings, the audit log): Home's Sign-in tab
   (`modules/home/data/signin.ts` is its loader) and Network's Proxy tab both

@@ -27,9 +27,14 @@ import { type Tone, toneStyle } from '../lib/tone'
 export const TABLE =
   '@container/table m-0 list-none overflow-hidden rounded-2xl border border-hairline bg-surface p-0 shadow-[inset_0_1px_0_var(--hairline-hi),var(--board-shadow)]'
 
-/** The labels row: a faint band, small muted labels. */
+/**
+ * The labels row: a faint band, small muted labels, centred in its fixed
+ * height. The centring is the head's own: a table whose rows wrap sets
+ * `items-start` on the GRID it shares with the head, and a head that inherited
+ * it drew its labels against the top border over an empty band.
+ */
 export const TABLE_HEAD =
-  'h-[2.125rem] border-hairline border-b bg-foreground/[0.02] text-[0.72rem] text-muted-foreground [font-weight:500]'
+  'h-[2.125rem] items-center border-hairline border-b bg-foreground/[0.02] text-[0.72rem] text-muted-foreground [font-weight:500]'
 
 /** A row. Hairline above every row except the first after the head or a group. */
 export const TABLE_ROW =

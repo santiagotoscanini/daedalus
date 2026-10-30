@@ -1,102 +1,69 @@
-import { KeyValue } from '../../../components/modules/parts'
-import { CAPTION, FOOT, MONO, NOTE } from '../../../components/tokens'
-import { Board, Chip, Measures } from '../../../components/viz'
-import { cn } from '../../../lib/cn'
-import { DASH, num, since } from '../../../lib/format'
-import type { Overview } from './shared'
+import { Ago } from '../../../components/ago'
+import { EMPTY } from '../../../components/tokens'
+import { BoardGrid, Stat, StatStrip } from '../../../components/viz'
+import { num } from '../../../lib/format'
+import { DeliveriesTable } from './relay-deliveries'
+import { CallersTable, FrequencyBoard } from './relay-frequency'
+import { SmtpBoard, UsersBoard } from './relay-setup'
+import type { Relay } from './shared'
 
-// Email › the alert relay: who the box's mail is from and to, the server it
-// leaves through, and what the last month of attempts says about it. The
-// same reading as Monitoring › Alerts, whose failed-sends table is the
-// drill-down this board leaves out.
+// Email › the relay tab: what the account the box mails through has sent,
+// how often, for whom, and how it is set up. The counts are msmtp's own log
+// lines over the window, read back from Loki.
 
-type Relay = Overview['relay']
-
-export function RelayBoard({ relay: r }: { relay: Relay }) {
-  const id = r.identity
-  const lastFailure = r.failures[0]
-  const failed = r.failed30d ?? 0
+export function RelayView({ data: d }: { data: Relay }) {
+  const log = d.log
+  const lastSent = log?.deliveries.find((x) => x.ok)
+  const lastFailed = log?.deliveries.find((x) => !x.ok)
+  const sent = d.relay.sent30d
+  const failed = d.relay.failed30d ?? 0
+  const lower = log?.capped === true ? 'at least ' : ''
 
   return (
-    <Board
-      title={r.failing ? 'Alert relay failing' : 'Alert relay'}
-      span={12}
-      aside={
-        r.failing ? (
-          <Chip tone="bad">
-            {num(failed)} failed send{failed === 1 ? '' : 's'} in 30 days
-          </Chip>
-        ) : (
-          <span className={NOTE}>{r.sent30d === null ? DASH : num(r.sent30d)} sent in 30 days</span>
-        )
-      }
-    >
-      <Measures
-        items={[
-          { k: 'Sent', v: num(r.sent30d) },
-          // Recovered failures are history: plain. Only a current one is red.
-          { k: 'Failed', v: num(r.failed30d), ...(r.failing ? { tone: 'bad' as const } : {}) },
-          {
-            k: 'Last success',
-            v:
-              r.lastSend === null
-                ? r.sent30d === null
-                  ? DASH
-                  : 'none'
-                : since(r.lastSend.agoSeconds),
-          },
-          {
-            k: 'Last failure',
-            v:
-              lastFailure === undefined
-                ? r.failed30d === null
-                  ? DASH
-                  : 'none'
-                : since(lastFailure.agoSeconds),
-          },
-        ]}
-      />
-      {r.sent30d === null && (
-        <p className={CAPTION}>Loki did not answer, so the delivery counts are unknown.</p>
+    <>
+      {sent === null ? (
+        <p className={EMPTY}>Loki did not answer, so the relay&rsquo;s deliveries are unknown.</p>
+      ) : (
+        <StatStrip>
+          <Stat label="Sent" value={num(sent)} sub={`${lower}in ${String(d.windowDays)} days`} />
+          <Stat
+            label="Failed"
+            value={num(failed)}
+            tone={d.relay.failing ? 'bad' : undefined}
+            sub={
+              failed === 0
+                ? undefined
+                : d.relay.failing
+                  ? 'newer than the last success'
+                  : 'since recovered'
+            }
+          />
+          <Stat
+            label="Per week"
+            value={num((sent / d.windowDays) * 7, 1)}
+            sub={`${String(d.windowDays)}-day average`}
+          />
+          {lastSent !== undefined && <Stat label="Last sent" value={<Ago at={lastSent.at} />} />}
+          {lastFailed !== undefined && (
+            <Stat
+              label="Last failure"
+              value={<Ago at={lastFailed.at} />}
+              tone={d.relay.failing ? 'bad' : undefined}
+            />
+          )}
+        </StatStrip>
       )}
-      {lastFailure !== undefined && (
-        <p className={cn(CAPTION, r.failing && 'text-danger/90')}>
-          <span className={MONO}>{lastFailure.unit}</span>: {lastFailure.error}
-        </p>
-      )}
-      <KeyValue
-        rows={[
-          {
-            k: 'From',
-            v: id === null || id.sender === '' ? DASH : <span className={MONO}>{id.sender}</span>,
-          },
-          {
-            k: 'To',
-            v: id === null || id.alertTo === '' ? DASH : <span className={MONO}>{id.alertTo}</span>,
-          },
-          {
-            k: 'Relay',
-            v:
-              id === null || id.smtpHost === '' ? (
-                DASH
-              ) : (
-                <span className={MONO}>
-                  {id.smtpHost}
-                  {id.smtpPort === null ? '' : `:${String(id.smtpPort)}`}
-                </span>
-              ),
-          },
-        ]}
-      />
-      <p className={FOOT}>
-        Every alert the box mails leaves through this one SMTP account, by way of{' '}
-        <span className={MONO}>sendmail</span>. The counts are read back from the relay&rsquo;s own
-        log, one line per attempt, over the last 30 days. A relay that stops working makes the box
-        quieter, because the warning would travel the path that broke: a red reading here may be the
-        only notice you get. A long gap since the last success is normal on a healthy box. Grafana
-        sends its own alerts through its SMTP client, so they are not counted. Monitoring &rsaquo;
-        Alerts lists each failed send.
-      </p>
-    </Board>
+      <BoardGrid>
+        {log !== null && (
+          <FrequencyBoard days={d.days} total={log.deliveries.length} window={d.windowDays} />
+        )}
+        <SmtpBoard d={d} />
+        {log !== null && <CallersTable callers={d.callers} window={d.windowDays} />}
+        <UsersBoard d={d} />
+        {log !== null && (
+          <DeliveriesTable log={log} failing={d.relay.failing} window={d.windowDays} />
+        )}
+      </BoardGrid>
+    </>
   )
 }

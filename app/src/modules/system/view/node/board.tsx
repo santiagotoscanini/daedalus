@@ -248,7 +248,7 @@ function Panel({ f }: { f: BoardFacts }) {
       }
     >
       <ul className={TABLE}>
-        <li aria-hidden="true" className={cn(REL_GRID, TABLE_HEAD, 'items-center')}>
+        <li aria-hidden="true" className={cn(REL_GRID, TABLE_HEAD)}>
           <span>Version</span>
           <span className={REL_MID}>Published</span>
           <span>What changed</span>

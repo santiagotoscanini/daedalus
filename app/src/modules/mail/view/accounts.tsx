@@ -4,17 +4,22 @@ import { QuietState } from '../../../components/modules/parts'
 import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
 import { Board, Chip, Progress } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import { bytes, DASH, num, pct, until } from '../../../lib/format'
+import { bytes, duration, num, pct, until } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
 import type { BridgeAccount, BridgeReport } from '../data/bridge'
 import { ACCOUNT_STATE } from './shared'
 
-// Email › the Proton Mail board: each account Bridge holds — whether it is
-// signed in, which addresses it serves, how full it is, and how far its
-// sync has got.
+// Email › the Proton Mail accounts: each one Bridge holds — whether it is
+// signed in, which addresses it serves, how full it is, and its sync.
 
 /** Addresses shown before the rest fold into a count. */
 const ADDRESSES_SHOWN = 3
+
+/**
+ * A completed sync shorter than this is Bridge's start-up check finding
+ * nothing pending, which says nothing about how long a sync takes.
+ */
+const MEANINGFUL_SYNC_MS = 1_000
 
 /** Storage fills toward a bounce: amber near the top, red at it. */
 function storageTone(p: number | null): Tone {
@@ -30,24 +35,28 @@ export function AccountsBoard({ report }: { report: BridgeReport }) {
 
   return (
     <Board
-      title="Proton Mail"
+      title={users.length > 1 ? `${num(users.length)} accounts` : 'Account'}
       span={8}
       aside={
-        worst !== undefined ? (
+        worst === undefined ? undefined : (
           <Chip tone={ACCOUNT_STATE[worst.state].tone}>
             {troubled.length === 1
               ? `${worst.username} ${ACCOUNT_STATE[worst.state].label}`
               : `${num(troubled.length)} accounts not connected`}
           </Chip>
-        ) : users.length > 1 ? (
-          <span className={NOTE}>{num(users.length)} accounts</span>
-        ) : undefined
+        )
       }
     >
       {!report.reporting ? (
-        <p className={EMPTY}>Nothing current to show while Bridge is not reporting.</p>
+        <p className={EMPTY}>
+          {report.error !== null
+            ? `The status file could not be read: ${report.error}`
+            : s === null
+              ? 'Bridge has written no status since the box started.'
+              : 'Bridge has been silent for over two minutes: the container is down or restarting.'}
+        </p>
       ) : s?.phase === 'starting' && users.length === 0 ? (
-        <p className={EMPTY}>Bridge is starting. Its accounts appear once it has loaded them.</p>
+        <p className={EMPTY}>Bridge is starting.</p>
       ) : users.length === 0 ? (
         <p className={EMPTY}>No account is signed in.</p>
       ) : (
@@ -59,11 +68,10 @@ export function AccountsBoard({ report }: { report: BridgeReport }) {
       )}
       <p className={FOOT}>
         Each account is one Proton login, served to mail clients on this box over IMAP and SMTP. A
-        signed-out or locked account serves nothing until it signs in again, which is done from a
-        terminal on the box: <span className={MONO}>sudo proton-bridge-cli</span>, then{' '}
-        <span className={MONO}>login</span>. Bridge resumes an unfinished sync when it starts, so an
-        account with no sync since then is up to date. Storage is the account&rsquo;s quota at
-        Proton; a full one refuses new mail.
+        signed-out or locked account serves nothing until it signs in again, from a terminal on the
+        box: <span className={MONO}>sudo proton-bridge-cli</span>, then{' '}
+        <span className={MONO}>login</span>. Storage is the account&rsquo;s quota at Proton; a full
+        one refuses new mail.
       </p>
     </Board>
   )
@@ -114,12 +122,16 @@ function AccountRow({ u }: { u: BridgeAccount }) {
 }
 
 /**
- * The sync, three ways: moving (the bar, its percentage and Bridge's own
- * estimate), finished since Bridge started, or nothing to do. Only a
- * connected account syncs, so the other two states read as a dash.
+ * The sync: moving (the bar, its percentage and Bridge's own estimate), or
+ * the last one this supervisor saw finish — when, and how long it took when
+ * that is a real number. Only a connected account syncs.
  */
 function SyncMeter({ u }: { u: BridgeAccount }) {
   const { sync } = u
+  const took =
+    sync.lastDurationMs !== null && sync.lastDurationMs >= MEANINGFUL_SYNC_MS
+      ? duration(sync.lastDurationMs / 1000)
+      : null
   if (sync.state === 'syncing') {
     const left = sync.remainingMs > 0 ? ` · ${until(sync.remainingMs / 1000)} left` : ''
     return (
@@ -128,40 +140,48 @@ function SyncMeter({ u }: { u: BridgeAccount }) {
         value={`${pct(sync.progress * 100)}${left}`}
         pct={sync.progress * 100}
         active
+        sub={
+          sync.startedAt === null && took === null ? undefined : (
+            <>
+              {sync.startedAt !== null && (
+                <>
+                  started <Ago at={sync.startedAt} />
+                </>
+              )}
+              {sync.startedAt !== null && took !== null && ' · '}
+              {took !== null && `the last one took ${took}`}
+            </>
+          )
+        }
       />
     )
   }
-  if (u.state !== 'connected') return <Meter label="Sync" value={DASH} pct={null} />
+  if (u.state !== 'connected' || sync.finishedAt === null) return null
   return (
     <Meter
-      label="Sync"
-      value={
-        sync.finishedAt === null ? (
-          'up to date'
-        ) : (
-          <>
-            finished <Ago at={sync.finishedAt} />
-          </>
-        )
-      }
+      label="Synced"
+      value={<Ago at={sync.finishedAt} />}
       pct={100}
+      sub={took === null ? undefined : `took ${took}`}
     />
   )
 }
 
-/** A labelled reading over its bar. The bar is always drawn, so two meters side by side share a baseline. */
+/** A labelled reading over its bar, and a line under it when there is one to say. */
 function Meter({
   label,
   value,
   pct: p,
   tone = 'muted',
   active = false,
+  sub,
 }: {
   label: string
   value: ReactNode
   pct: number | null
   tone?: Tone
   active?: boolean
+  sub?: ReactNode
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
@@ -170,6 +190,7 @@ function Meter({
         <span className="tabular-nums text-foreground [overflow-wrap:anywhere]">{value}</span>
       </div>
       <Progress pct={p} tone={tone} active={active} />
+      {sub !== undefined && <p className={cn(NOTE, 'm-0')}>{sub}</p>}
     </div>
   )
 }

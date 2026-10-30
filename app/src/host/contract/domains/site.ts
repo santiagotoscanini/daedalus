@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { arrayOf, nullable, num, obj, optional, str } from '../../../lib/contract/decode'
+import { arrayOf, bool, nullable, num, obj, optional, str } from '../../../lib/contract/decode'
 import { env } from '../../env'
 import { readSnapshot, type SnapshotResult } from '../snapshot'
 
@@ -10,15 +10,26 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 // (Settings › General).
 
 /**
- * Who the box's mail is from and to, and the relay it leaves through
- * (`fleet.mail`). `smtpHost` '' and `smtpPort` null: an export written before
- * the relay was part of it.
+ * Who the box's mail is from and to, the relay it leaves through
+ * (`fleet.mail`), and how msmtp speaks to it (platform/mail's settings, as
+ * nix configured them). '' and null: an export that does not carry the fact.
  */
 export type MailIdentity = {
   sender: string
   alertTo: string
   smtpHost: string
   smtpPort: number | null
+  /** TLS on the connection. */
+  tls: boolean | null
+  /** TLS by STARTTLS after a plain greeting, rather than from the first byte. */
+  starttls: boolean | null
+  /** The CA bundle msmtp checks the relay's certificate against. */
+  trustFile: string | null
+  /** Whether msmtp logs in, and as whom. */
+  auth: boolean | null
+  user: string | null
+  /** The system mailers that hand msmtp their mail, each true while the box runs it. */
+  notifiers: { smartd: boolean | null; zed: boolean | null }
 }
 
 /** A git author the box can commit as. */
@@ -75,6 +86,21 @@ export type SiteIdentity = {
 
 const identity = obj({ name: str, email: str })
 
+const NO_NOTIFIERS: MailIdentity['notifiers'] = { smartd: null, zed: null }
+
+const NO_MAIL: MailIdentity = {
+  sender: '',
+  alertTo: '',
+  smtpHost: '',
+  smtpPort: null,
+  tls: null,
+  starttls: null,
+  trustFile: null,
+  auth: null,
+  user: null,
+  notifiers: NO_NOTIFIERS,
+}
+
 const shape = obj({
   hostname: optional(str, ''),
   baseDomain: optional(str, ''),
@@ -107,8 +133,17 @@ const shape = obj({
       alertTo: optional(str, ''),
       smtpHost: optional(str, ''),
       smtpPort: optional(nullable(num), null),
+      tls: optional(nullable(bool), null),
+      starttls: optional(nullable(bool), null),
+      trustFile: optional(nullable(str), null),
+      auth: optional(nullable(bool), null),
+      user: optional(nullable(str), null),
+      notifiers: optional(
+        obj({ smartd: optional(nullable(bool), null), zed: optional(nullable(bool), null) }),
+        NO_NOTIFIERS,
+      ),
     }),
-    { sender: '', alertTo: '', smtpHost: '', smtpPort: null },
+    NO_MAIL,
   ),
   controlPlane: obj({
     label: nullable(str),
@@ -135,7 +170,7 @@ const NO_SITE: SiteIdentity = {
   operator: { user: '', group: '', uid: null },
   registryUrl: '',
   grafanaUrl: '',
-  mail: { sender: '', alertTo: '', smtpHost: '', smtpPort: null },
+  mail: NO_MAIL,
   controlPlane: { label: null, previousLabel: null, hostname: null, aliases: [] },
   git: { box: NO_GIT, operator: NO_GIT },
 }

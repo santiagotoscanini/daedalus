@@ -1,11 +1,13 @@
 import { defineViews } from '../../../lib/modules/tabs'
 import type { Tabs } from '../data'
 import { manifest } from '../manifest'
-import { OverviewView } from './overview'
+import { ProtonView } from './proton'
+import { RelayView } from './relay'
 
-// The Email page — one tab, two subjects. Why there is no ServiceHead and no
-// `nix` on it: ../manifest.ts.
+// The Email page: the relay every box has, and Proton Mail Bridge where the
+// box runs it (../manifest.ts).
 
 export const views = defineViews<typeof manifest, Tabs>(manifest, {
-  overview: ({ data }) => <OverviewView data={data} />,
+  relay: ({ data }) => <RelayView data={data} />,
+  proton: ({ data }) => <ProtonView data={data} />,
 })

@@ -52,10 +52,15 @@ export async function listAppNames(): Promise<string[]> {
 
 /** The registry without its children: the few flat columns a cross-cutting read keys on. */
 export async function listAppsLight(): Promise<
-  { name: string; litellm: boolean; githubRepoId: number | null }[]
+  { name: string; litellm: boolean; mail: boolean; githubRepoId: number | null }[]
 > {
   return db
-    .select({ name: apps.name, litellm: apps.litellm, githubRepoId: apps.githubRepoId })
+    .select({
+      name: apps.name,
+      litellm: apps.litellm,
+      mail: apps.mail,
+      githubRepoId: apps.githubRepoId,
+    })
     .from(apps)
     .orderBy(asc(apps.name))
 }

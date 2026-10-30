@@ -2,11 +2,11 @@ import type { Tone } from '../../../lib/tone'
 import type { MailData } from '../data'
 import type { AccountState, BridgeReport } from '../data/bridge'
 
-// What the Email page's boards share: the payload's shape, and the words and
+// What the Email page's boards share: each tab's payload, and the words and
 // tones Bridge's states and events are drawn with.
 
-export type Overview = Extract<MailData, { tab: 'overview' }>
-export type Bridge = NonNullable<Overview['bridge']>
+export type Relay = Extract<MailData, { tab: 'relay' }>
+export type Proton = Extract<MailData, { tab: 'proton' }>
 
 /** Connected is the norm and recedes; the other two are why you opened the page. */
 export const ACCOUNT_STATE: Record<AccountState, { label: string; tone: Tone }> = {
@@ -27,6 +27,7 @@ export const EVENT: Record<string, { label: string; tone?: Tone }> = {
   offline: { label: 'Offline', tone: 'warn' },
   disconnected: { label: 'Account disconnected', tone: 'bad' },
   'imap-login-failed': { label: 'IMAP login refused', tone: 'warn' },
+  'mailbox-read-failed': { label: 'Mailbox read failed', tone: 'warn' },
   'bad-event': { label: 'Bad event from Proton' },
   'update-required': { label: 'Update required', tone: 'bad' },
   'update-error': { label: 'Update check failed' },
@@ -44,3 +45,6 @@ export function busy(r: BridgeReport): boolean {
     (r.status.phase === 'starting' || r.status.users.some((u) => u.sync.state === 'syncing'))
   )
 }
+
+/** A unit as a row names it: without the `.service` every one of them carries. */
+export const unitName = (unit: string): string => unit.replace(/\.service$/, '')

@@ -45,10 +45,20 @@ export const fetchModuleBoards = readFn
  * the rail. The decision is the server's because it reads the box's export —
  * the browser only ever sees the outcome. Until the export exists every
  * module is active, so this is a no-op on a box that has not published it.
+ *
+ * A branded tab is named here too (`TabSpec.brand`): Email's relay tab after
+ * the provider `/export/site.json` says the relay belongs to.
  */
 export const fetchActiveModules = readFn.handler(async ({ context }): Promise<ModuleManifest[]> => {
-  const { activeModules } = await import('../lib/modules/active')
-  return activeModules(MODULES, (await context.ctx()).modules.state)
+  const [{ activeModules }, { siteMail }, { relayProvider }] = await Promise.all([
+    import('../lib/modules/active'),
+    import('../host/contract/domains/site'),
+    import('../lib/mail-providers'),
+  ])
+  const [ctx, mail] = await Promise.all([context.ctx(), siteMail()])
+  return activeModules(MODULES, ctx.modules.state, {
+    'mail-relay': relayProvider(mail?.smtpHost),
+  })
 })
 
 /* ── switching a module off, and on ───────────────────────────────────── */

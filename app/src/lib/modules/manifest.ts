@@ -15,6 +15,17 @@ import type { NavIconName } from '../../components/nav-icon'
 
 type TabHealth = 'vpn-egress' | 'uplink' | 'log-pipeline' | 'minecraft-ping'
 
+/**
+ * A tab whose name and mark are a fact about the box rather than about the
+ * engine: Email's relay tab is named after whatever provider the box relays
+ * through. A symbol for the same reason as `health` — the fact is on the
+ * server — resolved by `fetchActiveModules` (server/modules.ts).
+ */
+export type TabBrand = 'mail-relay'
+
+/** What a `TabBrand` resolves to on a box: the tab's label and its service mark. */
+export type TabFace = { label: string; logo: string }
+
 export type TabSpec = {
   id: string
   label: string
@@ -47,6 +58,16 @@ export type TabSpec = {
   dividerBefore?: boolean
   /** A mark drawn before the label, for the one tab that is a product rather than a layer (Claude). */
   icon?: NavIconName
+  /**
+   * A service's own mark (a path under public/), drawn before the label, for
+   * a tab that IS one outside service. Wins over `icon`.
+   */
+  logo?: string
+  /**
+   * The label and logo are the box's, resolved on the server; `label` and
+   * `icon` are what the tab wears when the box names nothing it knows.
+   */
+  brand?: TabBrand
   /** Whether this tab opens with a `ServiceHead`. Default true. */
   head?: boolean
   /**

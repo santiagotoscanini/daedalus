@@ -34,19 +34,16 @@ export function TabNav({
 }) {
   // isDotted, not `probe` alone — the loader's tabStatus comment says why.
   const probed = spec.tabs.some(isDotted)
-  // Which tabs are switched off on this box: the server marks them on the
-  // rail's copy of the manifest (lib/modules/active.ts), read here from the
-  // root loader so the tabs say it before their boards — which an off tab
-  // never fetches — could.
-  const off = useLoaderData({
+  // The rail's copy of the manifest (lib/modules/active.ts), read from the
+  // root loader so the tabs say what the server decided before their boards
+  // could: which tabs this box offers, which are switched off (an off tab
+  // never fetches its boards), and what a branded tab is called here.
+  const offered = useLoaderData({
     from: '__root__',
-    select: (d) =>
-      new Set(
-        (d.modules.find((m) => m.id === spec.id)?.tabs ?? [])
-          .filter((t) => t.off === true)
-          .map((t) => t.id),
-      ),
+    select: (d) => d.modules.find((m) => m.id === spec.id)?.tabs,
   })
+  const tabs = offered ?? spec.tabs
+  const off = new Set(tabs.filter((t) => t.off === true).map((t) => t.id))
   // All or none: a row where one tab wears a dot and its neighbours do not
   // reads as a mistake, so an off tab (grey dot) dots the whole row.
   const dotted = probed || off.size > 0
@@ -55,7 +52,7 @@ export function TabNav({
 
   return (
     <TabBar
-      tabs={spec.tabs.map((t) => {
+      tabs={tabs.map((t) => {
         const up = status?.[t.id] ?? null
         const isOff = off.has(t.id)
         return {
@@ -63,9 +60,12 @@ export function TabNav({
           label: t.label,
           dividerBefore: t.dividerBefore,
           muted: isOff,
-          // No icons in a tab row: the label names the tab. An off tab wears a
-          // grey dot titled "switched off" — the tab is dimmed too, so the
-          // dot and the dimming say it together without a pill in the label.
+          // A mark only where the tab IS one outside service (Email's two);
+          // elsewhere the label names the tab. An off tab wears a grey dot
+          // titled "switched off" — the tab is dimmed too, so the dot and the
+          // dimming say it together without a pill in the label.
+          logo: t.logo,
+          icon: t.logo === undefined ? t.icon : undefined,
           extra: isOff ? (
             <StateDot state="stopped" label="off" title="switched off on this box" />
           ) : dotted ? (

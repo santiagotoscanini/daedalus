@@ -1,91 +1,104 @@
+import type { ReactNode } from 'react'
 import { Ago } from '../../../components/ago'
-import { QuietState } from '../../../components/modules/parts'
-import { verdictOf } from '../../../components/service-head'
-import { CAPTION, FOOT, LIVE, MONO } from '../../../components/tokens'
-import { Board, Chip, Facts, Pulse } from '../../../components/viz'
-import { DASH } from '../../../lib/format'
-import type { BridgeReport, BridgeStatus } from '../data/bridge'
-import { type Bridge, busy } from './shared'
+import { FOOT, MONO, SUB } from '../../../components/tokens'
+import { Board, Chip, Facts } from '../../../components/viz'
+import { cn } from '../../../lib/cn'
+import { bytes } from '../../../lib/format'
+import type { BridgeReport, BridgeSettings, BridgeStatus } from '../data/bridge'
 
-// Email › the Bridge board: the program itself — which release, whether it
-// can reach Proton, what it listens on, and whether it is reporting at all.
+// Email › Bridge itself: whether it can reach Proton and what it listens on,
+// then the settings it runs with and the size of what it keeps on disk.
 
-export function BridgeBoard({ bridge, report }: { bridge: Bridge; report: BridgeReport }) {
+type Row = { k: string; v: ReactNode }
+
+export function BridgeBoard({ report }: { report: BridgeReport }) {
   const s = report.status
+  const rows: Row[] =
+    report.reporting && s !== null
+      ? [
+          ...(s.online === null
+            ? []
+            : [{ k: 'Proton', v: s.online ? 'reachable' : <Chip tone="bad">unreachable</Chip> }]),
+          ...listener('IMAP', s.imap),
+          ...listener('SMTP', s.smtp),
+          { k: 'Started', v: <Ago at={s.startedAt} /> },
+        ]
+      : s === null
+        ? []
+        : [{ k: 'Last report', v: <Ago at={s.updatedAt} /> }]
+  if (rows.length === 0) return null
+
   return (
-    <Board title="Bridge" span={4} spanMd={12} aside={<Reporting report={report} />}>
-      <Facts
-        list
-        rows={[
-          { k: 'Version', v: <Version bridge={bridge} /> },
-          ...(report.reporting && s !== null
-            ? [
-                { k: 'Proton', v: <Online online={s.online} /> },
-                { k: 'IMAP', v: <Listener l={s.imap} /> },
-                { k: 'SMTP', v: <Listener l={s.smtp} /> },
-                { k: 'Started', v: <Ago at={s.startedAt} /> },
-              ]
-            : [{ k: 'Last report', v: s === null ? 'none' : <Ago at={s.updatedAt} /> }]),
-        ]}
-      />
-      {!report.reporting && (
-        <p className={CAPTION}>
-          {report.error !== null
-            ? `The status file could not be read: ${report.error}`
-            : s === null
-              ? 'Bridge has written no status since the box started.'
-              : 'Silent for over two minutes: the container is down or restarting.'}
-        </p>
-      )}
+    <Board title="Bridge" span={4} spanMd={12}>
+      <Facts list rows={rows} />
       <p className={FOOT}>
-        A supervisor beside Bridge writes this status on every change and at least every 30 seconds,
-        so silence means it is not running. <b>Proton</b> is whether Bridge can reach Proton&rsquo;s
-        servers; while it cannot, Bridge closes both listeners until it can. The ports are local to
-        Bridge, and SSL means the listener speaks TLS from the first byte rather than by STARTTLS.
+        <b>Proton</b> is Bridge&rsquo;s own verdict: it opens its IMAP listener only while
+        Proton&rsquo;s servers answer. The ports are local to Bridge, and SSL means the listener
+        speaks TLS from the first byte rather than by STARTTLS.
       </p>
     </Board>
   )
 }
 
-/** The header's reading: alive (with when it last said so), starting, or silent. */
-function Reporting({ report }: { report: BridgeReport }) {
-  const s = report.status
-  if (!report.reporting || s === null) return <Chip tone="bad">not reporting</Chip>
-  if (s.phase === 'starting') return <Chip tone="info">starting</Chip>
-  return (
-    <span className={LIVE}>
-      <Pulse on={busy(report)} tone="accent" />
-      updated <Ago at={s.updatedAt} />
-    </span>
-  )
+function listener(k: string, l: BridgeStatus['imap']): Row[] {
+  if (l.port === 0) return []
+  return [
+    {
+      k,
+      v: (
+        <>
+          <span className={MONO}>{l.port}</span> · {l.ssl ? 'SSL' : 'STARTTLS'}
+        </>
+      ),
+    },
+  ]
 }
 
-/** The running release and its verdict against Proton's, on one line. */
-function Version({ bridge }: { bridge: Bridge }) {
-  const verdict = verdictOf(bridge.gap)
-  return (
-    <span className="inline-flex flex-wrap items-center justify-end gap-2">
-      <span
-        className={MONO}
-        title={bridge.versionFrom === 'bridge' ? 'as Bridge reports it' : 'the build this box pins'}
-      >
-        {bridge.gap.installed ?? DASH}
-      </span>
-      <Chip tone={verdict.tone === 'ok' ? 'muted' : verdict.tone}>{verdict.label}</Chip>
-    </span>
-  )
+const onOff = (v: boolean): string => (v ? 'on' : 'off')
+
+/** Each setting Bridge answered for, in the words its own settings use. */
+function settingRows(x: BridgeSettings): Row[] {
+  const rows: Row[] = []
+  if (x.keychain !== undefined)
+    rows.push({ k: 'Keychain', v: <span className={MONO}>{x.keychain}</span> })
+  if (x.allMailVisible !== undefined)
+    rows.push({ k: 'All Mail folder', v: x.allMailVisible ? 'shown' : 'hidden' })
+  if (x.alternativeRouting !== undefined)
+    rows.push({ k: 'Alternative routing', v: onOff(x.alternativeRouting) })
+  if (x.telemetryDisabled !== undefined)
+    rows.push({ k: 'Telemetry', v: onOff(!x.telemetryDisabled) })
+  if (x.automaticUpdates !== undefined)
+    rows.push({ k: 'Automatic updates', v: onOff(x.automaticUpdates) })
+  if (x.earlyAccess !== undefined) rows.push({ k: 'Early access', v: onOff(x.earlyAccess) })
+  return rows
 }
 
-function Online({ online }: { online: boolean | null }) {
-  if (online === null) return <QuietState>not reported yet</QuietState>
-  return online ? 'reachable' : <Chip tone="bad">unreachable</Chip>
-}
+export function SettingsBoard({ status: s }: { status: BridgeStatus }) {
+  const settings = settingRows(s.settings)
+  const disk: Row[] =
+    s.disk === null
+      ? []
+      : [
+          { k: 'Message store', v: bytes(s.disk.messageStoreBytes) },
+          { k: 'Search index', v: bytes(s.disk.indexBytes) },
+          { k: 'Measured', v: <Ago at={s.disk.measuredAt} /> },
+        ]
+  if (settings.length === 0 && disk.length === 0) return null
 
-function Listener({ l }: { l: BridgeStatus['imap'] }) {
-  if (l.port === 0) return DASH
   return (
-    <>
-      <span className={MONO}>{l.port}</span> · {l.ssl ? 'SSL' : 'STARTTLS'}
-    </>
+    <Board title="Settings and storage" span={4} spanMd={12}>
+      {settings.length > 0 && <Facts list rows={settings} />}
+      {disk.length > 0 && (
+        <>
+          <p className={cn(SUB, settings.length === 0 && 'mt-0')}>On disk</p>
+          <Facts list rows={disk} />
+        </>
+      )}
+      <p className={FOOT}>
+        The keychain is where Bridge keeps each account&rsquo;s session. Alternative routing reaches
+        Proton through third-party networks when its own servers are blocked. On disk is the local
+        copy of every message Bridge has synced, and the index it searches.
+      </p>
+    </Board>
   )
 }

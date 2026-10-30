@@ -11,13 +11,31 @@ export const manifest = {
   // about the watchers on Monitoring.
   order: 55,
   section: 'Infrastructure',
-  // Shaped to the page with Bridge: its accounts beside its facts, the
-  // events, then the relay.
-  boardSpans: [8, 4, 12, 12],
-  // One tab, and two subjects on it, so no ServiceHead: a header naming one
-  // service would put the relay under it. No `nix` either: the relay is the
-  // platform's and exists on every box, so the page does too; the Proton
-  // boards are there while `proton-bridge` is on (data/index.ts). No dot:
-  // nothing probes either half from outside, and the page is the check.
-  tabs: [{ id: 'overview', label: 'Overview', boardSpans: [8, 4, 12, 12], head: false }],
+  boardSpans: [8, 4, 12, 6, 6],
+  tabs: [
+    // The relay is the platform's and exists on every box, so its tab has no
+    // `nix` and comes first. It is named after the provider the box relays
+    // through (lib/mail-providers.ts, resolved by the server); "Relay" and
+    // the envelope are its face on a box relaying anywhere else. No head: it
+    // is an account, not a service with a version.
+    {
+      id: 'relay',
+      label: 'Relay',
+      icon: 'mail',
+      brand: 'mail-relay',
+      head: false,
+      boardSpans: [8, 4, 12, 6, 6],
+    },
+    // Proton Mail Bridge, while the box runs the `proton-bridge` stack. No
+    // dot: nothing probes it from outside, and its page is the check.
+    {
+      id: 'proton',
+      label: 'Proton Mail',
+      logo: '/icon-proton-mail.svg',
+      nix: 'proton-bridge',
+      boardSpans: [8, 4, 12, 12],
+    },
+  ],
+  // The one tab the page had before it split.
+  aliases: { overview: 'relay' },
 } as const satisfies ModuleManifest

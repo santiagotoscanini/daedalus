@@ -65,3 +65,28 @@ describe('activeModules', () => {
     expect(JSON.stringify(modules)).toBe(before)
   })
 })
+
+describe('activeModules, a branded tab', () => {
+  const modules = [
+    m('mail', [
+      { id: 'relay', label: 'Relay', icon: 'mail', brand: 'mail-relay' },
+      { id: 'proton', label: 'Proton Mail', logo: '/icon-proton-mail.svg', nix: 'proton-bridge' },
+    ]),
+  ]
+
+  it('wears the face the box resolved', () => {
+    const active = activeModules(modules, () => 'on', {
+      'mail-relay': { label: 'Gmail', logo: '/icon-gmail.svg' },
+    })
+    expect(active[0]?.tabs.map((t) => [t.id, t.label, t.logo])).toEqual([
+      ['relay', 'Gmail', '/icon-gmail.svg'],
+      ['proton', 'Proton Mail', '/icon-proton-mail.svg'],
+    ])
+  })
+
+  it('keeps its own label and icon when the box names nothing it knows', () => {
+    const active = activeModules(modules, () => 'on', { 'mail-relay': null })
+    expect(active[0]?.tabs[0]).toMatchObject({ label: 'Relay', icon: 'mail' })
+    expect(active[0]?.tabs[0]?.logo).toBeUndefined()
+  })
+})
