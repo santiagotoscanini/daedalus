@@ -1,7 +1,7 @@
 import type { TabFace } from './modules/manifest'
 
 // Who a box's SMTP relay belongs to, by its host: the name and the mark the
-// Email page's relay tab wears.
+// Communications page's relay tab wears.
 //
 // Keyed by the host exactly as `fleet.mail.smtpHost` spells it, and only
 // for hosts that are one provider's own submission server — nothing is

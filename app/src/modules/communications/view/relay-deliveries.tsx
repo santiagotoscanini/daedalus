@@ -16,7 +16,7 @@ import type { RelayDelivery, RelayLog } from '../../../lib/dashboard/mail-relay'
 import { bytes, num } from '../../../lib/format'
 import { unitName } from './shared'
 
-// Email › every delivery msmtp logged in the window, newest first: when,
+// Communications › every delivery msmtp logged in the window, newest first: when,
 // which unit was sending (and, for a failure notice, which unit it was
 // about), to whom, how big, what the relay answered, and how it ended.
 

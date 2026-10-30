@@ -14,7 +14,7 @@ describe('the module registry', () => {
       'health',
       'gaming',
       'network',
-      'mail',
+      'communications',
       'system',
       'database',
       'actions',

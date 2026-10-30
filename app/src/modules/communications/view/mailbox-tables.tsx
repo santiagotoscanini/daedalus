@@ -15,7 +15,7 @@ import { cn } from '../../../lib/cn'
 import { DASH, num } from '../../../lib/format'
 import type { Mailbox, MailMessage, MailSender } from '../data/bridge'
 
-// Email › the mailbox's two lists, as the house tables: who wrote most, and
+// Communications › the mailbox's two lists, as the house tables: who wrote most, and
 // what is in the inbox. Every cell is one line; an address or a subject too
 // long for its column ends in an ellipsis and is whole on the hover, so the
 // rows keep one height and the columns one width.

@@ -5,7 +5,7 @@ import { Board, Chip, Facts } from '../../../components/viz'
 import { bytes } from '../../../lib/format'
 import type { BridgeReport, BridgeSettings, BridgeStatus } from '../data/bridge'
 
-// Email › Bridge itself: whether it can reach Proton and what it listens on,
+// Communications › Bridge itself: whether it can reach Proton and what it listens on,
 // then the settings it runs with and the size of what it keeps on disk.
 
 type Row = { k: string; v: ReactNode }

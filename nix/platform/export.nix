@@ -561,7 +561,7 @@ in
           operator = {
             inherit (cfg.operator) user group uid;
           };
-          # The relay beside the two addresses: the Email page says where the
+          # The relay beside the two addresses: the Communications page says where the
           # box's mail leaves from, how msmtp speaks to it (read off msmtp's
           # own settings, platform/mail, so the page and the relay cannot
           # disagree), and which system mailers hand it their mail.

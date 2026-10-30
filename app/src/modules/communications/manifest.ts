@@ -1,14 +1,14 @@
 import type { ModuleManifest } from '../../lib/modules/manifest'
 
 export const manifest = {
-  id: 'mail',
-  label: 'Email',
-  // True on a box without Bridge too: the relay is always there, a bridged
-  // mailbox only sometimes.
-  lede: 'The relay this box’s alerts leave through, and any mailbox it bridges.',
-  // Right after Network: mail is the other way messages cross the box's edge,
-  // and the relay at the end of every alert path is a fact about the box, not
-  // about the watchers on Monitoring.
+  id: 'communications',
+  label: 'Communications',
+  // True on a box without a mailbox or a homeserver too: the relay is always
+  // there, the rest only sometimes.
+  lede: 'Every way messages cross the box: the relay its alerts leave through, and the mailboxes and chats it bridges.',
+  // Right after Network: messages are the other thing that crosses the box's
+  // edge, and the relay at the end of every alert path is a fact about the
+  // box, not about the watchers on Monitoring.
   order: 55,
   section: 'Infrastructure',
   boardSpans: [12, 12, 12],
@@ -34,6 +34,16 @@ export const manifest = {
       logo: '/icon-proton-mail.svg',
       nix: 'proton-bridge',
       boardSpans: [8, 4, 12, 12],
+    },
+    // The private homeserver and the bridges it carries, while the box runs
+    // the `matrix` stack. No dot either: it listens on no address anything
+    // outside its namespace can reach.
+    {
+      id: 'matrix',
+      label: 'Matrix',
+      logo: '/icon-matrix.svg',
+      nix: 'matrix',
+      boardSpans: [6, 6, 12],
     },
   ],
   // The one tab the page had before it split.

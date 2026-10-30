@@ -230,6 +230,12 @@ export const SCHEMA = {
       'The status Proton Mail Bridge’s supervisor writes: accounts, sync, events. Never a password.',
     source: 'stacks/proton-bridge fleet.dashboard.proton-bridge.env',
   },
+  MATRIX_STATUS_FILE: {
+    kind: 'path',
+    about:
+      'The status the Matrix stack’s helper writes: the homeserver, the operator’s account, each bridge login. Never a secret.',
+    source: 'stacks/matrix fleet.dashboard.matrix.env',
+  },
   GITHUB_TOKEN_PATH: {
     kind: 'path',
     about: 'The GitHub App’s minted installation token.',
@@ -451,6 +457,11 @@ export const SCHEMA = {
     kind: 'string',
     about: 'The Proton Mail Bridge release the box builds.',
     source: 'stacks/proton-bridge fleet.dashboard.proton-bridge.env',
+  },
+  MAUTRIX_WHATSAPP_VERSION: {
+    kind: 'string',
+    about: 'The mautrix-whatsapp release the box builds, as its tag spells it (0.YYMM.patch).',
+    source: 'stacks/matrix fleet.dashboard.matrix.env',
   },
 
   // ── service credentials — read through host/keys.ts ──────────────────────

@@ -6,7 +6,7 @@ import { readSnapshot } from '../../../host/contract/snapshot'
 import { REPORTING_MS, readBridge, reportOf } from './bridge'
 
 // The status file Proton Mail Bridge's supervisor writes (schema v2), read
-// the way the Email page reads it: through the snapshot reader, from a real
+// the way the Communications page reads it: through the snapshot reader, from a real
 // file.
 
 let dir: string

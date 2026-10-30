@@ -5,8 +5,8 @@ import { releases } from '../releases'
 import { type BridgeReport, readBridge } from './bridge'
 import { type BridgeLogs, loadBridgeLogs } from './bridge-logs'
 
-// Email › the Proton Mail tab: Bridge as its supervisor reports it (the
-// status file, re-read live by server/mail.ts), the container around it from
+// Communications › the Proton Mail tab: Bridge as its supervisor reports it (the
+// status file, re-read live by server/communications.ts), the container around it from
 // Prometheus, and its own warnings from Loki.
 
 /** The container the host's proton-bridge stack runs, and the name its metrics carry. */

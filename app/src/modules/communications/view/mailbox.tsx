@@ -6,7 +6,7 @@ import { num } from '../../../lib/format'
 import type { BridgeFolder, Mailbox } from '../data/bridge'
 import { InboxTable, SendersTable } from './mailbox-tables'
 
-// Email › one account's mailbox, as the supervisor last read it over IMAP:
+// Communications › one account's mailbox, as the supervisor last read it over IMAP:
 // thirty days of mail, who wrote most, the folders and labels, and what is in
 // the inbox now. Each is a full-width row: their heights follow the mailbox,
 // so no two of them would keep a flat bottom edge side by side.

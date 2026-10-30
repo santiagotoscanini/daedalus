@@ -7,7 +7,7 @@ import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { Relay } from './shared'
 
-// Email › the relay's setup: how msmtp reaches the account (as nix exported
+// Communications › the relay's setup: how msmtp reaches the account (as nix exported
 // it), and everything on the box that sends with the same account.
 
 /** How the connection is encrypted, in the words a reader expects. */

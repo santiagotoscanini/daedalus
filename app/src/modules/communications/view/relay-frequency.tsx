@@ -10,7 +10,7 @@ import { DASH, num } from '../../../lib/format'
 import type { RelayCaller, RelayDay } from '../data/relay'
 import { unitName } from './shared'
 
-// Email › the relay's rhythm: a column per day, and which units sent.
+// Communications › the relay's rhythm: a column per day, and which units sent.
 
 /** Callers ranked before the rest fold. */
 const CALLERS_SHOWN = 8

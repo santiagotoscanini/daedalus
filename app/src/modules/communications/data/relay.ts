@@ -11,7 +11,7 @@ import {
 import { localDay } from '../../../lib/format'
 import { loadOwnMailers, type OwnMailers } from './senders'
 
-// Email › the relay tab: the account every system mail leaves through, read
+// Communications › the relay tab: the account every system mail leaves through, read
 // back from msmtp's own log (lib/dashboard/mail-relay.ts, which Monitoring ›
 // Alerts shares), its setup as nix exported it, and who else sends with it.
 

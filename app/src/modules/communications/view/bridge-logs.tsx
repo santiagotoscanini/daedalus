@@ -15,7 +15,7 @@ import { cn } from '../../../lib/cn'
 import { num } from '../../../lib/format'
 import type { BridgeLogGroup, BridgeLogs } from '../data/bridge-logs'
 
-// Email › what Bridge itself logged as a warning or worse over the last day,
+// Communications › what Bridge itself logged as a warning or worse over the last day,
 // one row per message with how often and how lately.
 
 /** Rows before the rest fold. */

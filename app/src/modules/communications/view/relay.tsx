@@ -8,7 +8,7 @@ import { CallersTable, FrequencyBoard } from './relay-frequency'
 import { SmtpBoard, UsersBoard } from './relay-setup'
 import type { Relay } from './shared'
 
-// Email › the relay tab: what the account the box mails through has sent,
+// Communications › the relay tab: what the account the box mails through has sent,
 // how often, for whom, and how it is set up. The counts are msmtp's own log
 // lines over the window, read back from Loki.
 

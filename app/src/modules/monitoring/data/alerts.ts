@@ -6,7 +6,7 @@ import { basicAuth, getJson } from '../../../lib/http'
 // The Alerts tab: Grafana's ruler (every rule here is Grafana-managed), where
 // a firing alert goes, and the mail relay read back out of Loki — the one
 // delivery path that cannot alert about its own failure (the reader is
-// lib/dashboard/mail-relay.ts, which the Email page shares).
+// lib/dashboard/mail-relay.ts, which the Communications page shares).
 
 export type AlertsData = {
   rules: number | null

@@ -9,7 +9,7 @@ import type { Tone } from '../../../lib/tone'
 import type { BridgeAccount, BridgeReport } from '../data/bridge'
 import { ACCOUNT_STATE } from './shared'
 
-// Email › the Proton Mail accounts: each one Bridge holds — whether it is
+// Communications › the Proton Mail accounts: each one Bridge holds — whether it is
 // signed in, which addresses it serves, how full it is, and its sync.
 
 /** Addresses shown before the rest fold into a count. */

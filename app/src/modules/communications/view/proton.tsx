@@ -6,7 +6,7 @@ import { compareOf, ServiceHead, verdictOf } from '../../../components/service-h
 import { FOOT, LIVE } from '../../../components/tokens'
 import { BoardGrid, Chip, Pulse, Stat, StatStrip } from '../../../components/viz'
 import { num } from '../../../lib/format'
-import { fetchBridgeReportFn } from '../../../server/mail'
+import { fetchBridgeReportFn } from '../../../server/communications'
 import type { BridgeReport } from '../data/bridge'
 import { AccountsBoard } from './accounts'
 import { BridgeBoard, SettingsBoard } from './bridge'
@@ -15,7 +15,7 @@ import { EventsTable } from './events'
 import { MailboxBoards } from './mailbox'
 import { busy, type Proton } from './shared'
 
-// Email › the Proton Mail tab: Bridge as its supervisor reports it, the
+// Communications › the Proton Mail tab: Bridge as its supervisor reports it, the
 // mailbox it serves, the container around it, and what it logged.
 
 /** While a sync moves or Bridge starts: the supervisor flushes a change within a second. */

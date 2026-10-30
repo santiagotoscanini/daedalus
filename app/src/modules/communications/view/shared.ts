@@ -1,12 +1,13 @@
 import type { Tone } from '../../../lib/tone'
-import type { MailData } from '../data'
+import type { CommunicationsData } from '../data'
 import type { AccountState, BridgeReport } from '../data/bridge'
 
-// What the Email page's boards share: each tab's payload, and the words and
+// What the Communications page's boards share: each tab's payload, and the words and
 // tones Bridge's states and events are drawn with.
 
-export type Relay = Extract<MailData, { tab: 'relay' }>
-export type Proton = Extract<MailData, { tab: 'proton' }>
+export type Relay = Extract<CommunicationsData, { tab: 'relay' }>
+export type Proton = Extract<CommunicationsData, { tab: 'proton' }>
+export type Matrix = Extract<CommunicationsData, { tab: 'matrix' }>
 
 /** Connected is the norm and recedes; the other two are why you opened the page. */
 export const ACCOUNT_STATE: Record<AccountState, { label: string; tone: Tone }> = {

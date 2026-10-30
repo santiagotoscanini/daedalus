@@ -16,7 +16,7 @@ import { num } from '../../../lib/format'
 import type { BridgeEvent } from '../data/bridge'
 import { EVENT } from './shared'
 
-// Email › Bridge's recent events: what it said happened, newest first. The
+// Communications › Bridge's recent events: what it said happened, newest first. The
 // ordinary ones (a sync starting, the network coming back) are plain rows;
 // the ones that stop mail wear their tone.
 
