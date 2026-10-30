@@ -31,6 +31,7 @@ export type NavIconName =
   // GitHub Actions: the play mark inside a ring, which is the platform's own
   // glyph reduced to a stroke — a run is the thing this page is about.
   | 'actions'
+  | 'communications'
   | 'mail'
   | 'claude'
   | 'menu'
@@ -117,6 +118,14 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8.6" />
       <path d="m10.2 8.9 4.6 3.1-4.6 3.1Z" />
+    </>
+  ),
+  // A speech bubble with two lines of text: messages of any kind, which is
+  // the page; the envelope stays the relay tab's.
+  communications: (
+    <>
+      <path d="M5.6 4.6h12.8a2.4 2.4 0 0 1 2.4 2.4v7.6a2.4 2.4 0 0 1-2.4 2.4h-6.9l-4.3 3.4v-3.4H5.6a2.4 2.4 0 0 1-2.4-2.4V7a2.4 2.4 0 0 1 2.4-2.4Z" />
+      <path d="M7.6 9.2h8.8M7.6 12.4h5.6" />
     </>
   ),
   // An envelope: the flap is the whole sign at 19px.

@@ -17,7 +17,7 @@ type TabHealth = 'vpn-egress' | 'uplink' | 'log-pipeline' | 'minecraft-ping'
 
 /**
  * A tab whose name and mark are a fact about the box rather than about the
- * engine: Email's relay tab is named after whatever provider the box relays
+ * engine: Communications' relay tab is named after whatever provider the box relays
  * through. A symbol for the same reason as `health` — the fact is on the
  * server — resolved by `fetchActiveModules` (server/modules.ts).
  */

@@ -60,7 +60,7 @@ export function TabNav({
           label: t.label,
           dividerBefore: t.dividerBefore,
           muted: isOff,
-          // A mark only where the tab IS one outside service (Email's two);
+          // A mark only where the tab IS one outside service (Communications' two mail tabs);
           // elsewhere the label names the tab. An off tab wears a grey dot
           // titled "switched off" — the tab is dimmed too, so the dot and the
           // dimming say it together without a pill in the label.
