@@ -342,9 +342,9 @@ in
                 description = ''
                   Move the container off traefik-net onto a private
                   `iso-<name>-net` bridge whose only other member is
-                  traefik, so the forward-auth middleware is the only
-                  possible caller. The right default for any app using
-                  `auth.headers`; incompatible with `egress` and
+                  traefik, so traefik is the only possible caller. The
+                  right default for any app using `auth.headers`. Needs an
+                  `auth.mode`; incompatible with `egress` and
                   `prometheus.enable`.
                 '';
               };

@@ -282,6 +282,18 @@ in
         '';
       };
     };
+
+    # The identity provider people sign in with, as Settings › Sign-in edits it
+    # (site.json `oidc`). Blank keeps what the host's own provider hands the
+    # control plane; the client secret is in the vault, not here.
+    oidc = lib.genAttrs [ "issuer" "clientId" "name" ] (
+      field:
+      lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "site.json `oidc.${field}`. Blank keeps the host's own provider's value.";
+      }
+    );
   };
 
   config = lib.mkMerge [
@@ -371,6 +383,12 @@ in
             label = unset (siteDoc.identity.controlPlane or null);
             previousLabel = unset (siteDoc.identity.controlPlanePrevious or null);
           };
+        # `or`: absent until Settings › Sign-in says something.
+        oidc = {
+          issuer = siteDoc.oidc.issuer or "";
+          clientId = siteDoc.oidc.clientId or "";
+          name = siteDoc.oidc.name or "";
+        };
         # `or`: absent (or `"github": null`) until an App exists. The fields are
         # picked by name so a key the engine adds later cannot fail the
         # submodule's type check before this module learns about it.

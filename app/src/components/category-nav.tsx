@@ -40,7 +40,7 @@ export function TabNav({
   // never fetches its boards), and what a branded tab is called here.
   const offered = useLoaderData({
     from: '__root__',
-    select: (d) => d.modules.find((m) => m.id === spec.id)?.tabs,
+    select: (d) => d.modules?.find((m) => m.id === spec.id)?.tabs,
   })
   const tabs = offered ?? spec.tabs
   const off = new Set(tabs.filter((t) => t.off === true).map((t) => t.id))

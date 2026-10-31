@@ -18,6 +18,12 @@ export const fetchShell = readFn.handler(async () => {
   return { theme, modules, site, engineOverride }
 })
 
+/** The document around /login: the palette and the identity, and no rail. */
+export const fetchLoginShell = readFn.handler(async () => {
+  const [theme, site] = await Promise.all([fetchTheme(), fetchSite()])
+  return { theme, site }
+})
+
 /**
  * How the controller link stands, for the shell's banner. While it is not
  * connected this asks the controller once — a dial the client's backoff

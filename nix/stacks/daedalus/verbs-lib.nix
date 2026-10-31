@@ -41,7 +41,7 @@ let
   # filter). Baking this in makes apps.json part of daedalus-apply's
   # ExecStart, which the unit's `restartIfChanged = false` covers — see the
   # note there.
-  vaultAppSecrets = map (n: "vault/apps/${n}-env.sops") (lib.attrNames registryApps);
+  vaultAppSecrets = map (n: "vault/apps/${n}-env.sops") secretApps;
 
   # The apps whose operator-secrets file the secret-set verb may write: the
   # same committed registry `vaultAppSecrets` above is built from, as bare
@@ -52,7 +52,9 @@ let
   # This is the security control on that verb (host/secret-set.sh), exactly as
   # `runnableTasks` is on the `task-run` verb: an app the box has not applied has no
   # writable file at all, and nothing from the request ever becomes a path.
-  secretApps = lib.attrNames registryApps;
+  # The control plane is not in the registry and has a file too: the client
+  # secret on Settings › Sign-in.
+  secretApps = lib.attrNames registryApps ++ [ "daedalus" ];
 
   # Set or remove ONE key in an app's operator-secrets file. The host half of
   # the write-only secrets editor: daedalus can seal a value (sopsStatic, the

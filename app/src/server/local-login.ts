@@ -4,17 +4,30 @@ import { strMax } from '../lib/contract/fields'
 import type { Result } from '../lib/result'
 import { publicFn, readFn } from './fn'
 
-// Server functions behind /login — the break-glass local login
+// Server functions behind /login, and the break-glass local login
 // (core/local-login.ts). These are the DOOR, so they are the one set of
 // mutations in this app that is `publicFn`, not `adminFn`: a caller here has
 // no identity yet, and getting one is the point. What gates them instead is
 // site.json's `auth.localLogin`: off, setup and login throw before touching
-// anything, logout does nothing, and the page that would call them answers 404.
+// anything, and logout does nothing.
 
-/** The page's loader. Null means the route does not exist. */
-export const fetchLocalLoginState = readFn.handler(async (): Promise<LocalLoginState | null> => {
+/** What /login can offer this request. */
+export type LoginState = {
+  /** The identity provider's name, or null: none is configured. */
+  provider: string | null
+  /** The break-glass form's state, or null: site.json has it off. */
+  local: LocalLoginState | null
+  signedIn: boolean
+}
+
+/** The page's loader. */
+export const fetchLoginState = readFn.handler(async (): Promise<LoginState> => {
+  const { getRequest } = await import('@tanstack/react-start/server')
+  const { signedIn } = await import('../core/authz')
   const { localLoginState } = await import('../core/local-login')
-  return localLoginState()
+  const { oidcConfig } = await import('../core/oidc-config')
+  const [local, session] = await Promise.all([localLoginState(), signedIn(getRequest())])
+  return { provider: oidcConfig()?.name ?? null, local, signedIn: session }
 })
 
 /** A form field of at most `max` characters, refused as `expected <field>`. */

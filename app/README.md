@@ -19,8 +19,8 @@ Everything else is one level up, and this file does not restate it:
 - `pnpm-workspace.yaml`: how to add a dependency under the registry policy and
   the 7-day release cooldown, in its comments.
 
-`/api/healthz` is load-bearing — the gatus probe, the request gate's and
-forward-auth's exemption, and the deploy unit's health check; its route
+`/api/healthz` is load-bearing — the gatus probe, the request gate's
+exemption, and the deploy unit's health check; its route
 file says how. Keep it unauthenticated, keep it meaning "can actually
 serve", and keep it starting nothing: the process's own work starts once at
 process start (`src/host/background.ts`).

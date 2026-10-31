@@ -10,7 +10,7 @@ import { useResolvedScheme } from '../lib/scheme'
 import { SiteProvider } from '../lib/site-context'
 import { presetById, themeCss } from '../lib/theme'
 import { fetchAccount } from '../server/profile'
-import { fetchShell } from '../server/shell'
+import { fetchLoginShell, fetchShell } from '../server/shell'
 
 // The root route: the HTML document every page renders inside, and what it
 // needs before it can draw. The frame itself — the rail, the phone drawer,
@@ -42,10 +42,14 @@ export const Route = createRootRoute({
   // the first load they are answered from this browser's memory and
   // refreshed behind the page (lib/known.ts): a navigation never waits on
   // the shell it is already showing.
-  loader: async () => ({
-    ...(await known('shell', fetchShell)),
-    account: fetchAccount(),
-  }),
+  //
+  // /login is the one page with no session behind it, so it gets none of that:
+  // what the box runs is not for a visitor, and `modules: null` is the bare
+  // frame below. Only the palette and the identity the document needs.
+  loader: async ({ location }) =>
+    location.pathname === '/login'
+      ? { ...(await fetchLoginShell()), modules: null, engineOverride: false, account: null }
+      : { ...(await known('shell', fetchShell)), account: fetchAccount() },
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
@@ -54,8 +58,7 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { title: 'daedalus' },
       { name: 'description', content: 'S2 control plane' },
-      // Behind a Pocket ID gate on the LAN; there is nothing here for a
-      // crawler even if one could reach it.
+      // Behind a sign-in; there is nothing here for a crawler.
       { name: 'robots', content: 'noindex, nofollow' },
     ],
     // Icons are plain files under public/ plus the link tags for them —
@@ -115,9 +118,18 @@ function RootDocument({ children }: { children: ReactNode }) {
       <body>
         <RouteProgress />
         <SiteProvider site={site}>
-          <Shell theme={theme} account={account} modules={modules} engineOverride={engineOverride}>
-            {children}
-          </Shell>
+          {modules === null || account === null ? (
+            children
+          ) : (
+            <Shell
+              theme={theme}
+              account={account}
+              modules={modules}
+              engineOverride={engineOverride}
+            >
+              {children}
+            </Shell>
+          )}
         </SiteProvider>
         <Scripts />
       </body>

@@ -344,8 +344,71 @@ export const SCHEMA = {
     kind: 'string',
     secret: true,
     about:
-      'What traefik sends as X-Proxy-Proof on every request it forwards here. Without it no forwarded identity is honoured (core/auth.ts).',
+      'What traefik sends as X-Proxy-Proof on every request it forwards here. Without it the request gate refuses the request (core/request-gate.ts).',
     source: 'modules/traefik, webApps.daedalus.proxyProof (/run/proxy-proof/app-daedalus.env)',
+  },
+  AUTH_SECRET: {
+    kind: 'string',
+    secret: true,
+    about: 'Seals the sign-in session cookie (core/session.ts). Unset, nobody can sign in.',
+    source: 'modules/apps, generated once under <machineState>/apps/daedalus/env',
+  },
+  OIDC_ISSUER_URL: {
+    kind: 'string',
+    about: 'The box’s own identity provider (core/oidc-config.ts).',
+    source: 'modules/apps, `auth.mode = "native"`',
+  },
+  OIDC_CLIENT_ID: {
+    kind: 'string',
+    about: 'This app’s client at the box’s own identity provider.',
+    source: 'modules/apps, `auth.mode = "native"`',
+  },
+  OIDC_CLIENT_SECRET: {
+    kind: 'string',
+    secret: true,
+    about: 'That client’s secret, generated on this box.',
+    source: 'modules/pocket-id, /run/sso-clients/daedalus-env',
+  },
+  OIDC_REDIRECT_URI: {
+    kind: 'string',
+    about: 'The callback registered at the identity provider, shown on Settings › Sign-in.',
+    source: 'modules/apps, `auth.mode = "native"`',
+  },
+  OIDC_PROVIDER_ID: {
+    kind: 'string',
+    about: 'The last segment of that callback, which Auth.js derives from the provider’s id.',
+    source: 'modules/apps, `auth.mode = "native"`',
+  },
+  OIDC_PROVIDER_NAME: {
+    kind: 'string',
+    about: 'What the sign-in button calls the box’s own identity provider.',
+    source: 'modules/apps, `auth.mode = "native"`',
+  },
+  OIDC_SCOPES: {
+    kind: 'string',
+    about: 'The scopes a sign-in asks for. `groups` is what carries `admins`.',
+    source: 'modules/apps, `auth.mode = "native"`',
+  },
+  AUTH_OIDC_ISSUER: {
+    kind: 'string',
+    about: 'Settings › Sign-in’s issuer, in place of OIDC_ISSUER_URL.',
+    source: 'site.json `oidc.issuer`',
+  },
+  AUTH_OIDC_CLIENT_ID: {
+    kind: 'string',
+    about: 'Settings › Sign-in’s client id, in place of OIDC_CLIENT_ID.',
+    source: 'site.json `oidc.clientId`',
+  },
+  AUTH_OIDC_NAME: {
+    kind: 'string',
+    about: 'Settings › Sign-in’s provider name, in place of OIDC_PROVIDER_NAME.',
+    source: 'site.json `oidc.name`',
+  },
+  AUTH_OIDC_CLIENT_SECRET: {
+    kind: 'string',
+    secret: true,
+    about: 'Settings › Sign-in’s client secret, in place of OIDC_CLIENT_SECRET.',
+    source: 'site/vault/apps/daedalus-env.sops',
   },
   READER_TOKEN: {
     kind: 'string',

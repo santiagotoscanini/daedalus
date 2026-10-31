@@ -245,3 +245,13 @@ export const revokeMcpTokenFn = adminFn
     const done = await revokeMcpToken(data.id)
     return done ? { ok: true, value: null } : { ok: false, reason: 'No such token.' }
   })
+
+const issuerForm = withMessage(obj({ issuer: strMax(512) }), 'expected an issuer')
+
+/** Settings › Sign-in's Test: asks the issuer's discovery document, and saves nothing. */
+export const testOidcIssuerFn = adminFn
+  .validator(asValidator(issuerForm))
+  .handler(async ({ data, context }) => {
+    const { testIssuer } = await import('../core/settings/sign-in')
+    return testIssuer(await context.ctx(), data.issuer)
+  })

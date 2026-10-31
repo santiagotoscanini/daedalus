@@ -5,8 +5,7 @@ import { readCapped } from '../lib/read-capped'
 // `redeem_https`): `{code, code_verifier}` in, the machine's tunnel and the
 // controller it pins out (api/wire.rs `EnrollRedeemed`).
 //
-// OUTSIDE the Pocket ID gate (authBypassRule in nix/stacks/daedalus/
-// daedalus.nix): the caller is a root service with no browser behind it. It
+// OUTSIDE the sign-in (EXEMPT in core/request-gate.ts): the caller is a root service with no browser behind it. It
 // carries its own authorization — a single-use code an admin's Confirm minted
 // minutes earlier, redeemed only with the PKCE verifier whose challenge the
 // machine put in the page the admin confirmed (host/enroll.ts). A code seen on

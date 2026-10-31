@@ -82,6 +82,7 @@ const committed: SiteDocument = {
   },
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
+  oidc: { issuer: '', clientId: '', name: '' },
   developer: { engineOverride: false },
   commits: { author: 'box' },
   modules: { enabled: {}, web: {}, players: {} },

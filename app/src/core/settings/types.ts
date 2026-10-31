@@ -21,6 +21,15 @@ export type SourceMeta = {
 export type OperatorAccount = { user: string; group: string }
 
 export type BoxSettings = {
+  /** The identity provider in force (core/oidc-config.ts). No secret crosses. */
+  signIn: {
+    issuer: string | null
+    clientId: string | null
+    name: string
+    secret: 'settings' | 'box' | 'none'
+    callbackUrl: string | null
+    configured: boolean
+  }
   general: {
     hostname: string
     baseDomain: string

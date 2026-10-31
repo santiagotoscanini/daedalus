@@ -250,9 +250,9 @@ let
       # ID client itself via fleet.ssoClients.
       proxyAuth = app.auth.mode == "proxy";
       nativeAuth = app.auth.mode == "native";
-      # Isolation only makes sense for a bridge-routed forward-auth app
-      # (see the option's description); egress apps aren't on a bridge.
-      isolatedAuth = proxyAuth && app.auth.isolated;
+      # Isolation only makes sense for a bridge-routed app with SSO of either
+      # shape (see the option's description); egress apps aren't on a bridge.
+      isolatedAuth = (proxyAuth || nativeAuth) && app.auth.isolated;
       # Where the IdP sends the browser back. The forward-auth plugin
       # owns /oidc/callback on the app's own hostname; a native app
       # mounts its framework's callback path — Auth.js's shape for the
@@ -354,6 +354,7 @@ let
       app,
       egressEnabled,
       proxyAuth,
+      nativeAuth,
       dev,
       exposed,
       ...
@@ -369,8 +370,8 @@ let
           message = "fleet.apps.${name}: `egress` cannot combine with `prometheus.enable` — a netns'd app isn't reachable from monitoring-net, so the scrape target would be permanently down.";
         }
         {
-          assertion = app.auth.isolated -> (proxyAuth && !egressEnabled);
-          message = "fleet.apps.${name}: `auth.isolated` needs `auth.mode = \"proxy\"` and no `egress` — isolation puts the container on a private bridge whose only other member is traefik, which a netns'd app can't join and a native-OIDC app gains nothing from.";
+          assertion = app.auth.isolated -> ((proxyAuth || nativeAuth) && !egressEnabled);
+          message = "fleet.apps.${name}: `auth.isolated` needs `auth.mode` to be \"proxy\" or \"native\", and no `egress` — isolation puts the container on a private bridge whose only other member is traefik, which a netns'd app can't join and a native-OIDC app gains nothing from.";
         }
         {
           assertion = !(app.auth.isolated && app.prometheus.enable);

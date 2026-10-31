@@ -65,7 +65,9 @@ export async function revealAppEnvVar(data: { name: string; key: string }) {
  */
 async function writableSecretApps(): Promise<string[]> {
   const manifest = await readNixManifest()
-  return Object.keys(manifest.registry.apps)
+  // The control plane is not in the registry, and has one key of its own: the
+  // client secret on Settings › Sign-in (the verb's list, verbs-lib.nix).
+  return [...Object.keys(manifest.registry.apps), 'daedalus']
 }
 
 /** The refusal shared by both verbs, or null when the pair is sendable. */

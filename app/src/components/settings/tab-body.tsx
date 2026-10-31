@@ -17,6 +17,7 @@ import { Machines } from './machines'
 import { Modules } from './modules'
 import { Network } from './network'
 import { Repository } from './repository'
+import { SignIn } from './sign-in'
 
 // The body of the Settings tab that is showing, drawn from what the route's
 // loader read. Several tabs have one part that streams in behind the page (the
@@ -93,6 +94,7 @@ export function SettingsTabBody({
         />
       )}
       {tab === 'network' && <Network settings={settings} edit={edit} />}
+      {tab === 'sign-in' && <SignIn settings={settings} edit={edit} />}
       {tab === 'integrations' && (
         <MaybeAwait
           resetKey={tab}

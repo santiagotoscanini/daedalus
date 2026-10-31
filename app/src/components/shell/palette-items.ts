@@ -202,7 +202,7 @@ export function buildItems(
       label: 'Sign out',
       icon: 'logout',
       keywords: 'log out logout',
-      action: { kind: 'href', href: '/logout' },
+      action: { kind: 'href', href: '/api/auth/end' },
     },
   )
   return items

@@ -1,24 +1,20 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { AUTH_HEADERS, forwardedHeaderOf } from '../core/auth'
 import { makeCtx } from '../core/ctx'
+import { sessionOf } from '../core/session'
 import { profilePicture } from '../core/settings/profile'
 
 // The signed-in person’s Pocket ID picture, for the Profile page and the rail.
 //
 // Proxied rather than an <img> pointed at the IdP: the account is resolved from
-// this request's forward-auth headers (core/settings/profile.ts), so the page
-// never needs to know or send a user id, and a picture that was just replaced
-// is revalidated here instead of served from what the browser kept of Pocket
-// ID's origin. Behind the gate — it is not in the forward-auth bypass — and
-// the headers are read through the proxy proof like every other identity.
+// this request's session (core/settings/profile.ts), so the page never needs to
+// know or send a user id, and a picture that was just replaced is revalidated
+// here instead of served from what the browser kept of Pocket ID's origin.
 export const Route = createFileRoute('/api/profile-picture')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const header = (name: string) => forwardedHeaderOf(request, name) || null
-        const picture = await profilePicture(await makeCtx(), {
-          sub: header(AUTH_HEADERS.SUBJECT),
-        })
+        const session = await sessionOf(request)
+        const picture = await profilePicture(await makeCtx(), { sub: session?.sub ?? null })
         // A plain 404, not the router's not-found: this answers an <img>.
         if (picture === null) return new Response(null, { status: 404 })
         return new Response(new Uint8Array(picture.bytes), {

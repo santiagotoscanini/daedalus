@@ -111,3 +111,11 @@ export function parseUpstreams(text: string): string[] {
     .map((l) => l.trim())
     .filter((l) => l !== '')
 }
+
+/** Why a value cannot be an OIDC issuer, or null. Blank keeps the box's own. */
+export function oidcIssuerError(value: string): string | null {
+  const v = value.trim()
+  if (v === '') return null
+  if (!URL.canParse(v)) return 'That is not a URL.'
+  return new URL(v).protocol === 'https:' ? null : 'An issuer has to be https.'
+}

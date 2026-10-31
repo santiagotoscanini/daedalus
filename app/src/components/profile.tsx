@@ -174,8 +174,8 @@ function Account({ profile: p }: { profile: Profile }) {
               <ExternalLinkIcon />
             </a>
           )}
-          {/* A full page load: /logout belongs to the forward-auth middleware. */}
-          <a href="/logout" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+          {/* A full page load: this is a server route, not a page. */}
+          <a href="/api/auth/end" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
             <LogOutIcon />
             Sign out
           </a>

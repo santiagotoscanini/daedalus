@@ -5,6 +5,7 @@ import { repoFacts } from '../../host/contract/domains/repo'
 import { type SiteIdentity, siteIdentity } from '../../host/contract/domains/site'
 import type { SnapshotResult } from '../../host/contract/snapshot'
 import type { Ctx } from '../ctx'
+import { oidcFacts } from '../oidc-config'
 import type { BoxSettings, SourceMeta } from './types'
 
 // The reader behind Settings: what this box IS, assembled from the three
@@ -47,6 +48,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
   const devServer = ctx.env('DAEDALUS_DEV') === '1'
 
   return {
+    signIn: oidcFacts(),
     general: {
       hostname: s.hostname,
       baseDomain: s.baseDomain,

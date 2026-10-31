@@ -1,30 +1,24 @@
+import { getRequest } from '@tanstack/react-start/server'
 import type { Result } from '../lib/result'
-import { type Actor, isAdmin, NOT_ADMIN_REASON, requireActor, requireGroups } from './auth'
+import { type Actor, isAdmin, NO_ACTOR_REASON, NOT_ADMIN_REASON } from './auth'
 import { type LocalIdentity, localIdentity } from './local-login'
+import { sessionOf } from './session'
 
 // Who may CHANGE this box, as opposed to who is signed in.
 //
-// core/auth.ts answers "is anyone there" and stays free of the database
-// because the server-function seam static-imports it. This module asks the
-// second question; it reads the break-glass session (core/local-login.ts), so
-// the seam reaches it only through server/fn.ts's `adminOnly`, with
-// `await import`.
+// This module reads the session and the break-glass login, so the seam reaches
+// it only through server/fn.ts's `adminOnly`, with `await import`.
 //
-// Authorization already exists one layer earlier: the Pocket ID client
-// daedalus derives allows `authGroups`, which defaults to [ "admins" ], and it
-// is enforced at the IdP — someone outside the group never completes a login,
-// so the app never sees the request. This module is defence in depth at the
-// thing that actually writes, which matters the day a client is widened or a
-// bypass rule grows a path. It depends on the proxy sending
-// `X-Forwarded-Groups` (daedalus.nix's `auth.headers`); a request without it is
-// not an admin.
+// Authorization exists one layer earlier too: core/session.ts gives a session
+// only to `admins`, and the Pocket ID client refuses everyone else before that.
+// This module is defence in depth at the thing that actually writes, which
+// matters the day either of those is widened.
 //
 // MACHINE CALLERS DO NOT USE THE GATE ABOVE. /api/github/webhook (an HMAC
 // signature) and /mcp (a scoped token) authenticate something that has no
-// person behind it and no session to carry groups — traefik does not even set
-// the header on the paths it bypasses. They keep their own auth; /mcp, whose
-// tools drive the same write flows as the buttons, reaches its own narrow door
-// at the bottom of this file (assertMachineActor).
+// person behind it and no session to carry groups. They keep their own auth;
+// /mcp, whose tools drive the same write flows as the buttons, reaches its own
+// narrow door at the bottom of this file (assertMachineActor).
 
 /** What an authorization decision knows. */
 export type Authorization = {
@@ -36,7 +30,7 @@ export type Authorization = {
 
 /**
  * The decision a break-glass local session yields (core/local-login.ts): the
- * same shape the headers produce, with `admins` implied. Pure, so the claim
+ * same shape a session produces, with `admins` implied. Pure, so the claim
  * that such a session passes `assertAdmin()` is one test.
  */
 export function localAuthorization(identity: LocalIdentity): Authorization {
@@ -44,12 +38,11 @@ export function localAuthorization(identity: LocalIdentity): Authorization {
 }
 
 /**
- * The headers first, the local session second. The proxy's word wins when it
- * has one; the session is only consulted when the request carries no
- * forwarded identity, and it answers null without reading a cookie unless
- * site.json turns the login on.
+ * The IdP's session first, the local one second: it is only consulted when the
+ * request carries no session, and it answers null without reading a cookie
+ * unless site.json turns the login on.
  */
-const decide = async (
+export const decide = async (
   actor: Actor,
   groups: string[],
   local: () => Promise<LocalIdentity | null>,
@@ -63,7 +56,15 @@ const decide = async (
 
 /** The decision for the request this server function is running inside. */
 export async function authorize(): Promise<Authorization> {
-  return decide(requireActor(), requireGroups(), () => localIdentity())
+  const session = await sessionOf(getRequest())
+  const actor: Actor =
+    session === null ? { ok: false, reason: NO_ACTOR_REASON } : { ok: true, value: session.email }
+  return decide(actor, session?.groups ?? [], () => localIdentity())
+}
+
+/** Whether a request carries either session: the request gate's question. */
+export async function signedIn(request: Request): Promise<boolean> {
+  return (await sessionOf(request)) !== null || (await localIdentity()) !== null
 }
 
 /**
@@ -111,9 +112,7 @@ export async function assertAdmin(): Promise<string> {
 // ── The one door for a caller that is not a person ─────────────────────────
 //
 // Everything above answers "which signed-in human is this, and are they an
-// admin". The MCP server at /mcp has no such caller: there are no forward-auth
-// headers on that path at all (traefik's plugin only sets them on gated paths,
-// and /mcp is in `authBypassRule` precisely so an agent can reach it), so
+// admin". The MCP server at /mcp has no such caller and no session, so
 // `assertAdmin()` would read an absent identity as a refusal and turn every
 // tool call into a 500.
 //

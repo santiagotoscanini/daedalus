@@ -7,6 +7,7 @@
   config,
   lib,
   pkgs,
+  mkDotenvSecret,
   ...
 }:
 
@@ -37,10 +38,23 @@ let
   dashboard = lib.attrValues config.fleet.dashboard;
 
   daedalusDev = config.fleet.daedalus.source == "dev";
+
+  # The control plane's own operator-secrets file, which holds one key: the
+  # client secret saved on Settings › Sign-in. modules/apps/declarations.nix
+  # wires these for the registry's apps, and this one is not in the registry.
+  vaultFile =
+    (import ../../platform/lib/operator-secrets-lib.nix {
+      inherit lib;
+      site = config.fleet.site.source;
+    }).daedalus or null;
 in
 
 {
   config = lib.mkIf config.fleet.modules.daedalus.enable {
+    sops.secrets."app-daedalus-env" = lib.mkIf (vaultFile != null) (
+      mkDotenvSecret vaultFile // { restartUnits = [ "podman-app-daedalus.service" ]; }
+    );
+
     # The bridges the stacks ask for (fleet.dashboard.<id>.bridges), each
     # joined once. Merges with what modules/apps contributes for this container
     # (app-db, the iso bridge). Bridges are two-way, which is why the app
@@ -54,7 +68,8 @@ in
       environmentFiles = [
         "/run/daedalus-dashboard/env"
       ]
-      ++ lib.concatMap (d: d.envFiles) dashboard;
+      ++ lib.concatMap (d: d.envFiles) dashboard
+      ++ lib.optional (vaultFile != null) config.sops.secrets."app-daedalus-env".path;
 
       # mkMerge, not `//`, for the stacks' contributions: a name two of them
       # both set (or one of them and this block) is a conflicting definition,
@@ -62,6 +77,14 @@ in
       env = lib.mkMerge (
         map (d: d.env) dashboard
         ++ [
+          # Settings › Sign-in, over the client `auth.mode = "native"` declares
+          # (app/src/core/oidc-config.ts). Blank is left out: the app reads the
+          # box's own value then.
+          (lib.filterAttrs (_: v: v != "") {
+            AUTH_OIDC_ISSUER = config.fleet.oidc.issuer;
+            AUTH_OIDC_CLIENT_ID = config.fleet.oidc.clientId;
+            AUTH_OIDC_NAME = config.fleet.oidc.name;
+          })
           (lib.optionalAttrs haveGithubApp {
             BUILD_LOGS_PATH = "/builds";
             # The builder's machinery, from daedalus-builder-snapshot.

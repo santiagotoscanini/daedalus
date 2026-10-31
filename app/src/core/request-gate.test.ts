@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EXEMPT, gate, READER_TOKEN_HEADER, verdictOf } from './request-gate'
+import { EXEMPT, gate, isOpen, READER_TOKEN_HEADER, verdictOf } from './request-gate'
 
 // The gate in front of every request: who may be served without traefik's
 // proof. Each refusal below is somebody on a shared bridge dialling the
@@ -105,10 +105,14 @@ describe('the request middleware', () => {
 })
 
 describe('the gate', () => {
+  const yes = () => Promise.resolve(true)
+  const no = () => Promise.resolve(false)
+  const proved = { 'x-proxy-proof': PROOF }
+
   it('answers 403 instead of the app, and says so once a minute per path', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     for (const r of [req('/claude'), req('/claude?tab=x')]) {
-      const refused = gate(r)
+      const refused = await gate(r, yes)
       expect(refused?.status).toBe(403)
       expect(await refused?.text()).toBe('Forbidden')
     }
@@ -118,9 +122,53 @@ describe('the gate', () => {
     )
   })
 
-  it('lets the proxied, the exempt and the reader through to the app', () => {
-    expect(gate(req('/claude', { 'x-proxy-proof': PROOF }))).toBeNull()
-    expect(gate(req('/api/healthz'))).toBeNull()
-    expect(gate(req('/claude', { [READER_TOKEN_HEADER]: READER }))).toBeNull()
+  it('lets a session, the exempt and the reader through to the app', async () => {
+    expect(await gate(req('/claude', proved), yes)).toBeNull()
+    expect(await gate(req('/api/healthz'), no)).toBeNull()
+    expect(await gate(req('/claude', { [READER_TOKEN_HEADER]: READER }), no)).toBeNull()
+  })
+
+  it('never lets a session stand in for the proof', async () => {
+    expect((await gate(req('/claude'), yes))?.status).toBe(403)
+    expect((await gate(req('/login'), yes))?.status).toBe(403)
+    expect((await gate(req('/api/auth/start'), yes))?.status).toBe(403)
+  })
+
+  it('sends a page with no session to sign in, and back to where it was', async () => {
+    const r = await gate(req('/settings?tab=network', proved), no)
+    expect(r?.status).toBe(302)
+    expect(r?.headers.get('location')).toBe('/login?next=%2Fsettings%3Ftab%3Dnetwork')
+  })
+
+  it('answers 401 to what is not a page: a read, an image, an API', async () => {
+    for (const path of ['/_serverFn/abc', '/api/profile-picture', '/api/shot-run/x']) {
+      expect((await gate(req(path, proved), no))?.status, path).toBe(401)
+    }
+  })
+
+  it('refuses a POST to a page or a route with no session', async () => {
+    expect((await gate(req('/settings', proved, 'POST'), no))?.status).toBe(401)
+  })
+})
+
+describe('what a proxied request reaches with no session', () => {
+  it('is the way to get one', () => {
+    expect(isOpen(req('/login'))).toBe(true)
+    expect(isOpen(req('/api/auth/start'))).toBe(true)
+    expect(isOpen(req('/api/auth/callback/pocket-id'))).toBe(true)
+  })
+
+  it('is a POST to a server function, which gates itself', () => {
+    expect(isOpen(req('/_serverFn/abc', {}, 'POST'))).toBe(true)
+  })
+
+  it('is every exempt door', () => {
+    for (const path of Object.keys(EXEMPT)) expect(isOpen(req(path)), path).toBe(true)
+  })
+
+  it('is not a read, or anything that only looks like the above', () => {
+    for (const path of ['/_serverFn/abc', '/apps', '/', '/loginx', '/api/authx', '/api/auth']) {
+      expect(isOpen(req(path)), path).toBe(false)
+    }
   })
 })

@@ -55,8 +55,8 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // box RUNS — the NixOS release, its support window, the channel — is on
 // System › Updates beside the engine's pin, with the other things that move.
 //
-// The tabs are the nine subjects a box has, in the order a first visit
-// reads them: what it is called, how it is reached, what it talks to, where
+// The tabs are the ten subjects a box has, in the order a first visit
+// reads them: what it is called, how it is reached, who may sign in, what it talks to, where
 // its configuration lives, what else it lists, which other machines it
 // trusts and what it asks of them, which catalog modules it runs, how it
 // looks, and how it is driven.
@@ -64,6 +64,7 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 const TABS = [
   { id: 'general', label: 'General' },
   { id: 'network', label: 'Network' },
+  { id: 'sign-in', label: 'Sign-in' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'repository', label: 'Site' },
   { id: 'machines', label: 'Machines' },

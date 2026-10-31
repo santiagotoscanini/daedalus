@@ -10,7 +10,7 @@
   "egress": null,
   "env": [],
   "auth": {
-    "mode": "proxy",
+    "mode": "native",
     "isolated": true,
     "healthPath": "/api/healthz"
   },

@@ -109,11 +109,13 @@ export default defineConfig(({ command }) => ({
     //
     // A build bundles EVERY dependency into `dist/server`, so the runtime
     // image carries no React, router, radix or zod — only what cannot be
-    // bundled (argon2 is a native addon) and what `server.mjs` imports itself.
+    // bundled (argon2 is a native addon, and @auth/core stays a whole package so
+    // the bundle does not swallow its optional passkey imports) and what
+    // `server.mjs` imports itself.
     // Build-only: in dev it would push all of node_modules through the SSR
     // transform for nothing.
     noExternal: command === 'build' ? true : ['lucide-react'],
-    external: command === 'build' ? ['@node-rs/argon2'] : [],
+    external: command === 'build' ? ['@node-rs/argon2', '@auth/core'] : [],
   },
 
   server: {

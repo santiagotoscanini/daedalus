@@ -419,33 +419,6 @@ in
       # has: an image built on the box moves with the engine rev, through the
       # rebuild that brings it.
       deploy.enable = source == "published";
-
-      # Forward-auth: daedalus has no user model of its own and serves one
-      # operator, so the Pocket ID gate stands in front of it. The headers are
-      # trusted only beside traefik's proxy proof, and the strip middleware
-      # blanks any client-sent copy before the gate.
-      auth = selfApp.auth // {
-        headers = {
-          "X-Forwarded-Email" = "{{ .claims.email }}";
-          # Pocket ID's user id. The Profile page finds the signed-in account
-          # by it, because unlike the email it survives the person editing it.
-          "X-Forwarded-User" = "{{ .claims.sub }}";
-          # Which Pocket ID groups the session carries, as a JSON array
-          # (`mapToJsonArray`: Go renders a bare slice as `[a b]`). The app
-          # refuses a mutation from outside `admins` — defence in depth behind
-          # the client's own `authGroups`. The plugin sets headers on gated
-          # paths only, so every bypassed path arrives with this blank.
-          "X-Forwarded-Groups" = "{{ .claims.groups | mapToJsonArray }}";
-        };
-        # The paths whose callers cannot hold a passkey, each written to
-        # authenticate itself or to be harmless in public on the LAN
-        # (ARCHITECTURE.md "Trust boundaries"): /mcp (a scoped bearer token,
-        # checked before any work; deliberately not fronted by the LiteLLM
-        # gateway, which would widen its reach), the icons (iOS fetches the
-        # home-screen icon without the session cookie) and /api/agent/enroll
-        # (a single-use, PKCE-bound code).
-        authBypassRule = "PathPrefix(`/mcp`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`) || Path(`/api/agent/enroll`)";
-      };
     };
 
     # The tunnel registry rides the publishing domain (platform/export.nix);

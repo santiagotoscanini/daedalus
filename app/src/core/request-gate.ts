@@ -31,6 +31,11 @@ import { provenByProxy } from './auth'
 // A refusal is a bare 403 before any route or server function runs, and one
 // journal line per path a minute — the method and the path, never a header, a
 // query or a body.
+//
+// Proof says traefik sent a request, not that a person did. So a proxied
+// request also needs a session (core/session.ts), or the break-glass one,
+// unless it is on the short list of what a visitor must reach to get one:
+// `isOpen`. A page is sent to /login; anything else is a 401.
 
 /** The paths served without traefik's proof, and why each may be. Exact matches only. */
 export const EXEMPT: Readonly<Record<string, string>> = {
@@ -78,9 +83,53 @@ function logRefusal(request: Request): void {
   console.warn(`[gate] refused ${key}: no proxy proof, not an exempt path, no reader token`)
 }
 
-/** What the request middleware answers instead of the app, or null to let it through. */
-export function gate(request: Request): Response | null {
-  if (verdictOf(request) !== 'unproven') return null
-  logRefusal(request)
-  return new Response('Forbidden', { status: 403, headers: { 'cache-control': 'no-store' } })
+/**
+ * What a proxied request reaches with no session.
+ *
+ * A POST to a server function passes because each one gates itself: it is an
+ * `adminFn` or one of the login's `publicFn`s, and server/fn.test.ts fails on
+ * anything else. A GET one is a read, and reads have no check but this file's.
+ */
+export function isOpen(request: Request): boolean {
+  const { pathname } = new URL(request.url)
+  return (
+    pathname === '/login' ||
+    pathname.startsWith('/api/auth/') ||
+    Object.hasOwn(EXEMPT, pathname) ||
+    (request.method === 'POST' && pathname.startsWith('/_serverFn/'))
+  )
+}
+
+const noStore = { 'cache-control': 'no-store' }
+
+function toSignIn(request: Request): Response {
+  const { pathname, search } = new URL(request.url)
+  const isPage =
+    READS.has(request.method) &&
+    !pathname.startsWith('/api/') &&
+    !pathname.startsWith('/_serverFn/')
+  if (!isPage) return new Response('Unauthorized', { status: 401, headers: noStore })
+  const next = encodeURIComponent(`${pathname}${search}`)
+  return new Response(null, {
+    status: 302,
+    headers: { ...noStore, location: `/login?next=${next}` },
+  })
+}
+
+/**
+ * What the request middleware answers instead of the app, or null to let it
+ * through. `signedIn` is the only part that reads a cookie or a row, handed in
+ * so the rules can be asserted without either.
+ */
+export async function gate(
+  request: Request,
+  signedIn: (request: Request) => Promise<boolean>,
+): Promise<Response | null> {
+  const verdict = verdictOf(request)
+  if (verdict === 'unproven') {
+    logRefusal(request)
+    return new Response('Forbidden', { status: 403, headers: noStore })
+  }
+  if (verdict !== 'proxied' || isOpen(request) || (await signedIn(request))) return null
+  return toSignIn(request)
 }

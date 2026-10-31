@@ -119,7 +119,7 @@ function NativeMenu({
           <SettingsIcon />
           Settings
         </a>
-        <a href="/logout" className={NATIVE_ITEM}>
+        <a href="/api/auth/end" className={NATIVE_ITEM}>
           <LogOutIcon />
           Sign out
         </a>
@@ -263,11 +263,10 @@ function Menu({
             </a>
           </DropdownMenuItem>
         )}
-        {/* A full page load, not a router link: /logout is answered by the
-            forward-auth middleware in front of this app, which ends the
-            Pocket ID session and comes back through its callback. */}
+        {/* A full page load, not a router link: this is a server route, which
+            clears the session and lands on the login page. */}
         <DropdownMenuItem asChild>
-          <a href="/logout">
+          <a href="/api/auth/end">
             <LogOutIcon />
             Sign out
           </a>

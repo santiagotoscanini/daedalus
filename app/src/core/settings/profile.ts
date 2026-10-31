@@ -20,11 +20,10 @@ import type { Account, Profile, ProfilePatch, ProfileRead } from './types'
 // API with the static API key (DASH_POCKETID_KEY), the sanctioned path for
 // state that lives inside an app.
 //
-// WHICH account is decided by the forward-auth headers of the request, never
-// by the page: X-Forwarded-User carries the OIDC `sub` (Pocket ID's user id,
-// stable across a rename and an email edit). Nothing here
-// takes an account id from the client, so a request can only ever reach the
-// account it signed in as.
+// WHICH account is decided by the request's session, never by the page: it
+// carries the OIDC `sub` (Pocket ID's user id, stable across a rename and an
+// email edit). Nothing here takes an account id from the client, so a request
+// can only ever reach the account it signed in as.
 //
 // One trap shapes the write. PUT /api/users/:id is the ADMIN update, and for
 // an admin editing another account Pocket ID applies `isAdmin`, `disabled` and
@@ -36,7 +35,7 @@ import type { Account, Profile, ProfilePatch, ProfileRead } from './types'
 // with them) along with a name change. `userGroupIds` is left out; that
 // endpoint ignores it.
 
-/** Who a request signed in as, per the forward-auth headers traefik sets. */
+/** Who a request signed in as, per its session. */
 export type Who = { sub: string | null }
 
 type PocketUser = {

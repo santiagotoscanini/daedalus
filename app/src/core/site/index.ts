@@ -9,7 +9,7 @@ import type { SnapshotResult } from '../../host/contract/snapshot'
 import { env } from '../../host/env'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { ENGINE_REPO } from '../../lib/engine'
-import { controlPlaneLabelError } from '../../lib/site-fields'
+import { controlPlaneLabelError, oidcIssuerError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
 import {
@@ -88,6 +88,11 @@ const EDITABLE = [
   // Apply that sets it is already governed by it, and the one that clears it
   // is the switch back onto the pinned engine.
   'developer.engineOverride',
+  // The identity provider people sign in with. Bound to the container by nix, and
+  // blank means the box's own (core/oidc-config.ts).
+  'oidc.issuer',
+  'oidc.clientId',
+  'oidc.name',
   // Also read only by the host agents, at commit time — so the Apply that
   // changes it already commits as the identity it chose.
   'commits.author',
@@ -267,6 +272,12 @@ async function refuseUnknown(
 ): Promise<void> {
   const unchanged = (f: SiteField) =>
     committed !== null && sameValue(getField(committed, f), patch[f])
+
+  const issuer = patch['oidc.issuer']
+  if (typeof issuer === 'string') {
+    const problem = oidcIssuerError(issuer)
+    if (problem !== null) throw new Error(problem)
+  }
 
   // The control plane's name. A label the build would refuse, a reserved
   // label, or a hostname some other app already answers at never gets

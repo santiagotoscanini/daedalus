@@ -5,12 +5,10 @@
 // ── how a page reaches a service ──────────────────────────────────────────
 //
 // daedalus is deliberately NOT on traefik-net: `auth.isolated` puts it on a
-// private bridge with traefik as the only other member, which is what makes it
-// safe for the app to trust the `X-Forwarded-Email` header that names the
-// signed-in person (core/auth.ts). Dialling a service by container DNS would
-// mean joining traefik-net and handing every container on it a path to the
-// control plane, so it reaches everything three other ways instead, in this
-// order of preference:
+// private bridge with traefik as the only other member. Dialling a service by
+// container DNS would mean joining traefik-net and handing every container on it
+// a path to the control plane, so it reaches everything three other ways
+// instead, in this order of preference:
 //
 //   a bridge it shares — prometheus / loki over `monitoring` (litellm and pg
 //                        over app-db-net, traefik's API over its own iso

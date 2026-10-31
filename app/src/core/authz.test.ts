@@ -7,29 +7,16 @@ import { type Authorization, allow, assertMachineActor } from './authz'
 // cases are the combinations of (signed in?) x (admin?), and none of them
 // should need a request to state.
 
-describe('reading the groups header', () => {
-  it('parses the JSON array the plugin renders', () => {
-    expect(groupsOf('["admins","family"]')).toEqual([ADMIN_GROUP, 'family'])
-    expect(groupsOf('["family"]')).toEqual(['family'])
+describe('reading the groups claim', () => {
+  it('keeps the strings of a list', () => {
+    expect(groupsOf([ADMIN_GROUP, 'family'])).toEqual([ADMIN_GROUP, 'family'])
+    expect(groupsOf(['family', 1, null, '  '])).toEqual(['family'])
   })
 
-  it('reads every unusable header as no groups at all', () => {
-    // Absent is a request with no header at all; blank is a traefik-bypassed
-    // path, where the strip middleware ran and the plugin never re-set it;
-    // the rest are shapes this app must not crash on. All of them must be
-    // "not an admin", never an exception on a page that was only reading.
-    for (const raw of [
-      undefined,
-      '',
-      '   ',
-      'admins',
-      '[admins family]',
-      '{"groups":["admins"]}',
-      'null',
-      '[1,2]',
-      '["  "]',
-      '[',
-    ]) {
+  it('reads every other shape as no groups at all', () => {
+    // A claim is the provider's to shape. All of these must be "not an admin",
+    // never an exception on a page that was only reading.
+    for (const raw of [undefined, null, '', 'admins', '["admins"]', { groups: ['admins'] }, 1]) {
       expect(groupsOf(raw), String(raw)).toEqual([])
       expect(isAdmin(groupsOf(raw)), String(raw)).toBe(false)
     }

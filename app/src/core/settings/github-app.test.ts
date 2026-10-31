@@ -34,6 +34,12 @@ vi.mock('../vault', () => ({
   },
 }))
 vi.mock('../../host/contract/domains/site-doc', () => ({ readCommittedSite: async () => h.site }))
+vi.mock('../session', () => ({
+  actorOf: async (request: Request) => {
+    const value = request.headers.get('x-test-actor')
+    return value === null ? { ok: false, reason: 'no one' } : { ok: true, value }
+  },
+}))
 vi.mock('../../lib/repo/settings', () => ({
   SETTING_KEYS: {
     githubAppCreation: 'github.app.creation',
@@ -115,6 +121,7 @@ const DOC: SiteDocument = {
   },
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
+  oidc: { issuer: '', clientId: '', name: '' },
   developer: { engineOverride: false },
   commits: { author: 'box' },
   modules: { enabled: {}, web: {}, players: {} },
@@ -219,18 +226,15 @@ async function begin(ctx: Ctx, replace = false): Promise<string> {
 
 const leaks = (text: string) => SECRETS.filter((s) => text.includes(s))
 
-// As traefik forwards it: the identity header, and the proof that traefik sent
-// it (core/auth.ts reads no identity without one).
-const PROOF = 'proof-for-the-callback-tests'
+// The signed-in person is core/session.ts's to say; this is its answer.
 const request = (query: string, email: string | null = ACTOR) =>
   new Request(`http://app-daedalus:3000/settings/github/callback?${query}`, {
-    headers: email === null ? {} : { 'x-forwarded-email': email, 'x-proxy-proof': PROOF },
+    headers: email === null ? {} : { 'x-test-actor': email },
   })
 
 const location = (r: Response) => r.headers.get('location') ?? ''
 
 beforeEach(() => {
-  vi.stubEnv('PROXY_PROOF', PROOF)
   h.blocker = null
   h.apply = { ok: true, id: 'apply-1', changed: [] }
   h.applyCalls = []

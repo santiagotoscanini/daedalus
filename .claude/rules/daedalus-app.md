@@ -23,11 +23,12 @@ loaded. They are not repeated here.
   `tab-views.tsx`) /
   `apps.new.tsx`, `apps_.$name.builds.$id.tsx` (one build: its log,
   facts and cancel), `settings.tsx`, `claude.tsx`, `profile.tsx`,
-  `login.tsx` (the break-glass local login, a 404 unless site.json turns
-  it on — `core/local-login.ts`), and `settings_.github.callback.ts`,
+  `login.tsx` (where a visitor with no session lands: straight on to the
+  identity provider, or the break-glass form when site.json turns it on —
+  `core/local-login.ts`), and `settings_.github.callback.ts`,
   where GitHub returns the App manifest's `?code&state`. The `api.*.ts`
   server routes are only what an
-  outside caller needs — healthz, the GitHub push webhook, a Mac's
+  outside caller needs — healthz, the sign-in (`api.auth.$`), the GitHub push webhook, a Mac's
   log-in (`agent/enroll`), app-icon, profile-picture, and the two image
   servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
@@ -106,8 +107,9 @@ loaded. They are not repeated here.
   from it on purpose.
 - `src/core/` — server-only decisions, imported dynamically like
   `lib/repo/*`. `ctx.ts` is the capability set above; `auth.ts` /
-  `authz.ts` are who is calling and whether they may (`assertAdmin`,
-  and `assertMachineActor` for the MCP token); `builds/` is the
+  `session.ts` / `authz.ts` are who is calling and whether they may (the
+  Auth.js session over `oidc-config.ts`, `assertAdmin`, and
+  `assertMachineActor` for the MCP token); `builds/` is the
   scheduler, dispatch, sweep and GitHub reporting. `core/settings/` is the
   read-only reader behind `/settings` (`index.ts` assembles env +
   /export + snapshots into `BoxSettings`; `integrations.ts` is the
@@ -116,7 +118,7 @@ loaded. They are not repeated here.
   Vercel through its token — cached in-process and served stale while it
   refreshes;
   `profile.ts` is the Profile tab — the signed-in person's Pocket ID
-  account, resolved from the forward-auth headers and written through
+  account, resolved from the session and written through
   Pocket ID's admin API (every write re-sends isAdmin/disabled/
   emailVerified; the file header says why);
   `zones.ts`, `timezones.ts` and `nixos.ts` feed General's two pickers

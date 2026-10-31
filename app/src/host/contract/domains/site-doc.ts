@@ -52,6 +52,16 @@ const shape = obj({
   // JSON.stringify omits), so a file without the block re-renders to its own
   // bytes; present, it round-trips as written.
   auth: optional(obj({ localLogin: optional(bool, false) }), undefined),
+  // The identity provider, from Settings › Sign-in (core/site/file.ts). Filled
+  // in like `developer`; the renderer drops the block while it is all blank.
+  oidc: optional(
+    obj({
+      issuer: optional(str, ''),
+      clientId: optional(str, ''),
+      name: optional(str, ''),
+    }),
+    { issuer: '', clientId: '', name: '' },
+  ),
   // The engine override (core/site/file.ts says what it does). Filled in
   // rather than left absent, unlike `auth`: it is an EDITABLE field, and the
   // editor walks the dotted path `developer.engineOverride` into the document.

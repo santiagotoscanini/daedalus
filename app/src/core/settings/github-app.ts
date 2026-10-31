@@ -12,9 +12,9 @@ import {
 import { getJsonResult } from '../../lib/http'
 import { isRecord } from '../../lib/is-record'
 import type { Result } from '../../lib/result'
-import { actorOf } from '../auth'
 import type { Ctx } from '../ctx'
 import { GITHUB_API, GITHUB_API_VERSION, installationState } from '../github-app'
+import { actorOf } from '../session'
 import { renderSiteFile, type SiteDocument, type SiteGithubApp } from '../site/file'
 import { sealJsonForVault } from '../vault'
 import type {
@@ -820,7 +820,7 @@ function callbackResponse(result: GithubAppFinish): Response {
 /** GET /settings/github/callback?code&state, behind the gate like every page. */
 export async function githubCallback(ctx: Ctx, request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams
-  const gate = actorOf(request)
+  const gate = await actorOf(request)
   const code = params.get('code') ?? ''
   const state = params.get('state') ?? ''
   // Neither the code nor the state reaches a log line, even inside an error.
