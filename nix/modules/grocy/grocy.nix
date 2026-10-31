@@ -10,9 +10,12 @@
 #
 # Auth: the identity provider's gate, and everyone through it maps to
 # grocy's `admin` account (its data is shared, not per-user). API clients
-# keep working through the /api bypass: GROCY-API-KEY is checked before
-# the header in ReverseProxyAuthMiddleware — that is how the control plane
-# reads it, through the proxy on the public hostname.
+# keep working through a bypass on the GROCY-API-KEY header, which is
+# checked before the identity header in ReverseProxyAuthMiddleware — that
+# is how the control plane reads it, through the proxy on the public
+# hostname. The bypass is on the header and not on /api because a keyless
+# request there has no identity, and grocy answers that with a 500 and its
+# stack trace. The web UI's own /api calls pass the gate like its pages.
 #
 # The host brings:
 #   fleet.modules.grocy.enable          the switch (default off, as every catalog module)
@@ -90,7 +93,7 @@ in
       auth = "oidc";
       healthPath = "/login";
       isolated = true;
-      authBypassRule = "PathPrefix(`/api`)";
+      authBypassRule = "HeaderRegexp(`GROCY-API-KEY`, `.+`)";
       authHeaders."Remote-User" = "admin";
     };
     # Consent screen and the identity provider's My Apps page.
