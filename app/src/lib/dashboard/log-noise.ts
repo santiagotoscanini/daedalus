@@ -21,6 +21,8 @@ export const NOISE: readonly string[] = [
   String.raw`Fontconfig error`,
   String.raw`0 failure`,
   String.raw`failed 0`,
+  String.raw`live probe (miss|summary)`,
+  String.raw`error: resource not found`,
 ]
 
 /** Containers a person's messages pass through: never read, summarised or quoted. */

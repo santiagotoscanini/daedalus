@@ -25,6 +25,8 @@ describe('what counts as an error', () => {
       'Session termination failed: 202',
       '{"level":"error","message":"invalid api token format"}',
       'WARNING:  permission denied to vacuum "pg_authid", skipping it',
+      '[argus] live probe miss http://203.0.113.1/x → body="Document Error: Not Found"',
+      "http <-- 404, req: 'GET /-/npm/v1/attestations/x', error: resource not found",
     ]) {
       expect(counted(line), line).toBe(false)
     }
