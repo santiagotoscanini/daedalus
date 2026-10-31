@@ -601,9 +601,11 @@ let
           aliases = app.hostnameAliases;
           exposeRemotely = app.stage == "live";
         }
+        // {
+          isolated = isolatedAuth;
+        }
         // (lib.optionalAttrs proxyAuth {
           auth = "oidc";
-          isolated = isolatedAuth;
           inherit (app.auth) authBypassRule;
           authHeaders = app.auth.headers;
           # The webApp is where the derived client reads its group
