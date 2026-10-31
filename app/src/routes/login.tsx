@@ -29,21 +29,23 @@ const startHref = (next: string) => `/api/auth/start?next=${encodeURIComponent(n
 export const Route = createFileRoute('/login')({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { next?: string; error?: string; signedOut?: boolean } => ({
+  ): { next?: string; error?: string; signedOut?: 1 } => ({
     next: typeof search.next === 'string' ? search.next : undefined,
     // A code, never text: Auth.js's word for what went wrong.
     error:
       typeof search.error === 'string' && /^[A-Za-z]{1,40}$/.test(search.error)
         ? search.error
         : undefined,
-    signedOut: search.signedOut === 1 || search.signedOut === '1' ? true : undefined,
+    // The value validated here is what the router writes back into the URL, and
+    // it redirects when the two differ, so this keeps the shape it arrived in.
+    signedOut: search.signedOut === 1 ? 1 : undefined,
   }),
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
     const state = await fetchLoginState()
     const next = safeNext(deps.next)
     if (state.signedIn) throw redirect({ href: next, reloadDocument: true })
-    const quiet = deps.error === undefined && deps.signedOut !== true
+    const quiet = deps.error === undefined && deps.signedOut === undefined
     if (state.provider !== null && state.local === null && quiet) {
       throw redirect({ href: startHref(next), reloadDocument: true })
     }
@@ -82,7 +84,7 @@ function LoginPage() {
             <h1 className="m-0 text-[1.25rem] leading-tight tracking-[-0.02em] [font-weight:620]">
               {title}
             </h1>
-            {signedOut === true && <p className={NOTE_SHOWN}>You are signed out.</p>}
+            {signedOut !== undefined && <p className={NOTE_SHOWN}>You are signed out.</p>}
             {local !== null && (
               <p className="m-0 text-[0.82rem] text-muted-foreground leading-relaxed">
                 {setup

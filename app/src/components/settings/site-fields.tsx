@@ -109,6 +109,8 @@ type TextProps = {
   /** An empty box saves `null` rather than `""` (interface, gateway). */
   nullable?: boolean
   className?: string
+  /** What a blank box stands for. */
+  placeholder?: string
   /** Fixed text drawn around the box — the parts of a value that are not a choice. */
   prefix?: string
   suffix?: string
@@ -131,6 +133,7 @@ function TextInner({
   validate,
   nullable,
   className,
+  placeholder,
   prefix,
   suffix,
   value,
@@ -157,6 +160,7 @@ function TextInner({
             id={id}
             type="text"
             aria-label={label}
+            placeholder={placeholder}
             className={cn(BOX, prefix !== undefined && 'min-w-0 flex-1 sm:flex-none', className)}
             value={draft}
             disabled={edit.committed === null}

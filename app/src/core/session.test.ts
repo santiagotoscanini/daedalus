@@ -200,3 +200,14 @@ describe('where a sign-in may return to', () => {
     }
   })
 })
+
+describe('the login page’s route', () => {
+  // The router writes the validated search back into the URL and redirects when
+  // they differ, so a flag that changes shape here silently signs a person
+  // straight back in after they signed out.
+  it('keeps the signed-out flag in the shape it arrives in', async () => {
+    const { Route } = await import('../routes/login')
+    const validate = Route.options.validateSearch as (s: Record<string, unknown>) => unknown
+    expect(validate({ signedOut: 1 })).toMatchObject({ signedOut: 1 })
+  })
+})

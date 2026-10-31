@@ -58,6 +58,13 @@ function configFor(oidc: OidcConfig, secret: string): AuthConfig {
     trustHost: true,
     session: { strategy: 'jwt', maxAge: SESSION_MAX_AGE_S },
     pages: { signIn: '/login', error: '/login' },
+    // A cookie that does not open is a visitor, not a fault: it reads as nobody,
+    // and a public host should not log a stack for each one.
+    logger: {
+      error: (e) => {
+        if (e.name !== 'JWTSessionError') console.error('[auth]', e)
+      },
+    },
     providers: [
       {
         id: oidc.providerId,

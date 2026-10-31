@@ -55,6 +55,7 @@ export function SignIn({ settings, edit }: { settings: BoxSettings; edit: SiteEd
                   edit={edit}
                   field="oidc.issuer"
                   label="Issuer URL"
+                  placeholder={s.issuer ?? undefined}
                   validate={oidcIssuerError}
                 />
                 <IssuerTest fallback={s.issuer} edit={edit} />
@@ -63,11 +64,18 @@ export function SignIn({ settings, edit }: { settings: BoxSettings; edit: SiteEd
           },
           {
             k: 'Client ID',
-            v: <SiteText edit={edit} field="oidc.clientId" label="Client ID" />,
+            v: (
+              <SiteText
+                edit={edit}
+                field="oidc.clientId"
+                label="Client ID"
+                placeholder={s.clientId ?? undefined}
+              />
+            ),
           },
           {
             k: 'Display name',
-            v: <SiteText edit={edit} field="oidc.name" label="Display name" />,
+            v: <SiteText edit={edit} field="oidc.name" label="Display name" placeholder={s.name} />,
           },
           { k: 'Client secret', v: <SecretField source={s.secret} /> },
           { k: 'Callback URL', v: <Value v={s.callbackUrl} /> },
