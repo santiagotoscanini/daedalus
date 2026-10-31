@@ -206,38 +206,9 @@ let
       # whatever that image happens to contain. See sync-clients.sh.
       CURL_BIN=${pkgs.pkgsStatic.curl}/bin/curl
 
-      ${builtins.readFile ./assets/api.sh}
       ${builtins.readFile ./assets/sync-clients.sh}
     '';
   };
-
-  # fleet.sso.metadataClients, applied to every CIMD client the IdP holds.
-  metadataPolicy = pkgs.writeText "sso-metadata-clients.json" (
-    builtins.toJSON {
-      reauth = config.fleet.sso.metadataClients.requiresReauthentication;
-      groups = config.fleet.sso.metadataClients.allowedGroups;
-      refreshMinutes = config.fleet.sso.metadataClients.refreshTokenDurationMinutes;
-    }
-  );
-  hardenScript = pkgs.writeShellApplication {
-    name = "pocket-id-metadata-clients";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.gnugrep
-      pkgs.jq
-      pkgs.podman
-    ];
-    text = ''
-      POLICY=${metadataPolicy}
-      IDP_ENV=${config.sops.secrets."pocket-id-env".path}
-      CURL_BIN=${pkgs.pkgsStatic.curl}/bin/curl
-
-      ${builtins.readFile ./assets/api.sh}
-      ${builtins.readFile ./assets/harden-metadata-clients.sh}
-    '';
-  };
-  # Only a box that lets CIMD clients at some API has any to harden.
-  hasCimd = lib.any (a: a.cimd) (lib.attrValues config.fleet.ssoApis);
 
   # `grep | cut` per client, into shell vars the heredoc interpolates.
   # Rendered files carry the secret; the /nix/store script carries only
@@ -351,33 +322,6 @@ in
           };
         };
       }
-
-      # fleet.sso.metadataClients on every CIMD client, on a timer: such a
-      # client only exists after its first sign-in (assets/harden-metadata-
-      # clients.sh says why it matters and what it sets).
-      (lib.mkIf hasCimd {
-        systemd.services.pocket-id-metadata-clients = {
-          description = "Harden Pocket ID's Client ID Metadata Document clients";
-          after = [ "podman-pocket-id.service" ];
-          wants = [ "podman-pocket-id.service" ];
-          serviceConfig = {
-            Type = "oneshot";
-            TimeoutStartSec = 120;
-            User = config.fleet.operator.user;
-            Environment = "XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir}";
-            ExecStart = "${hardenScript}/bin/pocket-id-metadata-clients";
-          };
-        };
-        systemd.timers.pocket-id-metadata-clients = {
-          wantedBy = [ "timers.target" ];
-          timerConfig = {
-            OnBootSec = "2min";
-            OnUnitActiveSec = "2min";
-            AccuracySec = "15s";
-          };
-        };
-        fleet.monitoredJobs.pocket-id-metadata-clients = { };
-      })
 
       # Forward-auth creds for traefik — one file, every such client.
       (lib.mkIf (forwardAuthClients != { }) {
