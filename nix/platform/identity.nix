@@ -26,6 +26,33 @@
 # has to answer for itself.
 {
   options.fleet.sso = {
+    metadataClients = {
+      requiresReauthentication = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Require a fresh sign-in on every authorization by a Client ID
+          Metadata Document client. Such a client's id is shared by every
+          user of the app it names, and consent is remembered per user and
+          client, so without this a sign-in link someone else started for
+          that app completes silently inside your session, and the token is
+          theirs. Applied by the identity provider's stack to each CIMD
+          client it holds, on a timer, since one exists only after its first
+          sign-in (and only when some `fleet.ssoApis` entry has `cimd`).
+        '';
+      };
+      allowedGroups = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "admins" ];
+        description = "Identity-provider groups whose members may sign in through a CIMD client.";
+      };
+      refreshTokenDurationMinutes = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = "Refresh-token lifetime for CIMD clients; null keeps the identity provider's default.";
+      };
+    };
+
     issuerUrl = lib.mkOption {
       type = lib.types.str;
       default =
