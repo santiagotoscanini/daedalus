@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // What the token store must never do.
 //
@@ -152,5 +152,37 @@ describe('identifying', () => {
     await mintMcpToken({ label: 'triage', scope: 'read' })
     h.selecting = sha('dmcp_not-a-real-token')
     expect(await identifyMcpToken('dmcp_not-a-real-token')).toBeNull()
+  })
+})
+
+describe('the gateway’s token', () => {
+  const TOKEN = 'dmcp_gateway-token-for-the-tests'
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('passes with write scope, recorded under its own name, and needs no row', async () => {
+    vi.stubEnv('MCP_GATEWAY_TOKEN', TOKEN)
+    const { identifyMcpToken } = await import('./tokens')
+    expect(await identifyMcpToken(TOKEN)).toEqual({
+      id: 'gateway',
+      label: 'gateway',
+      scope: 'write',
+    })
+  })
+
+  it('is no way in while the box has not set one', async () => {
+    vi.stubEnv('MCP_GATEWAY_TOKEN', '')
+    const { identifyMcpToken } = await import('./tokens')
+    expect(await identifyMcpToken('')).toBeNull()
+    expect(await identifyMcpToken(TOKEN)).toBeNull()
+  })
+
+  it('does not stamp a row it does not have', async () => {
+    const { stampMcpTokenUse } = await import('./tokens')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await stampMcpTokenUse('gateway')
+    expect(warn).not.toHaveBeenCalled()
   })
 })

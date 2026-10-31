@@ -347,6 +347,13 @@ export const SCHEMA = {
       'What traefik sends as X-Proxy-Proof on every request it forwards here. Without it the request gate refuses the request (core/request-gate.ts).',
     source: 'modules/traefik, webApps.daedalus.proxyProof (/run/proxy-proof/app-daedalus.env)',
   },
+  MCP_GATEWAY_TOKEN: {
+    kind: 'string',
+    secret: true,
+    about:
+      'What the LLM gateway presents at /mcp, so a connector can reach the tools behind its sign-in (host/mcp/tokens.ts). Unset, only minted tokens pass.',
+    source: 'stacks/litellm/daedalus-mcp.nix, <machineState>/litellm/daedalus-mcp.env',
+  },
   AUTH_SECRET: {
     kind: 'string',
     secret: true,

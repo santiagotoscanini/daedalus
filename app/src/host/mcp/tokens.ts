@@ -7,6 +7,7 @@ import {
   setMcpTokenRevoked,
   setMcpTokenUsed,
 } from '../../lib/repo/mcp-tokens'
+import { env } from '../env'
 import { safeEqual } from '../github-app-crypto'
 
 // Minting, verifying and revoking the credentials that reach /mcp.
@@ -27,6 +28,12 @@ import { safeEqual } from '../github-app-crypto'
 // really is the one, in constant time: these credentials stand in front of a path that starts privileged units, and
 // the cheap habit is the one worth keeping.
 //
+// THE GATEWAY'S TOKEN. One token is not in the table: MCP_GATEWAY_TOKEN, which
+// the box generates once and hands to this container and to LiteLLM, so the
+// gateway can reach these tools behind a Pocket ID sign-in. It is write-scoped
+// and its writes are recorded as `mcp:gateway`. Rotating it is deleting the file
+// (stacks/litellm/daedalus-mcp.nix), which is why the Developer tab cannot.
+//
 // FAIL CLOSED, everywhere. No token minted means every call is refused; a
 // revoked token is refused; an unknown one is refused. There is no
 // "unconfigured means open" state.
@@ -37,6 +44,15 @@ export const MCP_TOKEN_PREFIX = 'dmcp_'
 const BYTES = 32
 
 const hash = (token: string): string => createHash('sha256').update(token).digest('hex')
+
+const GATEWAY_ID = 'gateway'
+
+/** The identity the gateway's token carries, or null: it was not presented. */
+function gatewayIdentity(digest: string): McpIdentity | null {
+  const token = env.get('MCP_GATEWAY_TOKEN')
+  if (token === undefined || token === '' || !safeEqual(hash(token), digest)) return null
+  return { id: GATEWAY_ID, label: 'gateway', scope: 'write' }
+}
 
 /** A token row as the UI lists it — never the token, which no longer exists. */
 export type McpTokenRow = {
@@ -125,6 +141,9 @@ export async function identifyMcpToken(presented: string | null): Promise<McpIde
   if (token === '') return null
 
   const digest = hash(token)
+  const gateway = gatewayIdentity(digest)
+  if (gateway !== null) return gateway
+
   const row = await findMcpTokenByHash(digest)
   if (row === undefined) return null
   // Belt and braces: the row was found by digest, and this confirms it in constant time rather than by `===`.
@@ -136,6 +155,7 @@ export async function identifyMcpToken(presented: string | null): Promise<McpIde
 
 /** Record that a token was used. Best-effort: a failed stamp must never fail a call. */
 export async function stampMcpTokenUse(id: string): Promise<void> {
+  if (id === GATEWAY_ID) return
   try {
     await setMcpTokenUsed(id)
   } catch (err) {
