@@ -344,10 +344,10 @@ in
 
     # Baseline security headers, applied as the websecure entrypoint's
     # default middleware (covers every router on it — generated and
-    # static — with no per-route wiring). Kept off cfweb: CF's edge sets
-    # its own, and HSTS over plain HTTP is ignored anyway. No frameDeny
-    # fleet-wide — some apps embed themselves; apps that want it add a
-    # per-route middleware.
+    # static — with no per-route wiring). cfweb gets the two that are not
+    # transport: HSTS there is Cloudflare's, which sets its own from the
+    # zone's settings. No frameDeny fleet-wide — some apps embed themselves;
+    # apps that want it add a per-route middleware.
     fleet.traefikRawRules."sec-headers.yml" = ''
       http:
         middlewares:
@@ -355,6 +355,10 @@ in
             headers:
               stsSeconds: 31536000
               stsIncludeSubdomains: true
+              contentTypeNosniff: true
+              referrerPolicy: strict-origin-when-cross-origin
+          cf-headers:
+            headers:
               contentTypeNosniff: true
               referrerPolicy: strict-origin-when-cross-origin
     '';
@@ -611,6 +615,7 @@ in
           "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=600s"
 
           "--entrypoints.websecure.http.middlewares=sec-headers@file"
+          "--entrypoints.cfweb.http.middlewares=cf-headers@file"
           "--entrypoints.websecure.http.tls=true"
           "--entrypoints.websecure.http.tls.options=tls-opts@file"
           "--entrypoints.web.http.redirections.entrypoint.to=websecure"
