@@ -119,3 +119,9 @@ export function oidcIssuerError(value: string): string | null {
   if (!URL.canParse(v)) return 'That is not a URL.'
   return new URL(v).protocol === 'https:' ? null : 'An issuer has to be https.'
 }
+
+/** Why a value cannot be the nightly restart's time, or null. Blank means there is none. */
+export function dailyResetError(value: string): string | null {
+  const v = value.trim()
+  return v === '' || /^([01]?\d|2[0-3]):[0-5]\d$/.test(v) ? null : 'A time like 04:00.'
+}

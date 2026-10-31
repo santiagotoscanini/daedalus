@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { AppIcon, Segmented } from '../../../components/controls'
 import { EngineCard } from '../../../components/engine-update'
 import { Chevron, ImageRow, ImageTableHead } from '../../../components/image-row'
@@ -11,8 +11,10 @@ import { Chip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { rowKey, type ServiceGroup } from '../../../lib/dashboard/service-groups'
 import { ceremonyFor } from '../../../lib/image-ceremony'
+import { type QueueItem, withItem, withoutItem } from '../../../lib/update-queue'
+import { clearUpdateQueueFn, queueUpdateFn, unqueueUpdateFn } from '../../../server/updates'
 import type { UpdateRow, UpdatesData } from '../data/updates'
-import { type QueueItem, QueuePanel } from './queue-panel'
+import { QueuePanel } from './queue-panel'
 
 // Every pinned image on the box, and what it would take to move it.
 //
@@ -52,10 +54,10 @@ import { type QueueItem, QueuePanel } from './queue-panel'
 // can be added to a queue instead of updated, and the queue goes to the host as
 // ONE request: one commit, one build, one switch.
 //
-// The queue lives in this component's state and nowhere else. It is a
-// selection, not a commitment — nothing has been asked of the host until the
-// button is pressed, so there is nothing for a reload to lose except the
-// clicking. Each entry was armed in its own row, behind that row's changelog
+// The queue is kept on the server (core/update-queue.ts), so the MCP tools and
+// this page look at one list; this state is that list, moved at once on a click
+// and put back by the next load. It is a selection, not a commitment: nothing
+// has been asked of the host until the button is pressed. Each entry was armed in its own row, behind that row's changelog
 // and its ceremony prompt if it has one, and the panel restates every warning
 // before the button, with the one thing batching changes: a single bad image
 // reverts the whole commit.
@@ -126,7 +128,10 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 export function UpdatesView({ d }: { d: UpdatesData }) {
-  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [queue, setQueue] = useState<QueueItem[]>(d.queue)
+  useEffect(() => {
+    setQueue(d.queue)
+  }, [d.queue])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   // Which groups the person has opened or shut by hand. Absent = the default:
@@ -162,27 +167,31 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
     for (const m of q.lockstep) covered.set(m, q.container)
   }
 
+  const removeFromQueue = (container: string) => {
+    setQueue((q) => withoutItem(q, container))
+    void unqueueUpdateFn({ data: { container } })
+  }
+
   const bind = (r: UpdateRow) => {
     const owner = covered.get(r.container)
     return {
       queued: owner === r.container,
       blockedBy: owner === undefined || owner === r.container ? null : owner,
       add: (toTag: string | null, typed: string) => {
-        setQueue((q) => [
-          ...q.filter((i) => i.container !== r.container),
-          {
-            container: r.container,
-            toTag,
-            tag: r.tag ?? '',
-            lockstep: r.lockstep,
-            // What THIS move owes: a new major can, where its re-pull does not.
-            ceremony: ceremonyFor({ ...r, tag: r.tag ?? '' }, toTag),
-            typed,
-          },
-        ])
+        const item = {
+          container: r.container,
+          toTag,
+          tag: r.tag ?? '',
+          lockstep: r.lockstep,
+          // What THIS move owes: a new major can, where its re-pull does not.
+          ceremony: ceremonyFor({ ...r, tag: r.tag ?? '' }, toTag),
+          typed,
+        }
+        setQueue((q) => withItem(q, item))
+        void queueUpdateFn({ data: item })
       },
       remove: () => {
-        setQueue((q) => q.filter((i) => i.container !== r.container))
+        removeFromQueue(r.container)
       },
     }
   }
@@ -227,11 +236,10 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
       <QueuePanel
         queue={queue}
         initialStatus={d.status}
-        onRemove={(c) => {
-          setQueue((q) => q.filter((i) => i.container !== c))
-        }}
+        onRemove={removeFromQueue}
         onClear={() => {
           setQueue([])
+          void clearUpdateQueueFn()
         }}
       />
 

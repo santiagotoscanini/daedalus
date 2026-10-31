@@ -9,7 +9,7 @@ import type { SnapshotResult } from '../../host/contract/snapshot'
 import { env } from '../../host/env'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { ENGINE_REPO } from '../../lib/engine'
-import { controlPlaneLabelError, oidcIssuerError } from '../../lib/site-fields'
+import { controlPlaneLabelError, dailyResetError, oidcIssuerError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
 import {
@@ -80,6 +80,8 @@ const EDITABLE = [
   'network.dhcp.end',
   'network.dhcp.leaseTime',
   'network.dnsUpstreams',
+  // Not sourced by nix: the error summary reads it (host/mcp/ops.ts).
+  'network.dailyResetAt',
   'mail.sender',
   'mail.alertTo',
   'cloudflare.zoneId',
@@ -272,6 +274,12 @@ async function refuseUnknown(
 ): Promise<void> {
   const unchanged = (f: SiteField) =>
     committed !== null && sameValue(getField(committed, f), patch[f])
+
+  const reset = patch['network.dailyResetAt']
+  if (typeof reset === 'string') {
+    const problem = dailyResetError(reset)
+    if (problem !== null) throw new Error(problem)
+  }
 
   const issuer = patch['oidc.issuer']
   if (typeof issuer === 'string') {

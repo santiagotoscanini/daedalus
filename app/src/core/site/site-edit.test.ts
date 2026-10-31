@@ -79,6 +79,7 @@ const committed: SiteDocument = {
       leaseTime: '8h',
     },
     dnsUpstreams: ['1.1.1.1'],
+    dailyResetAt: '',
   },
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },

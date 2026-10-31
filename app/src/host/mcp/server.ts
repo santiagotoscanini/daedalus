@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { Ctx } from '../../core/ctx'
 import { MCP_TOOLS, type McpToolSpec, scopeRefusal } from '../../lib/mcp'
 import { MCP_DOCS, readMcpDoc } from './docs'
+import { registerOpsTools } from './ops-tools'
 import type { McpIdentity } from './tokens'
 
 // Daedalus's tools, as an MCP server.
@@ -16,9 +17,8 @@ import type { McpIdentity } from './tokens'
 // call can do nothing the UI cannot, because it is running the UI's code.
 //
 // It is NOT a wrapper over the server functions. Those expect to be running
-// inside a TanStack request: they read forward-auth headers through
-// `getRequestHeader` and gate on `assertAdmin()` (server/fn.ts's `adminFn`),
-// and an MCP request carries neither. Calling them
+// inside a TanStack request and gate on `assertAdmin()` (server/fn.ts's
+// `adminFn`), which needs a session, and an MCP request has none. Calling them
 // from here would be asking a session gate to authorise something with no
 // session. So the writes reach the flows directly and bring their own actor —
 // see `authoriseWrite` below.
@@ -34,7 +34,7 @@ import type { McpIdentity } from './tokens'
 //
 // ── shapes ────────────────────────────────────────────────────────────────
 //
-// zod is here and nowhere else in this codebase. The SDK types `inputSchema`
+// zod is here, and in ops-tools.ts beside it, and nowhere else in this codebase. The SDK types `inputSchema`
 // as a zod schema, so a tool's arguments have to be expressed in it; every
 // other boundary in the app still uses the hand-rolled decoder in
 // `lib/contract/decode.ts`, and should stay that way.
@@ -460,6 +460,8 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       return done.ok ? ok({ alwaysOn: args.on === true }) : refuse(done.reason)
     },
   )
+
+  registerOpsTools({ read, write, ctx, ok, refuse })
 
   // ── resources ───────────────────────────────────────────────────────────
 

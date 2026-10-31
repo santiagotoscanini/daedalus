@@ -1,6 +1,7 @@
 import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import {
+  dailyResetError,
   hostnameShapeError,
   interfaceError,
   ipv4Error,
@@ -169,6 +170,18 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
         icon="/icon-pihole.svg"
         description="Every device in the house resolves through Pi-hole; these are what Pi-hole itself asks."
         rows={[
+          {
+            k: 'Nightly restart',
+            v: (
+              <SiteText
+                edit={edit}
+                field="network.dailyResetAt"
+                label="Nightly restart"
+                placeholder="04:00"
+                validate={dailyResetError}
+              />
+            ),
+          },
           {
             k: 'Upstreams',
             v: (

@@ -66,6 +66,8 @@ export type SiteDocument = {
     ddns: { host: string; interval: string }
     dhcp: { active: boolean; router: string; start: string; end: string; leaseTime: string }
     dnsUpstreams: string[]
+    /** When the network restarts every night, HH:MM; blank when it does not. Nix ignores it. */
+    dailyResetAt: string
   }
   mail: { sender: string; alertTo: string }
   /** Identifiers, not credentials — the ids in every dash.cloudflare.com URL.
@@ -186,6 +188,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
       ddns: s.network.ddns,
       dhcp: s.network.dhcp,
       dnsUpstreams: s.network.dns.upstreams,
+      dailyResetAt: '',
     },
     mail: s.integrations.mail,
     cloudflare: {
@@ -217,6 +220,12 @@ function identityAsWritten(identity: SiteDocument['identity']): Record<string, u
   return Object.fromEntries(
     Object.entries(identity).filter(([k]) => k !== 'controlPlane' && k !== 'controlPlanePrevious'),
   )
+}
+
+/** The network block, without the reset time while it is blank: same rule as the labels. */
+function networkAsWritten(network: SiteDocument['network']): Record<string, unknown> {
+  if (network.dailyResetAt !== '') return network
+  return Object.fromEntries(Object.entries(network).filter(([k]) => k !== 'dailyResetAt'))
 }
 
 export function renderSiteFile(doc: SiteDocument): string {
@@ -261,6 +270,7 @@ export function renderSiteFile(doc: SiteDocument): string {
     ...PREAMBLE,
     ...rest,
     identity: identityAsWritten(rest.identity),
+    network: networkAsWritten(rest.network),
     ...(oidcSaid ? { oidc } : {}),
     // Same rule as the identity labels: the block exists in the file only
     // while it says something, so a document from before it re-renders to

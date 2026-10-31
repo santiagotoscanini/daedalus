@@ -61,6 +61,8 @@ export const SETTING_KEYS = {
    * node's equivalent lives in the node's policy, not here.
    */
   boxProviders: 'providers.box',
+  /** The pins queued to move together (core/update-queue.ts). */
+  updateQueue: 'updates.queue',
   /** When the build scheduler last ran its sweep. */
   buildsLastSweep: 'builds.lastSweep',
   /** Builds whose GitHub report failed, for "Retry report" (core/builds/report.ts). */

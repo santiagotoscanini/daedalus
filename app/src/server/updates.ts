@@ -1,4 +1,12 @@
-import { arrayOf, asValidator, obj, optional, str, withMessage } from '../lib/contract/decode'
+import {
+  arrayOf,
+  asValidator,
+  nullable,
+  obj,
+  optional,
+  str,
+  withMessage,
+} from '../lib/contract/decode'
 import { containerNameField, imageTargetField } from '../lib/contract/fields'
 import { adminFn, readFn } from './fn'
 
@@ -111,4 +119,40 @@ export const fetchNixosRelease = readFn.handler(async () => {
   const { siteIdentity } = await import('../host/contract/domains/site')
   const site = await siteIdentity()
   return nixosRelease(site.data.nixos)
+})
+
+const queueForm = withMessage(
+  obj({
+    container: containerNameField('container'),
+    toTag: nullable(str),
+    tag: str,
+    lockstep: arrayOf(str),
+    ceremony: nullable(str),
+    typed: str,
+  }),
+  'expected a queued pin',
+)
+
+/** Put a pin on the queue the Updates tab and the MCP tools share. */
+export const queueUpdateFn = adminFn
+  .validator(asValidator(queueForm))
+  .handler(async ({ data, context }) => {
+    const { queueItem } = await import('../core/update-queue')
+    return queueItem(await context.ctx(), data)
+  })
+
+export const unqueueUpdateFn = adminFn
+  .validator(
+    asValidator(
+      withMessage(obj({ container: containerNameField('container') }), 'expected a container'),
+    ),
+  )
+  .handler(async ({ data, context }) => {
+    const { unqueueItem } = await import('../core/update-queue')
+    return unqueueItem(await context.ctx(), data.container)
+  })
+
+export const clearUpdateQueueFn = adminFn.handler(async ({ context }) => {
+  const { clearQueue } = await import('../core/update-queue')
+  return clearQueue(await context.ctx())
 })

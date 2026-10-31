@@ -33,6 +33,7 @@ const doc: SiteDocument = {
       leaseTime: '8h',
     },
     dnsUpstreams: ['1.1.1.1'],
+    dailyResetAt: '',
   },
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
@@ -180,7 +181,9 @@ describe('site.json round trip', () => {
         owner: 'o',
         operator: { user: 'u', group: 'g' },
       },
-      network: doc.network,
+      network: Object.fromEntries(
+        Object.entries(doc.network).filter(([k]) => k !== 'dailyResetAt'),
+      ),
       mail: doc.mail,
       cloudflare: doc.cloudflare,
     }

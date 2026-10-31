@@ -1,5 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
 import { logStacks } from '../../../core/site/switches'
+import { readQueue } from '../../../core/update-queue'
 import { type EngineLock, repoFacts } from '../../../host/contract/domains/repo'
 import { type NixosFacts, siteIdentity } from '../../../host/contract/domains/site'
 import { readCommittedSite } from '../../../host/contract/domains/site-doc'
@@ -14,6 +15,7 @@ import {
   updateRows,
 } from '../../../lib/dashboard/update-rows'
 import { ENGINE_REPO } from '../../../lib/engine'
+import type { QueueItem } from '../../../lib/update-queue'
 
 export {
   type ContainerRow,
@@ -67,6 +69,8 @@ export type UpdatesData = {
    * already in progress rather than offering to start a second one.
    */
   status: ImageUpdateStatus
+  /** The pins queued to move together (core/update-queue.ts). */
+  queue: QueueItem[]
   /** The engine's own pin — the card above the table. */
   engine: EngineFacts
   /** The NixOS release this generation was built with, from the site export. */
@@ -140,13 +144,14 @@ async function loadEngine(ctx: Ctx): Promise<EngineFacts> {
 }
 
 export async function loadUpdates(ctx: Ctx): Promise<UpdatesData> {
-  const [rows, manual, status, engine, site, stacks] = await Promise.all([
+  const [rows, manual, status, engine, site, stacks, queue] = await Promise.all([
     updateRows(),
     manualRows(),
     readImageUpdateStatus(ctx),
     loadEngine(ctx),
     siteIdentity(),
     logStacks(ctx),
+    readQueue(ctx),
   ])
 
   const checked = [...rows, ...manual]
@@ -169,6 +174,7 @@ export async function loadUpdates(ctx: Ctx): Promise<UpdatesData> {
     checkedAt: checked.length === 0 ? null : (checked.sort().at(-1) ?? null),
     probeMissing: checked.length === 0,
     status,
+    queue,
     engine,
     nixos: site.data.nixos,
   }

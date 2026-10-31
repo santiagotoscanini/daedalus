@@ -10,21 +10,10 @@ import { Board, BoardGrid, Chip } from '../../../components/viz'
 import type { ImageUpdateStatus } from '../../../host/image-update'
 import { cn } from '../../../lib/cn'
 import { REBOOT_REQUIRED } from '../../../lib/reboot-required'
+import type { QueueItem } from '../../../lib/update-queue'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../../../server/updates'
 
 // The Updates tab's batch queue — see updates.tsx for why there is one.
-
-/** One queued container: what the row had decided when it was added. */
-export type QueueItem = {
-  container: string
-  /** Null = re-pull the tag it is on, the channel-pin case. */
-  toTag: string | null
-  tag: string
-  lockstep: string[]
-  ceremony: string | null
-  /** What the row's ceremony field held when it was queued: the batch's confirmation. */
-  typed: string
-}
 
 /**
  * The queue, and the one button that spends it.

@@ -44,6 +44,8 @@ const shape = obj({
     ddns: obj({ host: str, interval: str }),
     dhcp: obj({ active: bool, router: str, start: str, end: str, leaseTime: str }),
     dnsUpstreams: arrayOf(str),
+    // When the network restarts every night, as HH:MM. Absent reads as blank.
+    dailyResetAt: optional(str, ''),
   }),
   mail: obj({ sender: str, alertTo: str }),
   cloudflare: obj({ accountId: str, zoneId: str, tunnelId: str }),
