@@ -86,11 +86,24 @@ fi
 # Build the candidate from the dirty tree. `nix build`, not `nixos-rebuild
 # boot`: nothing is staged until the lock is committed, so the generation
 # that does get staged carries a real configurationRevision.
-if ! candidate="$(as_operator /run/current-system/sw/bin/nix build --no-link --print-out-paths \
-  "$FLAKE#nixosConfigurations.\"$HOSTNAME\".config.system.build.toplevel")"; then
-  echo "flake-autoupgrade: the updated lock does not build; restoring the old one" >&2
-  as_operator git checkout -- flake.lock
-  exit 1
+build_candidate() {
+  as_operator /run/current-system/sw/bin/nix build --no-link --print-out-paths \
+    "$FLAKE#nixosConfigurations.\"$HOSTNAME\".config.system.build.toplevel"
+}
+
+# Once more before giving up: a dropped download or a timing race in some
+# package's test suite fails a build that is fine, and a failed run costs the
+# week. Nix keeps what did build and remembers no failures, so the retry redoes
+# only what failed; a lock that really does not build fails it too, and still
+# restores the lock and fails the unit.
+if ! candidate="$(build_candidate)"; then
+  echo "flake-autoupgrade: the build failed; retrying once" >&2
+  sleep 60
+  if ! candidate="$(build_candidate)"; then
+    echo "flake-autoupgrade: the updated lock does not build; restoring the old one" >&2
+    as_operator git checkout -- flake.lock
+    exit 1
+  fi
 fi
 
 as_operator git commit -m "flake.lock: Update" -- flake.lock
