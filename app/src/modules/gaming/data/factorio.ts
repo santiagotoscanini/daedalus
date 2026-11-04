@@ -1,6 +1,8 @@
 import type { Ctx } from '../../../core/ctx'
+import type { VersionUpdateStatus } from '../../../host/version-update'
 import { getJson } from '../../../lib/http'
 import { decodeEntities } from '../../../lib/plain-text'
+import { compareVersions } from './minecraft-update'
 import { wanHost } from './shared'
 
 // The Factorio tab: the pinned version against Wube's, the game's own
@@ -78,6 +80,42 @@ export type FactorioData = {
     /** True when the section lists were cut — see CHANGELOG_MAX_ITEMS. */
     truncated: boolean
   }[]
+  /** Where the version can move: stable first, then experimental when it is ahead. */
+  options: FactorioOption[]
+  /** The version-update bridge, so a page opened mid-update joins the run. */
+  versionStatus: VersionUpdateStatus
+}
+
+/** One version the server can move to. */
+export type FactorioOption = {
+  version: string
+  channel: 'stable' | 'experimental'
+}
+
+/**
+ * The moves worth offering: Wube's stable when it is past the pin, and its
+ * experimental when that is past both. Stable is what Steam hands a client
+ * by default, so it is the one that keeps everybody able to join; an
+ * experimental server turns away every client still on stable.
+ */
+export function factorioOptions(
+  installed: string | null,
+  stable: string | null,
+  experimental: string | null,
+): FactorioOption[] {
+  if (installed === null) return []
+  const out: FactorioOption[] = []
+  if (stable !== null && compareVersions(stable, installed) > 0) {
+    out.push({ version: stable, channel: 'stable' })
+  }
+  if (
+    experimental !== null &&
+    compareVersions(experimental, installed) > 0 &&
+    (stable === null || compareVersions(experimental, stable) > 0)
+  ) {
+    out.push({ version: experimental, channel: 'experimental' })
+  }
+  return out
 }
 
 /**
@@ -112,7 +150,8 @@ const PORT = 34197
 export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
   const installed = ctx.env('FACTORIO_VERSION') ?? null
 
-  const [releases, graph, feed, containerUp, gameLog] = await Promise.all([
+  const { readVersionUpdateStatus } = await import('../../../host/version-update')
+  const [releases, graph, feed, containerUp, gameLog, versionStatus] = await Promise.all([
     getJson<{ stable?: { headless?: string }; experimental?: { headless?: string } }>(
       'https://factorio.com/api/latest-releases',
     ),
@@ -122,6 +161,7 @@ export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
     fetchFeed(),
     ctx.prom.scalar('container_up{name="factorio"}'),
     gameLines(ctx),
+    readVersionUpdateStatus(ctx),
   ])
 
   const stable = releases?.stable?.headless ?? null
@@ -156,6 +196,8 @@ export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
     events: gameLog.events,
     news: feed,
     changelog,
+    options: factorioOptions(installed, stable, experimental),
+    versionStatus,
   }
 }
 

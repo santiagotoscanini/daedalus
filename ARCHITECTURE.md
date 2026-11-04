@@ -392,12 +392,12 @@ loader the corresponding page calls; every write tool calls the same
 `host/apply-flow.ts`, `host/update-flow.ts`, `core/builds/actions.ts`,
 `lib/apps/deploy.ts` or `host/providers/lifecycle.ts` the
 button calls. So an MCP call can do nothing the UI cannot, and an MCP answer
-cannot disagree with the page that mirrors it. Nineteen tools:
+cannot disagree with the page that mirrors it. The tools (`app/src/lib/mcp.ts` is the whole catalogue):
 
 | | |
 |---|---|
-| reads | `apps.list`, `apps.get`, `builds.list`, `builds.get`, `builds.log`, `deployments`, `images.freshness`, `dns.records`, `site.get`, `apply.preview`, `health` |
-| writes | `build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply`, `provider.install`, `provider.power`, `provider.always_on` |
+| reads | `apps.list`, `apps.get`, `builds.list`, `builds.get`, `builds.log`, `deployments`, `images.freshness`, `dns.records`, `site.get`, `apply.preview`, `health`, `versions.pending` |
+| writes | `build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply`, `provider.install`, `provider.power`, `provider.always_on`, `version.update` |
 
 `apply.preview` is the diff an Apply would carry, computed by the very function
 `runApply` computes it with, and committing nothing. Two resources —
@@ -437,7 +437,7 @@ update takes down (`majorCeremony`: what a move to a new major takes), and the
 Updates panel arms its button only when the operator types the pin's name.
 `image.update` enforces the same predicate
 (`lib/image-ceremony.ts`, shared with the panel) on a `confirm` argument — an
-agent is precisely the caller that gate exists for.
+agent is precisely the caller that gate exists for. `version.update` asks the same of a game server: its `confirm` is the game's name, because the move restarts a server players are on and a newer version converts its world for good.
 
 **Two ways in.** `/mcp` itself is LAN-only: daedalus is `stage = "lab"`, with no
 Cloudflare tunnel route and no public name, and the token is checked before

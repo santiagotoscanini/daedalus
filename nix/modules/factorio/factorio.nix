@@ -16,15 +16,22 @@
 # is the host's to say (`fleet.modules.factorio.version`): a default here
 # would be a version somebody else's players are on.
 #
+# daedalus moves it (Gaming › Factorio, and the `version.update` MCP tool)
+# through fleet.versionPins: the agent finds the host's `version = "<v>";`
+# line, rewrites it, rebuilds, and passes only when the downloaded binary
+# reports the new version (assets/verify-version.sh).
+#
 # The host brings:
 #   fleet.modules.factorio.enable       the switch (default off, as every catalog module)
-#   fleet.modules.factorio.version      the headless server version (required)
+#   fleet.modules.factorio.version      the headless server version (required), written
+#                                       `version = "<v>";` on a line of its own so daedalus can move it
 #   fleet.modules.factorio.envSopsFile  ADMIN_USER, ADMIN_PASS, RCON_PASS, COOKIE_ENCRYPTION_KEY
 #   fleet.images.factorio               the digest-pinned OFSM image
 
 {
   config,
   lib,
+  pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
   pinnedImage,
@@ -34,6 +41,35 @@
 let
   cfg = config.fleet.modules.factorio;
   factorioVersion = cfg.version;
+  dataDir = "${config.fleet.stateRoot}/factorio";
+
+  # The dataset the saves live on, found by its mountpoint rather than named:
+  # a host that gives the stack its own can have the updater snapshot it
+  # before the switch. Null when the saves share a wider dataset — rolling
+  # that back would undo every other stack's writes since.
+  saveDataset = lib.findFirst (
+    n:
+    lib.elem (config.fleet.zfs.datasets.${n}.mount or null) [
+      dataDir
+      "${dataDir}/data/saves"
+    ]
+  ) null (builtins.attrNames config.fleet.zfs.datasets);
+
+  verifyVersion = pkgs.writeShellApplication {
+    name = "factorio-verify-version";
+    runtimeInputs = [
+      pkgs.podman
+      pkgs.coreutils
+      pkgs.util-linux
+    ];
+    text = ''
+      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
+      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
+      OPERATOR_HOME=${lib.escapeShellArg config.fleet.operator.home}
+      OPERATOR_RUNTIME_DIR=${lib.escapeShellArg config.fleet.operator.runtimeDir}
+      ${builtins.readFile ./assets/verify-version.sh}
+    '';
+  };
 in
 {
   options.fleet.modules.factorio = {
@@ -50,6 +86,8 @@ in
         The headless server version OFSM downloads at every start. Keep it
         matched to the players' clients, and mind that a bump can migrate
         the save. No default: this is which game the house is playing.
+        Write it as `version = "<v>";` on a line of its own: that line is
+        how daedalus finds the pin to move it.
       '';
     };
 
@@ -83,6 +121,19 @@ in
     # cannot drift from what is installed — and it is absent, not stale,
     # when this stack is switched off.
     fleet.dashboard.factorio.env.FACTORIO_VERSION = factorioVersion;
+
+    # The version, movable from daedalus (version-update.nix). The binding is
+    # the option's own name, as the host writes it in its `factorio` block.
+    fleet.versionPins.factorio = {
+      container = "factorio";
+      fields.version = {
+        binding = "version";
+        value = factorioVersion;
+        pattern = "[0-9]+\\.[0-9]+\\.[0-9]+";
+      };
+      dataset = saveDataset;
+      verify = lib.getExe verifyVersion;
+    };
 
     # ofsm admin credentials, decrypted to /run/secrets/factorio-env at
     # activation. Edit the host's file (`envSopsFile`) with `sops`.

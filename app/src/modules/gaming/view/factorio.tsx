@@ -17,6 +17,7 @@ import { Button } from '../../../components/ui/button'
 import { BoardGrid, Chip, Stat, StatStrip } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import type { GamingData } from '../data'
+import { FactorioVersionBoard } from './factorio-update'
 import { EventsSection, Unknown } from './shared'
 
 /**
@@ -107,6 +108,13 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
       </StatStrip>
 
       <BoardGrid>
+        <FactorioVersionBoard
+          installed={factorio.installed}
+          options={data.options}
+          gameRunning={live.game === null ? null : live.game === 'running'}
+          initialStatus={data.versionStatus}
+        />
+
         <Panel f={f} />
 
         <ComingsAndGoingsSection f={f} />

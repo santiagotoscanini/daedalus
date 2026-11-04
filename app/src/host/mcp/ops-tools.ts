@@ -134,6 +134,47 @@ export function registerOpsTools<R>({ read, write, ctx, ok, refuse }: Registrars
       : refuse(`${outcome.code}: ${outcome.reason}`)
   })
 
+  read('versions.pending', {}, async () => {
+    const { gameVersions } = await import('./versions')
+    return gameVersions(await ctx())
+  })
+
+  write(
+    'version.update',
+    {
+      game: z.enum(['factorio', 'minecraft']).describe('The game server to move.'),
+      version: z.string().min(1).describe('The version to move to, as versions.pending offers it.'),
+      build: z
+        .string()
+        .optional()
+        .describe(
+          'Minecraft only: the Paper build. Omit for the recommended build of that version.',
+        ),
+      confirm: z
+        .string()
+        .describe(
+          "The game's name, typed out. The update restarts the server and kicks whoever is on it, and a newer version converts the saved world for good.",
+        ),
+    },
+    async (args, actor) => {
+      const { requestGameUpdate } = await import('./versions')
+      const game = args.game === 'minecraft' ? 'minecraft' : 'factorio'
+      const outcome = await requestGameUpdate(
+        await ctx(),
+        {
+          game,
+          version: String(args.version),
+          build: args.build === undefined ? null : String(args.build),
+          confirm: String(args.confirm),
+        },
+        actor,
+      )
+      return outcome.ok
+        ? ok({ id: outcome.id, game, values: outcome.values })
+        : refuse(outcome.reason)
+    },
+  )
+
   write('engine.update', {}, async (_args, actor) => {
     const { runEngineUpdate } = await import('../engine-flow')
     const outcome = await runEngineUpdate({ ctx: await ctx(), actor })

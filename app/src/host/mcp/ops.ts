@@ -115,12 +115,14 @@ export async function updateStatus(ctx: Ctx) {
   const { readImageUpdateStatus } = await import('../image-update')
   const { readEngineUpdateStatus } = await import('../engine-update')
   const { readClaudeCodeUpdateStatus } = await import('../claude-code-update')
-  const [images, engine, claudeCode] = await Promise.all([
+  const { readVersionUpdateStatus } = await import('../version-update')
+  const [images, engine, claudeCode, versions] = await Promise.all([
     readImageUpdateStatus(ctx),
     readEngineUpdateStatus(ctx),
     readClaudeCodeUpdateStatus(ctx),
+    readVersionUpdateStatus(ctx),
   ])
-  return { images, engine, claudeCode }
+  return { images, engine, claudeCode, versions }
 }
 
 /** Queue a pin as the Updates tab would, or the sentence why not. */
