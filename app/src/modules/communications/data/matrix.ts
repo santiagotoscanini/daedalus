@@ -22,8 +22,9 @@ import { releases } from '../releases'
 // loopback of a namespace the control plane is not in. A helper inside it
 // (matrix-status) writes one JSON document every 30 s to a directory the host
 // mounts here read-only: whether the homeserver answers and its version,
-// whether the operator's Matrix account signs in, and each WhatsApp login's
-// state as the bridge reports it. It names the linked phone, never a secret.
+// whether the operator's Matrix account signs in, and each bridge's logins as
+// the bridge reports them (WhatsApp always; LinkedIn on a box that carries it).
+// It names the linked phone, never a secret.
 // A document older than REPORTING_MS is a helper that stopped: its last word
 // must not pass for a current one.
 
@@ -51,18 +52,23 @@ export type BridgeLogin = {
   since: number | null
 }
 
+/** One bridge as the helper reports it. */
+export type BridgeStatus = {
+  ready: boolean
+  bot: string
+  commandPrefix: string
+  logins: BridgeLogin[]
+  error: string
+}
+
 export type MatrixStatus = {
   schema: 1
   generatedAt: string
   homeserver: { serverName: string; healthy: boolean; version: string; error: string }
   operator: { mxid: string; signedIn: boolean; joinedRooms: number | null; error: string }
-  whatsapp: {
-    ready: boolean
-    bot: string
-    commandPrefix: string
-    logins: BridgeLogin[]
-    error: string
-  }
+  whatsapp: BridgeStatus
+  /** Null: the box carries no LinkedIn bridge (or its helper predates it). */
+  linkedin: BridgeStatus | null
 }
 
 export type MatrixReport = {
@@ -96,6 +102,15 @@ const login: Decoder<BridgeLogin> = obj({
   since: optional(nullable(int), null),
 })
 
+/** A bridge block; the same shape for every bridge. */
+const bridgeStatus: Decoder<BridgeStatus> = obj({
+  ready: bool,
+  bot: optional(str, ''),
+  commandPrefix: optional(str, ''),
+  logins: list(login),
+  error: optional(str, ''),
+})
+
 /** The version comes first, so another version fails on its version and not on a field it moved. */
 export const matrixStatus: Decoder<MatrixStatus> = obj({
   schema: schemaV1,
@@ -112,13 +127,8 @@ export const matrixStatus: Decoder<MatrixStatus> = obj({
     joinedRooms: optional(nullable(int), null),
     error: optional(str, ''),
   }),
-  whatsapp: obj({
-    ready: bool,
-    bot: optional(str, ''),
-    commandPrefix: optional(str, ''),
-    logins: list(login),
-    error: optional(str, ''),
-  }),
+  whatsapp: bridgeStatus,
+  linkedin: optional(nullable(bridgeStatus), null),
 })
 
 /** What a snapshot read of the file says, at `now`. */
@@ -141,20 +151,25 @@ export type MatrixData = {
   report: MatrixReport
   synapse: { gap: VersionGap; resources: AppResources }
   whatsapp: { gap: VersionGap; resources: AppResources }
+  linkedin: { gap: VersionGap; resources: AppResources }
 }
 
 export async function loadMatrix(ctx: Ctx): Promise<MatrixData> {
   const report = await readMatrix(ctx)
   const reported = report.status?.homeserver.version ?? ''
-  const [synapseGap, whatsappGap, synapseRes, whatsappRes] = await Promise.all([
-    versionGap(releases['matrix-synapse'].repo, reported === '' ? null : reported),
-    versionGap(releases['mautrix-whatsapp'].repo, ctx.env('MAUTRIX_WHATSAPP_VERSION') ?? null),
-    containerResources(ctx, 'matrix-synapse'),
-    containerResources(ctx, 'matrix-whatsapp'),
-  ])
+  const [synapseGap, whatsappGap, linkedinGap, synapseRes, whatsappRes, linkedinRes] =
+    await Promise.all([
+      versionGap(releases['matrix-synapse'].repo, reported === '' ? null : reported),
+      versionGap(releases['mautrix-whatsapp'].repo, ctx.env('MAUTRIX_WHATSAPP_VERSION') ?? null),
+      versionGap(releases['mautrix-linkedin'].repo, ctx.env('MAUTRIX_LINKEDIN_VERSION') ?? null),
+      containerResources(ctx, 'matrix-synapse'),
+      containerResources(ctx, 'matrix-whatsapp'),
+      containerResources(ctx, 'matrix-linkedin'),
+    ])
   return {
     report,
     synapse: { gap: synapseGap, resources: synapseRes },
     whatsapp: { gap: whatsappGap, resources: whatsappRes },
+    linkedin: { gap: linkedinGap, resources: linkedinRes },
   }
 }

@@ -533,6 +533,12 @@ export const SCHEMA = {
     about: 'The mautrix-whatsapp release the box builds, as its tag spells it (0.YYMM.patch).',
     source: 'stacks/matrix fleet.dashboard.matrix.env',
   },
+  MAUTRIX_LINKEDIN_VERSION: {
+    kind: 'string',
+    about:
+      'The mautrix-linkedin release the box builds (or the last tag its pinned commit is past), as its tag spells it (0.YYMM.patch).',
+    source: 'stacks/matrix fleet.dashboard.matrix.env',
+  },
 
   // ── service credentials — read through host/keys.ts ──────────────────────
   DASH_CF_API_TOKEN: dash(

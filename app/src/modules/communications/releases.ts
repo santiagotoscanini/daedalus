@@ -8,8 +8,11 @@ import type { ReleaseSource } from '../../lib/dashboard/image-repos'
 //   matrix-synapse    Element's repository; the image is theirs, by digest.
 //   mautrix-whatsapp  the bridge's repository, tagged `v0.YYMM.patch`: the
 //                     version the host exports is in that shape already.
+//   mautrix-linkedin  the same shape; a box may build a commit past the tag it
+//                     exports.
 export const releases = {
   'proton-bridge': { repo: 'ProtonMail/proton-bridge' },
   'matrix-synapse': { repo: 'element-hq/synapse' },
   'mautrix-whatsapp': { repo: 'mautrix/whatsapp' },
+  'mautrix-linkedin': { repo: 'mautrix/linkedin' },
 } satisfies Record<string, ReleaseSource>

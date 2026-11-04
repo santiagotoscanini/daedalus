@@ -10,12 +10,13 @@ import type { AppResources } from '../../../lib/apps/metrics'
 import { num } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
 import { fetchMatrixReportFn } from '../../../server/communications'
-import type { BridgeLogin, LoginState, MatrixReport } from '../data/matrix'
+import type { BridgeLogin, BridgeStatus, LoginState, MatrixReport } from '../data/matrix'
 import type { Matrix } from './shared'
 
 // Communications › the Matrix tab: the private homeserver as its helper
-// reports it, the WhatsApp login the bridge holds, the two containers that
-// matter, their release notes and the stack's log.
+// reports it, each bridge's logins (WhatsApp, and LinkedIn where the box
+// carries it), the containers that matter, their release notes and the
+// stack's log.
 
 /** While a login is being made or is reconnecting: the helper writes every 30 s. */
 const BUSY_MS = 5_000
@@ -40,7 +41,9 @@ const stateOf = (s: LoginState): { label: string; tone: Tone } =>
   STATE[s] ?? { label: s.toLowerCase().replace(/_/g, ' '), tone: 'muted' }
 
 const moving = (r: MatrixReport): boolean =>
-  r.status?.whatsapp.logins.some((l) => l.state !== 'CONNECTED') ?? false
+  [r.status?.whatsapp, r.status?.linkedin].some(
+    (b) => b?.logins.some((l) => l.state !== 'CONNECTED') ?? false,
+  )
 
 export function MatrixView({ data: d }: { data: Matrix }) {
   const report = useLiveValue<MatrixReport>(
@@ -63,11 +66,49 @@ export function MatrixView({ data: d }: { data: Matrix }) {
         lede="A private homeserver that carries this box’s chat bridges. It federates with no one, takes no sign-ups, and listens only inside its own network namespace."
         actions={<Reporting report={report} />}
       />
-      <Strip synapse={d.synapse.resources} whatsapp={d.whatsapp.resources} />
+      <Strip
+        cells={[
+          { key: 'synapse', label: 'Synapse', r: d.synapse.resources },
+          { key: 'whatsapp', label: 'WhatsApp bridge', r: d.whatsapp.resources },
+          ...(s?.linkedin == null
+            ? []
+            : [{ key: 'linkedin', label: 'LinkedIn bridge', r: d.linkedin.resources }]),
+        ]}
+      />
       <BoardGrid>
         <HomeserverBoard report={report} />
-        <WhatsAppBoard report={report} version={d.whatsapp.gap.installed} />
-        {s !== null && s.whatsapp.logins.length === 0 && <LinkBoard />}
+        {s !== null && (
+          <BridgeBoard
+            title="WhatsApp"
+            bridge={s.whatsapp}
+            version={d.whatsapp.gap.installed}
+            foot={
+              <>
+                The bridge is a linked device of the phone&rsquo;s account, like WhatsApp Web. The
+                phone has to come online at least every two weeks or WhatsApp drops every linked
+                device; the bridge warns at twelve days. Removing it from the phone&rsquo;s{' '}
+                <b>Linked devices</b> cuts it off at once.
+              </>
+            }
+          />
+        )}
+        {s?.linkedin != null && (
+          <BridgeBoard
+            title="LinkedIn"
+            bridge={s.linkedin}
+            version={d.linkedin.gap.installed}
+            foot={
+              <>
+                The bridge holds a signed-in LinkedIn session, the way a browser does. LinkedIn ends
+                such sessions when it likes; a login that turns <b>unlinked</b> or <b>logged out</b>{' '}
+                is fixed by linking again. Signing out of all sessions in LinkedIn&rsquo;s settings
+                cuts it off at once.
+              </>
+            }
+          />
+        )}
+        {s !== null && s.whatsapp.logins.length === 0 && <LinkWhatsAppBoard />}
+        {s?.linkedin != null && s.linkedin.logins.length === 0 && <LinkLinkedInBoard />}
         <Changelog
           gap={d.synapse.gap}
           title="Synapse releases"
@@ -91,13 +132,26 @@ export function MatrixView({ data: d }: { data: Matrix }) {
             </p>
           }
         />
+        {s?.linkedin != null && (
+          <Changelog
+            gap={d.linkedin.gap}
+            title="mautrix-linkedin releases"
+            span={12}
+            foot={
+              <p className={FOOT}>
+                The box may build a reviewed commit past the release shown as running; the stack
+                names the commit. Move it after reading what landed since.
+              </p>
+            }
+          />
+        )}
         <LogBoard
           source={{ stack: 'matrix' }}
           title="Matrix logs"
           foot={
             <p className={FOOT}>
-              Synapse, the bridge and the helper, at info and above. Neither logs message text at
-              that level, and the helper&rsquo;s own polls are dropped before they ship.
+              Synapse, the bridges and the helper, at info and above. None logs message text at that
+              level, and the helper&rsquo;s own polls are dropped before they ship.
             </p>
           }
         />
@@ -117,35 +171,30 @@ function Reporting({ report }: { report: MatrixReport }) {
   )
 }
 
-function Strip({ synapse, whatsapp }: { synapse: AppResources; whatsapp: AppResources }) {
+type StripCell = { key: string; label: string; r: AppResources }
+
+function Strip({ cells: from }: { cells: StripCell[] }) {
   const cells = [
-    synapse.memory.used !== null && (
-      <Stat
-        key="synapse"
-        label="Synapse memory"
-        value={mb(synapse.memory.used)}
-        unit={synapse.memory.limit === null ? 'MB' : `of ${mb(synapse.memory.limit)} MB`}
-        spark={synapse.memory.spark}
-        title="memory.current, page cache included"
-      />
+    ...from.map(
+      ({ key, label, r }) =>
+        r.memory.used !== null && (
+          <Stat
+            key={key}
+            label={`${label} memory`}
+            value={mb(r.memory.used)}
+            unit={r.memory.limit === null ? 'MB' : `of ${mb(r.memory.limit)} MB`}
+            spark={r.memory.spark}
+            title="memory.current, page cache included"
+          />
+        ),
     ),
-    whatsapp.memory.used !== null && (
-      <Stat
-        key="whatsapp"
-        label="Bridge memory"
-        value={mb(whatsapp.memory.used)}
-        unit={whatsapp.memory.limit === null ? 'MB' : `of ${mb(whatsapp.memory.limit)} MB`}
-        spark={whatsapp.memory.spark}
-        title="memory.current, page cache included"
-      />
-    ),
-    ...[synapse, whatsapp].map(
-      (r, i) =>
+    ...from.map(
+      ({ key, label, r }) =>
         r.oomKills !== null &&
         r.oomKills > 0 && (
           <Stat
-            key={`oom-${String(i)}`}
-            label={i === 0 ? 'Synapse OOM kills' : 'Bridge OOM kills'}
+            key={`oom-${key}`}
+            label={`${label} OOM kills`}
             value={num(r.oomKills)}
             tone="bad"
           />
@@ -212,10 +261,17 @@ function loginRows(l: BridgeLogin): Row[] {
   ]
 }
 
-function WhatsAppBoard({ report, version }: { report: MatrixReport; version: string | null }) {
-  const s = report.reporting ? report.status : null
-  if (s === null) return null
-  const w = s.whatsapp
+function BridgeBoard({
+  title,
+  bridge: w,
+  version,
+  foot,
+}: {
+  title: string
+  bridge: BridgeStatus
+  version: string | null
+  foot: ReactNode
+}) {
   const rows: Row[] = [
     { k: 'Bridge', v: w.ready ? 'ready' : <Chip tone="bad">not ready</Chip> },
     ...(version === null ? [] : [{ k: 'Version', v: <span className={MONO}>{version}</span> }]),
@@ -225,7 +281,7 @@ function WhatsAppBoard({ report, version }: { report: MatrixReport; version: str
   const worst = w.logins.find((l) => stateOf(l.state).tone === 'bad')
   return (
     <Board
-      title="WhatsApp"
+      title={title}
       span={6}
       spanMd={12}
       aside={
@@ -237,17 +293,39 @@ function WhatsAppBoard({ report, version }: { report: MatrixReport; version: str
       }
     >
       <Facts rows={rows} />
+      <p className={FOOT}>{foot}</p>
+    </Board>
+  )
+}
+
+function LinkLinkedInBoard() {
+  return (
+    <Board title="Link LinkedIn" span={12}>
+      <Facts
+        rows={[
+          {
+            k: 'With your password',
+            v: <span className={MONO}>matrix-linkedin-link password</span>,
+          },
+          {
+            k: 'With a browser’s session',
+            v: <span className={MONO}>matrix-linkedin-link cookies</span>,
+          },
+          { k: 'To log out', v: <span className={MONO}>matrix-linkedin-link logout</span> },
+        ]}
+      />
       <p className={FOOT}>
-        The bridge is a linked device of the phone&rsquo;s account, like WhatsApp Web. The phone has
-        to come online at least every two weeks or WhatsApp drops every linked device; the bridge
-        warns at twelve days. Removing it from the phone&rsquo;s <b>Linked devices</b> cuts it off
-        at once.
+        From a terminal on the box; it asks for what LinkedIn needs and keeps none of it. With a
+        password, the bridge signs in itself and LinkedIn may send a code or ask for approval in its
+        app. With a session, paste one request copied from Chrome while signed in: DevTools,{' '}
+        <b>Network</b>, any request to <span className={MONO}>www.linkedin.com/voyager/</span>,{' '}
+        <b>Copy as cURL (bash)</b>.
       </p>
     </Board>
   )
 }
 
-function LinkBoard() {
+function LinkWhatsAppBoard() {
   return (
     <Board title="Link WhatsApp" span={12}>
       <Facts
