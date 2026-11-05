@@ -54,7 +54,7 @@ export function RyotView({ d }: { d: Ryot }) {
             <p className={FOOT}>
               The tracker as tools on the LLM gateway: search, look a title up with its history, log
               a watch, rate and review, keep the Watchlist. Our own repository, built on the box
-              from its clone until it is published, so a new version is a commit there and{' '}
+              from the flake input of the same name, so a new version is a push there and{' '}
               <span className={MONO}>nix flake update ryot-mcp</span>. It signs in once, with{' '}
               <span className={MONO}>ryot-mcp-login</span>, and renews its own session after that.
             </p>

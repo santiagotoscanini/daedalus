@@ -182,7 +182,7 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
             <p className={FOOT}>
               Requests as tools on the LLM gateway: search, see what is in the library and on its
               way, request a movie or a show&rsquo;s seasons, report a problem. Our own repository,
-              built on the box from its clone until it is published, so a new version is a commit
+              built on the box from the flake input of the same name, so a new version is a push
               there and <span className={MONO}>nix flake update seerr-mcp</span>.
             </p>
           }
