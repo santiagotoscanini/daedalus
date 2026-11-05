@@ -497,6 +497,11 @@ export const SCHEMA = {
     about: 'ryot-mcp’s version (built on the box from its flake input).',
     source: 'stacks/ryot-mcp fleet.dashboard.ryot-mcp.env',
   },
+  SEERR_MCP_VERSION: {
+    kind: 'string',
+    about: 'seerr-mcp’s version (built on the box from its flake input).',
+    source: 'stacks/seerr-mcp fleet.dashboard.seerr-mcp.env',
+  },
   CALIBRE_WEB_MCP_VERSION: {
     kind: 'string',
     about: 'calibre-web-mcp’s version (built on the box from its flake input).',

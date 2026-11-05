@@ -69,7 +69,7 @@ export const manifest = {
       probes: ['seerr', 'sonarr', 'radarr', 'bazarr'],
       boardSpans: [12, 6, 6, 12],
       dividerBefore: true,
-      nix: ['tv', 'seerr', 'recyclarr', 'scraparr'],
+      nix: ['tv', 'seerr', 'seerr-mcp', 'recyclarr', 'scraparr'],
     },
     {
       id: 'indexer',

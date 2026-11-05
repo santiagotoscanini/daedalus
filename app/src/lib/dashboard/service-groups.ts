@@ -32,6 +32,7 @@ const FOLD: Record<string, string> = {
   'calibre-web-mcp': 'calibre-web',
   'shelfmark-mcp': 'shelfmark',
   'ryot-mcp': 'ryot',
+  'seerr-mcp': 'tv',
   'litellm-pgvector': 'litellm',
   // The control plane's own container is the engine.
   'app-daedalus': 'daedalus',

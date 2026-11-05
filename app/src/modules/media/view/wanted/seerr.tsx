@@ -1,7 +1,7 @@
 // Wanted › Seerr: what people asked for, and how far each request has got.
 
 import { LogBoard } from '../../../../components/logs'
-import { Changelog } from '../../../../components/release-notes'
+import { Changelog, VersionAside } from '../../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../../components/service-head'
 import { Board, BoardGrid, Chip, Measures, RankRow } from '../../../../components/viz'
 import { cn } from '../../../../lib/cn'
@@ -12,6 +12,7 @@ import {
   EMPTY,
   FOOT,
   LIST,
+  MONO,
   NOTE,
   PHONE_SUB,
   TABLE,
@@ -172,10 +173,33 @@ export function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           }
         />
 
+        <Changelog
+          gap={d.mcp.gap}
+          span={12}
+          title="Seerr MCP"
+          aside={<VersionAside version={d.mcp.version} behind={d.mcp.gap.behind.length} />}
+          foot={
+            <p className={FOOT}>
+              Requests as tools on the LLM gateway: search, see what is in the library and on its
+              way, request a movie or a show&rsquo;s seasons, report a problem. Our own repository,
+              built on the box from its clone until it is published, so a new version is a commit
+              there and <span className={MONO}>nix flake update seerr-mcp</span>.
+            </p>
+          }
+        />
+
         <LogBoard
           source={{ container: 'seerr' }}
           title="Seerr logs"
-          neighbours={WANTED_NEIGHBOURS}
+          neighbours={[
+            ...WANTED_NEIGHBOURS,
+            {
+              source: { container: 'mcp-seerr' },
+              label: 'Seerr MCP',
+              role: 'the tool server in front of it',
+              note: 'It reaches Seerr on a private bridge with Seerr’s API key, so its requests are the admin’s and approved at once. One line per tool call, with its outcome.',
+            },
+          ]}
         />
       </BoardGrid>
     </>

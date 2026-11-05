@@ -1,5 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { EMPTY_GAP, type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
 import { localDay } from '../../../lib/format'
 import { getJson, pool } from '../../../lib/http'
@@ -31,6 +31,12 @@ export type SeerrData = {
   }[]
   /** Who does the asking. */
   people: { name: string; requests: number }[]
+  /**
+   * The MCP server that requests through it from the gateway; ours, built on
+   * the box from a clone not yet published, so the version has no release
+   * list to be compared with.
+   */
+  mcp: { version: string | null; gap: VersionGap }
 }
 
 /**
@@ -86,6 +92,7 @@ export async function loadSeerr(ctx: Ctx): Promise<SeerrData> {
   ])
 
   const version = status?.version ?? null
+  const mcpVersion = ctx.env('SEERR_MCP_VERSION') || null
   const rows = list?.results ?? []
 
   // Titles come from a second call each, because a request record carries a
@@ -133,6 +140,7 @@ export async function loadSeerr(ctx: Ctx): Promise<SeerrData> {
       }))
       .filter((u) => u.requests > 0)
       .sort((a, b) => b.requests - a.requests),
+    mcp: { version: mcpVersion, gap: { ...EMPTY_GAP, installed: mcpVersion } },
   }
 }
 
