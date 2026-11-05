@@ -392,7 +392,10 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+              # MemAvailable leaves out the ZFS ARC, which a host with a big arcMax
+              # fills on purpose and gives back under pressure; count what it
+              # holds above its floor. A host without ZFS adds zero.
+              expr: (node_memory_MemAvailable_bytes + (clamp_min(node_zfs_arc_size - node_zfs_arc_c_min, 0) or node_memory_MemAvailable_bytes * 0)) / node_memory_MemTotal_bytes * 100
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -419,7 +422,7 @@ groups:
         for: 5m
         annotations:
           description: Memory on {{ $labels.instance }} has only {{ printf "%.1f" $values.A.Value }}% available.
-          summary: Host memory is critically low (< 10% available)
+          summary: Host memory is critically low (< 10% available, ZFS ARC counted)
         labels:
           severity: critical
         isPaused: false
