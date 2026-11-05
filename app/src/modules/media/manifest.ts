@@ -3,7 +3,7 @@ import type { ModuleManifest } from '../../lib/modules/manifest'
 export const manifest = {
   id: 'media',
   label: 'Media',
-  lede: 'Two libraries, the logs of what was read and watched, and the chain that fills them.',
+  lede: 'Two libraries, the log of what was read and watched, and the chain that fills them.',
   order: 20,
   section: 'Services',
   // Shaped to Jellyfin, the tab that opens by default.
@@ -13,16 +13,14 @@ export const manifest = {
   //
   // Split by what a thing IS, and the rule (`dividerBefore`) is the split: the
   // tabs before it are where a pipeline ENDS — the libraries a person
-  // actually opens, Hardcover, the record of what was read from one, and
-  // Ryot, the record of what was watched and played, from the library or
-  // anywhere else — and everything after it is machinery that fills them.
-  // Hardcover's Want to Read shelf is also where the book chain starts:
-  // Shelfmark syncs it.
+  // actually opens, and Ryot, the record of what was read, watched and
+  // played, from the library or anywhere else — and everything after it is
+  // machinery that fills them. Nothing fills the book shelf on its own: a
+  // download starts when someone asks for it (Shelfmark, or its MCP server).
   //
   // The MCP servers sit on the tab of the service they drive (the Pantry
-  // shape on Health): Calibre-Web's with Calibre, Shelfmark's with Shelfmark.
-  // Hardcover has no service on the box, only its MCP server, so its tab is a
-  // version and a log, like Health's Nutrition and Training.
+  // shape on Health): Calibre-Web's with Calibre, Shelfmark's with Shelfmark,
+  // Ryot's with Ryot.
   //
   // Three of these (Wanted, Downloaders, Cleanup) hold more than one service,
   // picked by a switch inside the page — the same shape Network uses for its
@@ -56,13 +54,6 @@ export const manifest = {
       probe: 'calibre-web',
       boardSpans: [12, 12, 12],
       nix: ['calibre-web', 'calibre-web-mcp'],
-    },
-    // No probe: the MCP server has no webApp, and Hardcover is not on the box.
-    {
-      id: 'hardcover',
-      label: 'Hardcover',
-      boardSpans: [12, 12, 12],
-      nix: 'hardcover-mcp',
     },
     {
       id: 'ryot',

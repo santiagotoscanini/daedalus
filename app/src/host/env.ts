@@ -487,16 +487,6 @@ export const SCHEMA = {
     about: 'The supergateway fronting yazio-mcp.',
     source: 'stacks/yazio-mcp fleet.dashboard.yazio-mcp.env',
   },
-  HARDCOVER_MCP_VERSION: {
-    kind: 'string',
-    about: 'hardcover-mcp’s PyPI version.',
-    source: 'stacks/hardcover-mcp fleet.dashboard.hardcover-mcp.env',
-  },
-  HARDCOVER_SUPERGATEWAY_VERSION: {
-    kind: 'string',
-    about: 'The supergateway fronting hardcover-mcp.',
-    source: 'stacks/hardcover-mcp fleet.dashboard.hardcover-mcp.env',
-  },
   RYOT_VERSION: {
     kind: 'string',
     about: 'Ryot’s version: the tag of the pinned image.',

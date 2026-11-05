@@ -29,7 +29,6 @@ import { manifest } from '../manifest'
 import { type CalibreData, loadCalibre } from './calibre'
 import { type CleanupData, loadCleanup } from './cleanup'
 import { type DownloadsData, loadDownloads } from './downloaders'
-import { type HardcoverData, loadHardcover } from './hardcover'
 import { loadProwlarr, type ProwlarrData } from './indexer'
 import { type JellyfinData, loadJellyfin } from './jellyfin'
 import { loadRyot, type RyotData } from './ryot'
@@ -65,7 +64,6 @@ import {
 export type Tabs = {
   jellyfin: JellyfinData
   calibre: CalibreData
-  hardcover: HardcoverData
   ryot: RyotData
   wanted: {
     seerr: SeerrData
@@ -83,7 +81,6 @@ export type MediaData = TabPayload<typeof manifest, Tabs>
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   jellyfin: (ctx) => loadJellyfin(ctx),
   calibre: (ctx) => loadCalibre(ctx),
-  hardcover: (ctx) => loadHardcover(ctx),
   ryot: (ctx) => loadRyot(ctx),
   wanted: async (ctx) => {
     // All five, because all five are on the page — the switch chooses what
@@ -109,7 +106,6 @@ export type {
   CalibreData,
   CleanupData,
   DownloadsData,
-  HardcoverData,
   JellyfinData,
   ProwlarrData,
   RecyclarrData,
