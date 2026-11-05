@@ -68,8 +68,8 @@ export const manifest = {
       id: 'ryot',
       label: 'Ryot',
       probe: 'ryot',
-      boardSpans: [12, 12],
-      nix: 'ryot',
+      boardSpans: [12, 12, 12],
+      nix: ['ryot', 'ryot-mcp'],
     },
     // Past the rule: everything that fills the two libraries above.
     {

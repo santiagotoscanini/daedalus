@@ -7,7 +7,7 @@ import { FOOT, MONO } from './shared'
 
 // Media › Ryot: the record of what was watched and played, wherever it was
 // watched. Its API is behind the Pocket ID gate, so the tab is the pin's
-// version, its changelog and the log.
+// version, its changelog, its MCP server and the logs.
 
 type Ryot = Extract<MediaData, { tab: 'ryot' }>
 
@@ -45,7 +45,33 @@ export function RyotView({ d }: { d: Ryot }) {
             </p>
           }
         />
-        <LogBoard source={{ container: 'ryot' }} title="Ryot logs" />
+        <Changelog
+          gap={d.mcp.gap}
+          span={12}
+          title="Ryot MCP"
+          aside={<VersionAside version={d.mcp.version} behind={d.mcp.gap.behind.length} />}
+          foot={
+            <p className={FOOT}>
+              The tracker as tools on the LLM gateway: search, look a title up with its history, log
+              a watch, rate and review, keep the Watchlist. Our own repository, built on the box
+              from its clone until it is published, so a new version is a commit there and{' '}
+              <span className={MONO}>nix flake update ryot-mcp</span>. It signs in once, with{' '}
+              <span className={MONO}>ryot-mcp-login</span>, and renews its own session after that.
+            </p>
+          }
+        />
+        <LogBoard
+          source={{ container: 'ryot' }}
+          title="Ryot logs"
+          neighbours={[
+            {
+              source: { container: 'mcp-ryot' },
+              label: 'Ryot MCP',
+              role: 'the tool server in front of it',
+              note: 'It reaches Ryot on a private bridge, never through the gate. One line per tool call, with its outcome; auth_failed means it holds no session Ryot accepts, and ryot-mcp-login on the box fixes that.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )

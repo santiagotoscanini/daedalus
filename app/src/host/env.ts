@@ -502,6 +502,11 @@ export const SCHEMA = {
     about: 'Ryot’s version: the tag of the pinned image.',
     source: 'stacks/ryot fleet.dashboard.ryot.env',
   },
+  RYOT_MCP_VERSION: {
+    kind: 'string',
+    about: 'ryot-mcp’s version (built on the box from its flake input).',
+    source: 'stacks/ryot-mcp fleet.dashboard.ryot-mcp.env',
+  },
   CALIBRE_WEB_MCP_VERSION: {
     kind: 'string',
     about: 'calibre-web-mcp’s version (built on the box from its flake input).',
