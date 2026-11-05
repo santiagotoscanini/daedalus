@@ -497,6 +497,11 @@ export const SCHEMA = {
     about: 'The supergateway fronting hardcover-mcp.',
     source: 'stacks/hardcover-mcp fleet.dashboard.hardcover-mcp.env',
   },
+  RYOT_VERSION: {
+    kind: 'string',
+    about: 'Ryot’s version: the tag of the pinned image.',
+    source: 'stacks/ryot fleet.dashboard.ryot.env',
+  },
   CALIBRE_WEB_MCP_VERSION: {
     kind: 'string',
     about: 'calibre-web-mcp’s version (built on the box from its flake input).',

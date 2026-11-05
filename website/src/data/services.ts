@@ -76,6 +76,7 @@ export const SERVICES: Service[] = [
   bes("home-assistant", "Home Assistant", "app"),
   bes("minecraft", "Minecraft", "app"),
   bes("calibre-web", "Calibre-Web", "app"),
+  bes("ryot", "Ryot", "app"),
   bes("n8n", "n8n", "app"),
   bes("open-webui", "Open WebUI", "app"),
   bes("litellm", "LiteLLM", "app"),

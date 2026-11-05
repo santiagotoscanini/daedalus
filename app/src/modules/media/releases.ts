@@ -12,6 +12,7 @@ export const releases: Record<string, ReleaseSource> = {
   recyclarr: { repo: 'recyclarr/recyclarr', opts: { notesWhenUnknown: true } },
   jellyfin: { repo: 'jellyfin/jellyfin', opts: { tag: TWO_OR_THREE } },
   'calibre-web': { repo: 'crocodilestick/Calibre-Web-Automated' },
+  ryot: { repo: 'IgnisDa/ryot' },
   qbittorrent: { repo: 'qbittorrent/qBittorrent', opts: { tag: /^release-(\d+\.\d+\.\d+)$/ } },
   nzbget: { repo: 'nzbgetcom/nzbget', opts: { tag: TWO_OR_THREE } },
   metube: { repo: 'alexta69/metube', opts: { tag: /^(\d{4}\.\d{2}\.\d{2})$/ } },

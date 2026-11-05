@@ -114,6 +114,7 @@ export const ICON_FILES: Record<string, string> = {
   qbittorrent: '/icon-qbittorrent.svg',
   radarr: '/icon-radarr.svg',
   recyclarr: '/icon-recyclarr.svg',
+  ryot: '/icon-ryot.png',
   seerr: '/icon-seerr.svg',
   shelfmark: '/icon-shelfmark.png',
   shotter: '/icon-shotter.svg',

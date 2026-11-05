@@ -32,6 +32,7 @@ import { type DownloadsData, loadDownloads } from './downloaders'
 import { type HardcoverData, loadHardcover } from './hardcover'
 import { loadProwlarr, type ProwlarrData } from './indexer'
 import { type JellyfinData, loadJellyfin } from './jellyfin'
+import { loadRyot, type RyotData } from './ryot'
 
 import {
   type ArrData,
@@ -65,6 +66,7 @@ export type Tabs = {
   jellyfin: JellyfinData
   calibre: CalibreData
   hardcover: HardcoverData
+  ryot: RyotData
   wanted: {
     seerr: SeerrData
     sonarr: ArrData
@@ -82,6 +84,7 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   jellyfin: (ctx) => loadJellyfin(ctx),
   calibre: (ctx) => loadCalibre(ctx),
   hardcover: (ctx) => loadHardcover(ctx),
+  ryot: (ctx) => loadRyot(ctx),
   wanted: async (ctx) => {
     // All five, because all five are on the page — the switch chooses what
     // is SHOWN, not what is fetched. Fetching on selection would put a
@@ -110,5 +113,6 @@ export type {
   JellyfinData,
   ProwlarrData,
   RecyclarrData,
+  RyotData,
   SeerrData,
 }

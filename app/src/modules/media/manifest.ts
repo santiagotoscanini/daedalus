@@ -3,7 +3,7 @@ import type { ModuleManifest } from '../../lib/modules/manifest'
 export const manifest = {
   id: 'media',
   label: 'Media',
-  lede: 'Two libraries, a reading log, and the chain that fills them.',
+  lede: 'Two libraries, the logs of what was read and watched, and the chain that fills them.',
   order: 20,
   section: 'Services',
   // Shaped to Jellyfin, the tab that opens by default.
@@ -13,9 +13,11 @@ export const manifest = {
   //
   // Split by what a thing IS, and the rule (`dividerBefore`) is the split: the
   // tabs before it are where a pipeline ENDS — the libraries a person
-  // actually opens, and Hardcover, the record of what was read from one —
-  // and everything after it is machinery that fills them. Hardcover's Want to
-  // Read shelf is also where the book chain starts: Shelfmark syncs it.
+  // actually opens, Hardcover, the record of what was read from one, and
+  // Ryot, the record of what was watched and played, from the library or
+  // anywhere else — and everything after it is machinery that fills them.
+  // Hardcover's Want to Read shelf is also where the book chain starts:
+  // Shelfmark syncs it.
   //
   // The MCP servers sit on the tab of the service they drive (the Pantry
   // shape on Health): Calibre-Web's with Calibre, Shelfmark's with Shelfmark.
@@ -61,6 +63,13 @@ export const manifest = {
       label: 'Hardcover',
       boardSpans: [12, 12, 12],
       nix: 'hardcover-mcp',
+    },
+    {
+      id: 'ryot',
+      label: 'Ryot',
+      probe: 'ryot',
+      boardSpans: [12, 12],
+      nix: 'ryot',
     },
     // Past the rule: everything that fills the two libraries above.
     {
