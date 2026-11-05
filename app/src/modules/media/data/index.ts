@@ -29,6 +29,7 @@ import { manifest } from '../manifest'
 import { type CalibreData, loadCalibre } from './calibre'
 import { type CleanupData, loadCleanup } from './cleanup'
 import { type DownloadsData, loadDownloads } from './downloaders'
+import { type HardcoverData, loadHardcover } from './hardcover'
 import { loadProwlarr, type ProwlarrData } from './indexer'
 import { type JellyfinData, loadJellyfin } from './jellyfin'
 
@@ -46,7 +47,7 @@ import {
 /**
  * A tab is a JOB; the services doing it are a switch inside the page.
  *
- * Six tabs rather than the containers behind them, because several of those
+ * Seven tabs rather than the containers behind them, because several of those
  * containers are one job split across processes for reasons of the software's
  * rather than the reader's. Seerr, Sonarr and Radarr answer one question —
  * what should be here that isn't. qBittorrent, NZBGet and MeTube answer
@@ -63,6 +64,7 @@ import {
 export type Tabs = {
   jellyfin: JellyfinData
   calibre: CalibreData
+  hardcover: HardcoverData
   wanted: {
     seerr: SeerrData
     sonarr: ArrData
@@ -79,6 +81,7 @@ export type MediaData = TabPayload<typeof manifest, Tabs>
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   jellyfin: (ctx) => loadJellyfin(ctx),
   calibre: (ctx) => loadCalibre(ctx),
+  hardcover: (ctx) => loadHardcover(ctx),
   wanted: async (ctx) => {
     // All five, because all five are on the page — the switch chooses what
     // is SHOWN, not what is fetched. Fetching on selection would put a
@@ -103,6 +106,7 @@ export type {
   CalibreData,
   CleanupData,
   DownloadsData,
+  HardcoverData,
   JellyfinData,
   ProwlarrData,
   RecyclarrData,

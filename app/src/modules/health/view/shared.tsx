@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
-import { CAPTION, FOOT, NOTE } from '../../../components/tokens'
-import { Chip } from '../../../components/viz'
+import { CAPTION, FOOT } from '../../../components/tokens'
 import type { VersionGap } from '../../../lib/dashboard/github'
+
+export { VersionAside } from '../../../components/release-notes'
 
 // What more than one Health tab draws with.
 
@@ -12,25 +13,6 @@ import type { VersionGap } from '../../../lib/dashboard/github'
  */
 export function gapTitle(label: string, _gap: VersionGap): string {
   return label
-}
-
-/**
- * The running version and its verdict, as a board's aside: "2.0.1 · current"
- * in muted ink, or the version beside an amber "N behind". Never broken.
- * Without `behind`, the version alone — for a board whose verdict the page
- * header already gives.
- */
-export function VersionAside({ version, behind }: { version: string | null; behind?: number }) {
-  return (
-    <span className={`${NOTE} inline-flex items-center gap-2 whitespace-nowrap`}>
-      <span className="font-mono text-[0.72rem]">{version ?? 'version unknown'}</span>
-      {behind === undefined ? null : behind === 0 ? (
-        <span>current</span>
-      ) : (
-        <Chip tone="warn">{behind} behind</Chip>
-      )}
-    </span>
-  )
 }
 
 /**

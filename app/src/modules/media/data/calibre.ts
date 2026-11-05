@@ -21,12 +21,15 @@ export type CalibreData = {
   series: number | null
   categories: number | null
   disk: { usedBytes: number | null; freeBytes: number | null }
+  /** The MCP server that drives it from the gateway; built on the box, its version from nix. */
+  mcp: { version: string | null; gap: VersionGap }
 }
 
 export async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
   const version = await imageTag('calibre-web')
+  const mcpVersion = ctx.env('CALIBRE_WEB_MCP_VERSION') || null
 
-  const [stats, disk, gap] = await Promise.all([
+  const [stats, disk, gap, mcpGap] = await Promise.all([
     // /opds is on calibre-web's forward-auth bypass and takes its own basic
     // auth (stacks/calibre-web), so this reads it with those credentials.
     getJson<{ books?: number; authors?: number; categories?: number; series?: number }>(
@@ -48,6 +51,8 @@ export async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
         tag: /^[Vv]?(\d+\.\d+\.\d+)$/,
       }),
     ),
+    // Our own repository; its Updates row (fleet.manualPins) names the same.
+    versionGap('santiagotoscanini/calibre-web-mcp', mcpVersion),
   ])
 
   return {
@@ -61,5 +66,6 @@ export async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
       usedBytes: disk.size !== null && disk.avail !== null ? disk.size - disk.avail : null,
       freeBytes: disk.avail,
     },
+    mcp: { version: mcpVersion, gap: mcpGap },
   }
 }

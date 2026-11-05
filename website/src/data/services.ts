@@ -95,6 +95,7 @@ export const SERVICES: Service[] = [
   out("ticktick", "TickTick", "si"),
   out("hevy", "Hevy", "app"),
   out("yazio", "Yazio", "app"),
+  out("hardcover", "Hardcover", "app"),
 ];
 
 /** What the field shows. */

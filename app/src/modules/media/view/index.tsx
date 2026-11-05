@@ -4,6 +4,7 @@ import { manifest } from '../manifest'
 import { CalibreView } from './calibre'
 import { CleanupView } from './cleanup'
 import { DownloadersView } from './downloaders'
+import { HardcoverView } from './hardcover'
 import { ProwlarrView } from './indexer'
 import { JellyfinView } from './jellyfin'
 import { WantedView } from './wanted'
@@ -24,6 +25,7 @@ import { WantedView } from './wanted'
 export const views = defineViews<typeof manifest, Tabs>(manifest, {
   jellyfin: ({ data }) => <JellyfinView d={data} />,
   calibre: ({ data }) => <CalibreView d={data} />,
+  hardcover: ({ data }) => <HardcoverView d={data} />,
   wanted: ({ data }) => <WantedView d={data} />,
   indexer: ({ data }) => <ProwlarrView d={data} />,
   downloaders: ({ data }) => <DownloadersView d={data} />,

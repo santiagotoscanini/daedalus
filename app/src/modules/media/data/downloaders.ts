@@ -88,6 +88,8 @@ export type DownloadsData = {
     gap: VersionGap
     jobs: { title: string; state: string; pct: number | null }[]
     counts: { downloading: number; queued: number; done: number; errors: number } | null
+    /** The MCP server that drives it from the gateway; built on the box, its version from nix. */
+    mcp: { version: string | null; gap: VersionGap }
   }
   /**
    * The tunnel every torrent and article goes through.
@@ -159,9 +161,10 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
 
   const nzbVer = nzbVersion?.result ?? null
   const metubeVer = await imageTag('metube')
+  const mcpVer = ctx.env('SHELFMARK_MCP_VERSION') || null
   const r = nzbStatus?.result
 
-  const [qbtGap, nzbGap, metubeGap, shelfmarkGap] = await Promise.all([
+  const [qbtGap, nzbGap, metubeGap, shelfmarkGap, mcpGap] = await Promise.all([
     versionGap('qbittorrent/qBittorrent', qbt.version, { tag: /^release-(\d+\.\d+\.\d+)$/ }),
     versionGap('nzbgetcom/nzbget', nzbVer, { tag: /^v?(\d+\.\d+(?:\.\d+)?)$/ }),
     versionGap('alexta69/metube', metubeVer, { tag: /^(\d{4}\.\d{2}\.\d{2})$/ }),
@@ -169,6 +172,8 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
     // version label: the panel then shows what has shipped rather than going
     // blank.
     versionGap('calibrain/shelfmark', shelfmark.version, { notesWhenUnknown: true }),
+    // Our own repository; its Updates row (fleet.manualPins) names the same.
+    versionGap('santiagotoscanini/shelfmark-mcp', mcpVer),
   ])
 
   const done = metubeHistory?.done ?? []
@@ -236,6 +241,7 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
               done: bucket('complete').length,
               errors: bucket('error').length,
             },
+      mcp: { version: mcpVer, gap: mcpGap },
     },
     vpn: {
       up: vpnUp.up === null ? null : vpnUp.up === 1,

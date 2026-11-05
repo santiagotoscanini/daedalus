@@ -29,6 +29,8 @@ const FOLD: Record<string, string> = {
   scraparr: 'tv',
   // Sidecars of one service.
   'grocy-mcp': 'grocy',
+  'calibre-web-mcp': 'calibre-web',
+  'shelfmark-mcp': 'shelfmark',
   'litellm-pgvector': 'litellm',
   // The control plane's own container is the engine.
   'app-daedalus': 'daedalus',
@@ -44,6 +46,7 @@ const LABELS: Record<string, string> = {
   downloads: 'VPN & downloads',
   getbased: 'getbased',
   'grocy-mcp': 'Grocy MCP',
+  'hardcover-mcp': 'Hardcover MCP',
   'hermes-agent': 'Hermes Agent',
   'hevy-mcp': 'Hevy MCP',
   'home-assistant': 'Home Assistant',
@@ -85,6 +88,7 @@ export const ICON_FILES: Record<string, string> = {
   gmail: '/icon-gmail.svg',
   grafana: '/icon-grafana.svg',
   grocy: '/icon-grocy.svg',
+  hardcover: '/icon-hardcover.png',
   healthchecks: '/icon-healthchecks.svg',
   'hermes-agent': '/icon-hermes-agent.png',
   hevy: '/icon-hevy.png',
@@ -131,6 +135,7 @@ const ICON_ALIAS: Record<string, string> = {
   cloudflared: 'cloudflare',
   downloads: 'gluetun',
   'grocy-mcp': 'grocy',
+  'hardcover-mcp': 'hardcover',
   'hevy-mcp': 'hevy',
   'lemonade-logs': 'lemonade',
   logging: 'loki',

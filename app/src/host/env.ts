@@ -487,6 +487,26 @@ export const SCHEMA = {
     about: 'The supergateway fronting yazio-mcp.',
     source: 'stacks/yazio-mcp fleet.dashboard.yazio-mcp.env',
   },
+  HARDCOVER_MCP_VERSION: {
+    kind: 'string',
+    about: 'hardcover-mcp’s PyPI version.',
+    source: 'stacks/hardcover-mcp fleet.dashboard.hardcover-mcp.env',
+  },
+  HARDCOVER_SUPERGATEWAY_VERSION: {
+    kind: 'string',
+    about: 'The supergateway fronting hardcover-mcp.',
+    source: 'stacks/hardcover-mcp fleet.dashboard.hardcover-mcp.env',
+  },
+  CALIBRE_WEB_MCP_VERSION: {
+    kind: 'string',
+    about: 'calibre-web-mcp’s version (built on the box from its flake input).',
+    source: 'stacks/calibre-web-mcp fleet.dashboard.calibre-web-mcp.env',
+  },
+  SHELFMARK_MCP_VERSION: {
+    kind: 'string',
+    about: 'shelfmark-mcp’s version (built on the box from its flake input).',
+    source: 'stacks/shelfmark-mcp fleet.dashboard.shelfmark-mcp.env',
+  },
   GETBASED_REV: {
     kind: 'string',
     about: 'The getbased source commit the health record is built from.',

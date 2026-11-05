@@ -1,5 +1,5 @@
 import { LogBoard } from '../../../../components/logs'
-import { Changelog } from '../../../../components/release-notes'
+import { Changelog, VersionAside } from '../../../../components/release-notes'
 import {
   compareOf,
   Open,
@@ -99,10 +99,38 @@ export function ShelfmarkPage({ d }: { d: Downloaders }) {
           }
         />
 
+        <Changelog
+          gap={shelfmark.mcp.gap}
+          span={12}
+          title="Shelfmark MCP"
+          aside={
+            <VersionAside
+              version={shelfmark.mcp.version}
+              behind={shelfmark.mcp.gap.behind.length}
+            />
+          }
+          foot={
+            <p className={FOOT}>
+              Shelfmark as tools on the LLM gateway: search for a book, pick a release, start the
+              download, follow it in. Our own repository, built on the box from the flake input of
+              the same name, so a new version is a push there and{' '}
+              <span className={MONO}>nix flake update shelfmark-mcp</span>.
+            </p>
+          }
+        />
+
         <LogBoard
           source={{ container: 'shelfmark' }}
           title="Shelfmark logs"
-          neighbours={[VERSION_SNAPSHOT]}
+          neighbours={[
+            VERSION_SNAPSHOT,
+            {
+              source: { container: 'mcp-shelfmark' },
+              label: 'Shelfmark MCP',
+              role: 'the tool server in front of it',
+              note: 'It calls Shelfmark’s API through the port the VPN namespace publishes. A download it started is Shelfmark’s from then on, so a failed one is in Shelfmark’s log above.',
+            },
+          ]}
         />
       </BoardGrid>
     </>

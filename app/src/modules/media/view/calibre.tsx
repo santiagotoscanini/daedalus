@@ -1,5 +1,5 @@
 import { LogBoard } from '../../../components/logs'
-import { Changelog } from '../../../components/release-notes'
+import { Changelog, VersionAside } from '../../../components/release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
 import { Board, BoardGrid, Facts } from '../../../components/viz'
 import { bytes, num } from '../../../lib/format'
@@ -54,8 +54,35 @@ export function CalibreView({ d }: { d: Calibre }) {
         </Board>
 
         <Changelog gap={calibre.gap} span={12} />
+        <Changelog
+          gap={calibre.mcp.gap}
+          span={12}
+          title="Calibre-Web MCP"
+          aside={
+            <VersionAside version={calibre.mcp.version} behind={calibre.mcp.gap.behind.length} />
+          }
+          foot={
+            <p className={FOOT}>
+              The shelf as tools on the LLM gateway: search it, look a book up, send one to the
+              Kindle, mark it read, file it on a shelf. Our own repository, built on the box from
+              the flake input of the same name, so a new version is a push there and{' '}
+              <span className={MONO}>nix flake update calibre-web-mcp</span>.
+            </p>
+          }
+        />
 
-        <LogBoard source={{ container: 'calibre-web' }} title="Calibre-Web logs" />
+        <LogBoard
+          source={{ container: 'calibre-web' }}
+          title="Calibre-Web logs"
+          neighbours={[
+            {
+              source: { container: 'mcp-calibre-web' },
+              label: 'Calibre-Web MCP',
+              role: 'the tool server in front of it',
+              note: 'It signs in as the library’s user on Calibre-Web’s private bridge. A send to the Kindle is queued by Calibre-Web, so whether the email went out is in Calibre-Web’s log, not this one.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )

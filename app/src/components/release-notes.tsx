@@ -46,6 +46,25 @@ const CHAIN_LAST =
 const COMMIT =
   'grid min-w-0 grid-cols-[4.5rem_1fr_auto] items-baseline gap-2.5 max-[40rem]:grid-cols-[1fr_auto] border-hairline border-t px-0.5 py-2 text-[0.8rem] first:border-t-0'
 
+/**
+ * The running version and its verdict, as a changelog's aside: "2.0.1 ·
+ * current" in muted ink, or the version beside an amber "N behind". For a
+ * page's second or third changelog, whose verdict the page header does not
+ * give. Without `behind`, the version alone.
+ */
+export function VersionAside({ version, behind }: { version: string | null; behind?: number }) {
+  return (
+    <span className={`${NOTE} inline-flex items-center gap-2 whitespace-nowrap`}>
+      <span className="font-mono text-[0.72rem]">{version ?? 'version unknown'}</span>
+      {behind === undefined ? null : behind === 0 ? (
+        <span>current</span>
+      ) : (
+        <Chip tone="warn">{behind} behind</Chip>
+      )}
+    </span>
+  )
+}
+
 export type Release = {
   version: string
   date: string
