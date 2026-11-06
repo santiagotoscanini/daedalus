@@ -1,5 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { imageVersion } from '../../../lib/dashboard/images'
 
 /* ── Garage ───────────────────────────────────────────────────────────── */
 
@@ -46,29 +47,46 @@ export type GarageData = {
   /** The LAN S3 endpoint and the web console. */
   s3Url: string
   consoleUrl: string
+  /**
+   * The web console, garage-ui: a service of its own, with its own version,
+   * releases and liveness. Null when the host runs no console.
+   */
+  console: { version: string | null; gap: VersionGap; up: boolean | null } | null
 }
 
 export async function loadGarage(ctx: Pick<Ctx, 'hosts' | 'prom'>): Promise<GarageData> {
-  const [bytes, objects, unfinished, unfinishedBytes, quotas, keys, scalars, info] =
-    await Promise.all([
-      ctx.prom.vector('garage_bucket_bytes'),
-      ctx.prom.vector('garage_bucket_objects'),
-      ctx.prom.vector('garage_bucket_unfinished_uploads'),
-      ctx.prom.vector('garage_bucket_unfinished_upload_bytes'),
-      ctx.prom.vector('garage_bucket_quota_bytes'),
-      ctx.prom.vector('garage_bucket_keys'),
-      ctx.prom.scalars({
-        available: 'max(cluster_available{job="garage"})',
-        diskAvail: 'max(garage_local_disk_avail{job="garage",volume="data"})',
-        diskTotal: 'max(garage_local_disk_total{job="garage",volume="data"})',
-        requests: 'sum(rate(api_s3_request_counter{job="garage"}[1h])) * 3600',
-        errors: 'sum(rate(api_s3_error_counter{job="garage",status_code=~"5.."}[1h])) * 3600',
-        erroredBlocks: 'max(block_resync_errored_blocks{job="garage"})',
-        resyncQueue: 'max(block_resync_queue_length{job="garage"})',
-        stamp: 'max(garage_bucket_metrics_timestamp_seconds)',
-      }),
-      ctx.prom.vector('garage_build_info{job="garage"}'),
-    ])
+  const [
+    bytes,
+    objects,
+    unfinished,
+    unfinishedBytes,
+    quotas,
+    keys,
+    scalars,
+    info,
+    consoleUp,
+    consoleRunning,
+  ] = await Promise.all([
+    ctx.prom.vector('garage_bucket_bytes'),
+    ctx.prom.vector('garage_bucket_objects'),
+    ctx.prom.vector('garage_bucket_unfinished_uploads'),
+    ctx.prom.vector('garage_bucket_unfinished_upload_bytes'),
+    ctx.prom.vector('garage_bucket_quota_bytes'),
+    ctx.prom.vector('garage_bucket_keys'),
+    ctx.prom.scalars({
+      available: 'max(cluster_available{job="garage"})',
+      diskAvail: 'max(garage_local_disk_avail{job="garage",volume="data"})',
+      diskTotal: 'max(garage_local_disk_total{job="garage",volume="data"})',
+      requests: 'sum(rate(api_s3_request_counter{job="garage"}[1h])) * 3600',
+      errors: 'sum(rate(api_s3_error_counter{job="garage",status_code=~"5.."}[1h])) * 3600',
+      erroredBlocks: 'max(block_resync_errored_blocks{job="garage"})',
+      resyncQueue: 'max(block_resync_queue_length{job="garage"})',
+      stamp: 'max(garage_bucket_metrics_timestamp_seconds)',
+    }),
+    ctx.prom.vector('garage_build_info{job="garage"}'),
+    ctx.prom.scalar('container_up{name="garage-ui"}'),
+    imageVersion('garage-ui'),
+  ])
 
   const by = (rows: { metric: Record<string, string>; value: [number, string] }[]) =>
     new Map(rows.map((r) => [r.metric.bucket ?? '', Number(r.value[1])]))
@@ -116,5 +134,14 @@ export async function loadGarage(ctx: Pick<Ctx, 'hosts' | 'prom'>): Promise<Gara
     gap: await versionGap('git.deuxfleurs.fr/Deuxfleurs/garage', version),
     s3Url: ctx.hosts.base('s3'),
     consoleUrl: ctx.hosts.base('garage'),
+    // No liveness series and no pinned version = no console on this host.
+    console:
+      consoleUp === null && consoleRunning.version === null
+        ? null
+        : {
+            version: consoleRunning.version,
+            gap: await versionGap('Noooste/garage-ui', consoleRunning.version),
+            up: consoleUp === null ? null : consoleUp >= 1,
+          },
   }
 }

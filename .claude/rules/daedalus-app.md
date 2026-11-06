@@ -14,6 +14,32 @@ verification commands — the throwaway-container gate, `shot daedalus` for
 pages under the SSO gate — are in the root `AGENTS.md`, which is always
 loaded. They are not repeated here.
 
+## Nothing the box runs is hidden
+
+The operator's standing rule, and the one most often forgotten: daedalus gives
+power over everything the box runs, so **every service a page fronts shows
+its version, its changelog, its logs and its health** — not just the headline
+one. "Service" means every container (the main one, its UI, its sidecars, its
+exporter) and the box's own glue that serves it (bootstrap oneshots, timers,
+exporters written as units). Concretely, when a module, stack or app gains or
+changes a service:
+
+- **Version + changelog:** a release source for each container in
+  `modules/<id>/releases.ts` (GitHub `owner/repo`, or `host/owner/repo` for a
+  Forgejo/Gitea forge — `lib/dashboard/github.ts`), and a `<Changelog>` board
+  for each on the page, titled with the service's own name.
+- **Logs:** a `LogBoard` for the main container and a `neighbours` entry for
+  every other container and glue unit (`{ container }`, `{ unit }`, or
+  `{ units: '<regex>' }` for a family such as per-tenant bootstraps), each
+  with a `role` and a `note` saying when you would come looking there.
+- **Health and state:** what the service itself reports (metrics, its own
+  API), never inferred from a green unit.
+- **Identity:** its icon in `app/public/` + `ICON_FILES`/`LABELS` in
+  `lib/dashboard/service-groups.ts`, so System › Updates and every list
+  show its face.
+
+A service that runs and appears nowhere is a bug, the same as a broken page.
+
 ## Architecture map
 
 - `src/routes/` — TanStack file-based routes: `__root.tsx`,

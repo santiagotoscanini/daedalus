@@ -136,6 +136,7 @@ export function GarageView({ d }: { d: Garage }) {
 
         <Changelog
           gap={d.gap}
+          title="Garage releases"
           span={12}
           aside={<span className={NOTE}>git.deuxfleurs.fr</span>}
           foot={
@@ -148,20 +149,98 @@ export function GarageView({ d }: { d: Garage }) {
           }
         />
 
+        {d.console !== null && <ConsoleBoard c={d.console} url={d.consoleUrl} />}
+        {d.console !== null && (
+          <Changelog
+            gap={d.console.gap}
+            title="garage-ui releases"
+            span={12}
+            aside={<span className={NOTE}>github.com/Noooste/garage-ui</span>}
+            foot={
+              <p className={FOOT}>
+                The console is a community project, not Deuxfleurs’ own: their admin UI is still a
+                pre-release with no bucket browser. A release here changes what an operator can do
+                to the store, so read what it adds to the admin API it calls before moving the pin.
+              </p>
+            }
+          />
+        )}
+
         <LogBoard
-          source={{ stack: 'garage' }}
-          title="Store logs"
+          source={{ container: 'garage' }}
+          title="Garage logs"
           neighbours={[
+            ...(d.console === null
+              ? []
+              : [
+                  {
+                    source: { container: 'garage-ui' },
+                    label: 'Console',
+                    role: 'the web console, garage-ui',
+                    note: 'Its sign-ins through the identity provider, and every admin call it makes on someone’s behalf. A login refused for a missing group says so here, with the groups the token carried.',
+                  },
+                ]),
             {
-              source: { unit: 'garage-cluster-bootstrap.service' },
-              label: 'Bootstrap',
-              role: 'what creates the store’s own secrets',
-              note: 'Generates the RPC secret and the metrics token once, into the machine state. The store itself configures its one-node layout on its first start.',
+              source: { units: 'garage-.+\\.service' },
+              label: 'Bootstraps and exporter',
+              role: 'the box’s own glue around the store',
+              note: 'The cluster bootstrap (the RPC secret and metrics token, once), one bootstrap per bucket (the bucket, its key, the grant and the lifecycle rule — where an app that cannot reach its bucket goes wrong first), the console’s token, and the five-minute copy of per-bucket usage behind the table above.',
             },
           ]}
+          foot={
+            <p className={FOOT}>
+              Garage logs every S3 and admin request at info: the client, the key id and the path. A
+              burst of 403s names the key that was refused; the secret never appears.
+            </p>
+          }
         />
       </BoardGrid>
     </>
+  )
+}
+
+/**
+ * The web console as the service it is: its own version against its own
+ * releases, whether it is running, and where to open it. Its logs ride the
+ * page's LogBoard as a neighbour; its changelog is the board after this one.
+ */
+function ConsoleBoard({ c, url }: { c: NonNullable<Garage['console']>; url: string }) {
+  const verdict = verdictOf(c.gap)
+  return (
+    <Board
+      title="The console"
+      icon="◧"
+      span={12}
+      aside={
+        <a className={NOTE} href={url} target="_blank" rel="noreferrer">
+          {url.replace(/^https:\/\//, '')} ↗
+        </a>
+      }
+    >
+      <Facts
+        rows={[
+          {
+            k: 'garage-ui',
+            v: (
+              <span className="flex items-center gap-2">
+                <span className={MONO}>{c.gap.installed ?? c.version ?? DASH}</span>
+                <Chip tone={verdict.tone}>{verdict.label}</Chip>
+              </span>
+            ),
+          },
+          {
+            k: 'Status',
+            v: c.up === null ? DASH : c.up ? 'running' : <Chip tone="bad">not running</Chip>,
+          },
+        ]}
+      />
+      <p className={FOOT}>
+        Buckets, keys and an object browser, signed in through the identity provider and open to
+        admins only. Everyone it admits is a full admin of the store: its object browser borrows a
+        bucket’s own key to read and write objects. Buckets and keys made for apps are declared on
+        the box, so a key deleted here is minted again only when its app’s env file is deleted.
+      </p>
+    </Board>
   )
 }
 
