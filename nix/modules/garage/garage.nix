@@ -41,8 +41,11 @@
 #     over the RPC port, which binds the container's loopback only. /health
 #     is open by design; /metrics requires the metrics token.
 #   - The admin (3903) and RPC (3901) ports are published nowhere. The S3 port
-#     is published on the host's loopback only when a tenant sits inside a VPN
-#     netns (`reach = "hostPort"`), which has no bridge to dial.
+#     is published on the host only when a tenant sits inside a VPN netns
+#     (`reach = "hostPort"`), which has no bridge to dial — on every address,
+#     because a rootless publish bound to 127.0.0.1 is unreachable through
+#     `host.containers.internal`, and with no firewall opening, so the LAN
+#     still cannot reach it.
 #
 # Settings the module fixes (assets/garage.toml explains each): SQLite
 # metadata with fsync, block fsync, Garage's own metadata snapshot every 6h,
@@ -94,7 +97,7 @@ let
   envBase = "${config.fleet.machineState}/garage";
   clusterEnv = "${envBase}/cluster/env";
 
-  # A tenant in a VPN netns dials the host's loopback-published S3 port.
+  # A tenant in a VPN netns dials the S3 port published on the host.
   anyHostPort = lib.any (b: b.reach == "hostPort") (lib.attrValues buckets);
 
   monitoring = config.fleet.modules.monitoring.enable;
@@ -209,7 +212,7 @@ in
               S3_ENDPOINT says. "bridge": `garage:${toString s3Port}` over
               garage-net, which the tenant joins. "hostPort":
               `host.containers.internal:${toString s3Port}`, the port
-              published on the host's loopback — for a tenant inside another
+              published on the host (firewall-closed) — for a tenant inside another
               container's network namespace (a VPN egress), which has no
               bridge; the netns owner must allow egress to the pasta host
               alias (`mkGluetunInstance`'s `hostEgress`).
@@ -409,7 +412,9 @@ in
             "${metaDir}:/var/lib/garage/meta"
             "${dataDir}:/var/lib/garage/data"
           ];
-          ports = lib.optional anyHostPort "127.0.0.1:${toString s3Port}:${toString s3Port}";
+          # Every address: a 127.0.0.1 publish is unreachable through
+          # host.containers.internal. No firewall opening, so not the LAN.
+          ports = lib.optional anyHostPort "${toString s3Port}:${toString s3Port}";
           extraOptions = [
             # A static binary that writes only under its two mounts and binds
             # unprivileged ports: no capability, no writable root.
