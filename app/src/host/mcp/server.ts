@@ -396,6 +396,35 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
     },
   )
 
+  // The app page's Settings, as a tool: the same validateAppPatch field list
+  // and the same updateApp guards (hostname collisions, the health path a
+  // gate needs, …) the button goes through, so an agent can do here exactly
+  // what the page can and nothing more. It edits the registry row; the box
+  // changes on the next `apply`.
+  write(
+    'app.update',
+    {
+      ...appArg,
+      patch: z
+        .record(z.string(), z.unknown())
+        .describe(
+          'Fields to change, by their registry names: postgres, objectStorage, litellm, prometheus, mail (booleans), stage, image, hostname, description, deployEnable, authMode, authHealthPath, limitCpus, limitMemoryMb, limitPids.',
+        ),
+    },
+    async (args) => {
+      const { updateApp } = await import('../../lib/repo/apps')
+      const { validateAppPatch } = await import('../../lib/apps/validate')
+      const name = String(args.app)
+      try {
+        const patch = validateAppPatch(args.patch as Record<string, unknown>)
+        await updateApp(name, patch)
+        return ok({ updated: name, fields: Object.keys(patch) })
+      } catch (err) {
+        return refuse(err instanceof Error ? err.message : String(err))
+      }
+    },
+  )
+
   write('apply', {}, async (_args, actor) => {
     const { runApply } = await import('../apply-flow')
     const outcome = await runApply(await ctx(), actor)

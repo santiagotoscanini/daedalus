@@ -103,6 +103,12 @@ export const MCP_TOOLS: readonly McpToolSpec[] = [
     summary: 'Move one or more container image pins, then rebuild and switch.',
   },
   {
+    name: 'app.update',
+    scope: 'write',
+    summary:
+      "Change an app's registry fields (the ones its Settings page edits: postgres, objectStorage, litellm, mail, stage, auth, limits…). Lands on the box with the next apply.",
+  },
+  {
     name: 'apply',
     scope: 'write',
     summary: 'Write the registry and site files, rebuild, and switch.',
