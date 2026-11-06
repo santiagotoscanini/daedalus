@@ -99,7 +99,14 @@ in
 
     services.syncoid = {
       enable = true;
-      interval = "hourly";
+      # Hourly, at :07 — never on the hour. The auto-snapshot timers fire at
+      # :00 (hourly, and the frequent tier at :00/:15/:30/:45), and each run
+      # also DESTROYS the oldest snapshot of its tier. A syncoid started in the
+      # same second can pick that snapshot as its incremental base just before
+      # it is destroyed, and the send fails ("dataset does not exist"); with
+      # --no-sync-snap it has no snapshot of its own to fall back on. Seven
+      # minutes past is clear of every snapshot run, with room before :15.
+      interval = "*-*-* *:07:00";
 
       # --no-sync-snap: ride the auto-snapshots instead of cutting our own
       #   (see header).
