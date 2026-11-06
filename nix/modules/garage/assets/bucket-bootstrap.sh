@@ -81,12 +81,29 @@ if ! jq -nc --arg id "$KEY_ID" '{id: $id}' | api GetKeyInfo >/dev/null 2>&1; the
   echo "imported key $KEY_ID as $KEY_NAME"
 fi
 
-# read + write for the objects; owner for the bucket's own settings (CORS and
-# lifecycle rules, which since Garage 2.5 need it), so an app can declare those
-# itself. Idempotent: Allow only sets flags.
+# read + write on the objects, and NOT owner: the bucket's own settings
+# (lifecycle, CORS, website) are the platform's, below, so an app needs none of
+# what owner grants — deleting the bucket included. Allow only sets flags and
+# Deny only clears them, so both run every time and a key granted owner by hand
+# (or by an older bootstrap) loses it.
 jq -nc --arg b "$BUCKET_ID" --arg k "$KEY_ID" \
-  '{bucketId: $b, accessKeyId: $k, permissions: {read: true, write: true, owner: true}}' |
+  '{bucketId: $b, accessKeyId: $k, permissions: {read: true, write: true, owner: false}}' |
   api AllowBucketKey >/dev/null
+jq -nc --arg b "$BUCKET_ID" --arg k "$KEY_ID" \
+  '{bucketId: $b, accessKeyId: $k, permissions: {read: false, write: false, owner: true}}' |
+  api DenyBucketKey >/dev/null
+
+# The bucket's lifecycle, converged to the platform's one rule: a multipart
+# upload left unfinished (a process that died mid-upload) is aborted after a
+# day, so its parts stop holding space. Garage runs the rules once a day.
+# Replaced only when it differs, so the bucket's record does not churn.
+want='[{"ID":"abort-incomplete-uploads","Status":"Enabled","AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}}]'
+have=$(jq -c '[(.lifecycleRules // [])[] | {ID, Status, AbortIncompleteMultipartUpload}]' <<<"$info")
+if [ "$have" != "$want" ]; then
+  jq -nc --arg b "$BUCKET_ID" --argjson r "$want" '{id: $b, body: {lifecycleRules: $r}}' |
+    api UpdateBucket >/dev/null
+  echo "set the lifecycle rules of $BUCKET"
+fi
 
 # A rotation leaves the previous key behind: any OTHER key carrying this
 # tenant's key name is the old one, and goes. Keys under any other name (the

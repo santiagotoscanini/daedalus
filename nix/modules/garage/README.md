@@ -48,21 +48,33 @@ secrets under the machine state.
 
 ## How the app talks to it
 
-`@aws-sdk/client-s3` v3:
+Through ONE module, the same in every app: [`client/object-store.ts`](client/object-store.ts),
+copied **verbatim** to the app's `src/server/object-store.ts` with its test
+beside it. Never edit an app's copy: change this one and copy it into every
+app, so each app reads like the others and a fix lands everywhere.
+Dependencies: `@aws-sdk/client-s3`, `@aws-sdk/lib-storage`,
+`@smithy/node-http-handler`.
 
 ```ts
-const s3 = new S3Client({
-  endpoint: process.env.S3_ENDPOINT,
-  region: process.env.S3_REGION,
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
-  },
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-})
+import { objectResponse, objectStoreFromEnv, memoryObjectStore } from './object-store'
+
+// The bucket in production; null when S3_* is absent (dev, tests) — a partial
+// set throws, naming the missing variables.
+const store = objectStoreFromEnv(process.env) ?? memoryObjectStore()
+
+await store.put('avatars/42.webp', bytes, 'image/webp')
+const obj = await store.open('avatars/42.webp', request.headers.get('range'))
+return obj ? objectResponse(obj, { 'Cache-Control': 'private, max-age=3600' }) : notFound()
 ```
+
+`ObjectStore` is put / putFile (multipart past 16 MiB) / read / readToFile /
+open (one range, streamed) / head / list (paginated) / copy (onto itself:
+refresh the last-modified time) / remove (batched). What an app keeps — content
+-addressed blobs, a profile archive, screenshots by id — is a store of its own
+built on top of it. The client inside is configured for this box: path-style,
+region from the env, checksums only when required, keep-alive, a 1 s connect
+timeout with four attempts (the VPN-netns path stalls a new connection's SYN a
+fifth to a half of the time; a fresh attempt cures it).
 
 What Garage does differently from AWS, all verified in its source at v2.5:
 
@@ -75,23 +87,19 @@ What Garage does differently from AWS, all verified in its source at v2.5:
 - **No versioning, object lock, tagging, ACLs or policies.** A delete is final.
 - **One range per GET.** A multi-range request gets the whole object, and the
   `response-content-*` overrides apply to full (200) responses only.
-- **Lifecycle rules** support `Expiration` and `AbortIncompleteMultipartUpload`,
-  filtered by `Filter.Prefix` or size, and run once a day. The app's key owns
-  its bucket, so the app may set its own rules (and CORS) at boot.
-- **Paginate listings**: at most 1000 keys a page. Keys carry no leading `/`.
+- **Bucket settings are the platform's.** The app's key reads and writes
+  objects and owns nothing: the bootstrap sets the bucket's one lifecycle rule
+  (a multipart upload left unfinished for a day is aborted; Garage runs rules
+  daily), and an app sets no rules, CORS or website of its own.
+- **Keys** carry no leading `/` and stay short (under a few hundred bytes).
 
 **Serve files through the app.** Buckets are private and the store has no
 public endpoint for tenants. A browser gets an object from one of the app's
-own routes, which already carry its auth and its stable URLs: stream the
-`GetObject` body through, passing `Range`, `ETag` and `Content-Type`. Don't
-hand browsers presigned URLs: they would point at the bridge or the LAN-only
-route. An upload goes browser → app → bucket. Through the Cloudflare tunnel a
-request body is capped at 100 MB, so a bigger file has to arrive in chunks.
-
-**Keep connections alive.** Use a keep-alive agent. For a tenant on
-`host.containers.internal` (a VPN netns) it is required: 20–50 % of new
-connections on that path stall ~10 s on the SYN, so reuse connections and
-retry a thrown request on an escalating timeout ladder.
+own routes, which already carry its auth and its stable URLs (`objectResponse`
+streams it, with `Range`, `ETag` and `Content-Type`). No presigned URLs: they
+would point at the bridge or the LAN-only route. An upload goes browser → app
+→ bucket. Through the Cloudflare tunnel a request body is capped at 100 MB, so
+a bigger file has to arrive in chunks.
 
 Scratch space (an upload being assembled, a file a renderer needs on disk) is
 the container's own filesystem, which a redeploy discards. Records stay in

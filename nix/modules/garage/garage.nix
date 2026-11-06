@@ -20,9 +20,11 @@
 #   - `garage-cluster-bootstrap.service` — generates the RPC secret and the
 #     metrics token into <machineState>/garage/cluster/env, once.
 #   - Per tenant, `garage-<name>-bootstrap.service` — the bucket (global alias
-#     <name>), an access key `app-<name>` with read+write+owner on it and
-#     nothing else, and <machineState>/garage/<name>/env, ordered before the
-#     tenant's containers. assets/bucket-bootstrap.sh says why the env file,
+#     <name>), an access key `app-<name>` with read+write on it and nothing
+#     else, the bucket's one lifecycle rule (abort a multipart upload left
+#     unfinished for a day), and <machineState>/garage/<name>/env, ordered
+#     before the tenant's containers. Bucket settings are the platform's: no
+#     tenant key owns its bucket. assets/bucket-bootstrap.sh says why the env file,
 #     not Garage, is the source of truth for the key.
 #   - `s3.<baseDomain>` — the S3 API through traefik, LAN only, for the
 #     operator's own tools (rclone, a desktop client). Tenants never use it:
