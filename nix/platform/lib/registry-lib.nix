@@ -46,7 +46,6 @@
       inherit (a) stage;
 
       postgres.enable = a.postgres;
-      storage.enable = a.storage;
       # `or` like `mail` below: an apps.json written before the field still
       # evaluates.
       objectStorage.enable = a.objectStorage or false;

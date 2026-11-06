@@ -2,7 +2,6 @@ import type { Ctx } from '../../core/ctx'
 import { appIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
 import { publishingFacts } from '../../host/contract/domains/publishing'
-import { siteIdentity } from '../../host/contract/domains/site'
 import { lastDeploy, pullFailing } from '../../host/deploy'
 import { manifestEntries } from '../../host/nix-manifest'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
@@ -42,29 +41,19 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
   // its name.
   const repo = appRepo(box, record.name)
 
-  const [
-    statuses,
-    applyStatus,
-    deploy,
-    pullBroken,
-    publishing,
-    hasIcon,
-    workspaces,
-    deployShot,
-    site,
-  ] = await Promise.all([
-    appStatuses(ctx, [name]),
-    readApplyStatus(ctx),
-    lastDeploy(name),
-    pullFailing(name),
-    // So the hostname field can reject a collision as it is typed rather
-    // than during the rebuild it would otherwise fail.
-    publishingFacts(),
-    appIcon(record.name, hostname, appReachable(record)).then((icon) => icon !== null),
-    readWorkspaces(),
-    readDeployShot(name),
-    siteIdentity(),
-  ])
+  const [statuses, applyStatus, deploy, pullBroken, publishing, hasIcon, workspaces, deployShot] =
+    await Promise.all([
+      appStatuses(ctx, [name]),
+      readApplyStatus(ctx),
+      lastDeploy(name),
+      pullFailing(name),
+      // So the hostname field can reject a collision as it is typed rather
+      // than during the rebuild it would otherwise fail.
+      publishingFacts(),
+      appIcon(record.name, hostname, appReachable(record)).then((icon) => icon !== null),
+      readWorkspaces(),
+      readDeployShot(name),
+    ])
   const status = statuses[name] ?? null
   // A new app's way to its first running container (./setup.ts).
   const setup = await setupProgress(ctx, record, manifest, {
@@ -81,10 +70,6 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
     // From the snapshot when it has published, from the env binding before
     // the first publish — same value, different freshness.
     workspaceRoot: workspaces.data.root || (ctx.env('WORKSPACE_ROOT') ?? ''),
-    // Where an app's data dir lives on the host, for the one panel that
-    // names it (what a removal leaves behind). From the export, so the
-    // path is the nix fact rather than a string typed into a component.
-    stateRoot: site.data.stateRoot,
     takenHostnames: publishing.takenHostnames.filter((h) => h !== hostname),
     reservedLabels: publishing.reservedLabels,
     // Authoritative record from the app's own deploy unit — a deploy also
@@ -111,7 +96,6 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
       description: record.description,
       hasIcon,
       postgres: record.postgres,
-      storage: record.storage,
       objectStorage: record.objectStorage,
       litellm: record.litellm,
       prometheus: record.prometheus,

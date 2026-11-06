@@ -4,7 +4,7 @@
 #
 # Each entry describes one self-built app: where its code comes from, its
 # hostname and stage, and which platform features it opts into (postgres,
-# storage, SSO, metrics, scheduled tasks, resource caps). The module that
+# object storage, SSO, metrics, scheduled tasks, resource caps). The module that
 # MATERIALIZES an entry — the `app-<name>` container, its webApp, the deploy
 # timer, the secrets bootstrap — is the apps stack, modules/apps in the
 # catalog. The declaration lives here, in the platform, because the control plane's own
@@ -256,27 +256,6 @@ in
                   derivatives, generated media. Records stay in Postgres, and
                   scratch space is the container's own filesystem, which a
                   redeploy discards.
-                '';
-              };
-            };
-
-            # Persistent disk for file-backed apps (SQLite, caches, uploads).
-            storage = {
-              enable = lib.mkOption {
-                type = lib.types.bool;
-                default = false;
-                description = ''
-                  When true, bind-mount `<fleet.stateRoot>/apps/<name>/data`
-                  at `/app/data` inside the container and pre-create it
-                  (0755 ${operator.user}:${operator.group}) via
-                  fleet.statePaths. Off by default — stateless apps get no
-                  disk.
-
-                  Both paths are conventions, not options, exactly like the
-                  port-3000 rule: we build the images, so we pick the path.
-                  Under `fleet.stateRoot` the dir is snapshotted
-                  frequent+hourly+daily — right for a small SQLite file,
-                  expensive for a large churning blob cache.
                 '';
               };
             };

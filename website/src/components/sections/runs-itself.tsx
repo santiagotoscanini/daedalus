@@ -26,7 +26,7 @@ const DIFF = [
   `"pinch": {`,
   `  "stage": "live",`,
   `  "postgres": true,`,
-  `  "storage": true,`,
+  `  "objectStorage": true,`,
   `  "litellm": true,`,
   `  "auth": { "mode": "native", "healthPath": "/api/healthz" },`,
   `  "presentation": { "description": "The family's recipes" }`,

@@ -11,7 +11,6 @@ import { manifestEntries } from './nix-manifest'
 const app = (stage: string) => ({
   stage,
   postgres: false,
-  storage: false,
   objectStorage: false,
   litellm: false,
   prometheus: false,

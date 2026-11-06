@@ -615,7 +615,6 @@ describe('railpackSpoke', () => {
 
 const REGISTRATION: AppRegistration = {
   postgres: true,
-  storage: false,
   objectStorage: false,
   litellm: false,
   prometheus: false,
@@ -635,7 +634,6 @@ describe('appFacts', () => {
 
   it.each([
     ['postgres', { postgres: true }],
-    ['storage', { storage: true }],
     ['object storage', { objectStorage: true }],
     ['litellm', { litellm: true }],
     ['prometheus', { prometheus: true }],

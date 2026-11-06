@@ -59,7 +59,6 @@ export function Wizard({ options }: { options: Options }) {
 
   const [description, setDescription] = useState('')
   const [postgres, setPostgres] = useState(false)
-  const [storage, setStorage] = useState(false)
   const [objectStorage, setObjectStorage] = useState(false)
   const [litellm, setLitellm] = useState(false)
   const [prometheus, setPrometheus] = useState(false)
@@ -151,7 +150,6 @@ export function Wizard({ options }: { options: Options }) {
               stage,
               description: description.trim(),
               postgres,
-              storage,
               objectStorage,
               litellm,
               prometheus,
@@ -268,12 +266,6 @@ export function Wizard({ options }: { options: Options }) {
                   onChange={setPostgres}
                   label="Postgres"
                   hint="Role + database on the shared cluster, injected as DATABASE_URL."
-                />
-                <Toggle
-                  checked={storage}
-                  onChange={setStorage}
-                  label="Persistent storage"
-                  hint="Bind-mounts a data dir at /app/data. What SQLite and file-backed apps need."
                 />
                 <Toggle
                   checked={objectStorage}

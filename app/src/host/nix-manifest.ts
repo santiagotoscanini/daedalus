@@ -81,7 +81,6 @@ export type ManifestApp = {
   awaitingImage?: boolean
   sourceMode?: SourceMode
   postgres: boolean
-  storage: boolean
   /** A Garage bucket. Optional so an apps.json predating the field still parses. */
   objectStorage?: boolean
   litellm: boolean
@@ -156,7 +155,6 @@ export const manifestApp: Decoder<ManifestApp> = obj({
   awaitingImage: optional(bool, false),
   sourceMode: optional(literal(...SOURCE_MODES), 'registry'),
   postgres: bool,
-  storage: bool,
   objectStorage: optional(bool, false),
   litellm: bool,
   prometheus: bool,

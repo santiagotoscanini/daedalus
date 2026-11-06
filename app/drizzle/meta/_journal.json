@@ -211,6 +211,13 @@
       "when": 1793988937877,
       "tag": "0029_object_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793990164915,
+      "tag": "0030_drop_app_storage",
+      "breakpoints": true
     }
   ]
 }

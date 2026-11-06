@@ -51,7 +51,6 @@
 #
 # Optional features (opt-in; `false` by default):
 #   - postgres.enable   → injects DATABASE_URL (+ POSTGRES_*)
-#   - storage.enable    → bind-mounts a persistent data dir at /app/data
 #   - objectStorage.enable → a private S3 bucket on the shared Garage store:
 #                         S3_ENDPOINT/REGION/BUCKET + the app's own key
 #   - litellm.enable    → injects LITELLM_BASE_URL (fleet.litellmBaseUrl)
@@ -79,13 +78,12 @@
 # this box chose. Adding SSO to an app is this one option: the secret is
 # generated the first time the client is declared.
 #
-# Convention enforced #2: an app that needs a disk writes it to
-# /app/data. Same reasoning as the port — we build the images, so we
-# pick the path. `storage.enable = true` bind-mounts
-# <stateRoot>/apps/<name>/data there; fleet.statePaths pre-creates it as the operator, which is
-# what container UID 0 maps to under rootless podman. This is what
-# SQLite / file-backed apps need; Postgres apps use postgres.enable
-# instead, and an app can use both.
+# Convention enforced #2: an app gets no persistent disk. Records live in
+# Postgres (postgres.enable), files in its bucket (objectStorage.enable,
+# modules/garage), and the container's own filesystem is scratch that the
+# next deploy discards. Same reasoning as the port — we build the images,
+# so the rule is ours: a host directory per app would be state outside
+# both stores, snapshotted by accident and invisible to the control plane.
 #
 # Environment plumbing — fully declarative:
 #
@@ -134,11 +132,6 @@ let
   # `fleet.appBuckets` while that option is still being assembled from them.
   appBucketEnvBase = "${config.fleet.machineState}/garage";
 
-  # Host tree backing `storage.enable`. One dir per app underneath —
-  # and the app-adjacent state other stacks own (an app's VPN tunnel
-  # state, daedalus's apply/) nests in the same per-app dirs.
-  appsDataRoot = "${config.fleet.stateRoot}/apps";
-
   # Last deploy result per app, `<digest> ok|failed`; a sibling
   # `<name>.pull` marker file means pulls are currently failing (the two
   # axes are independent — see deploy.sh). systemd owns the dir
@@ -185,9 +178,6 @@ let
 
       objectStorageEnabled = app.objectStorage.enable;
       bucketEnvFile = "${appBucketEnvBase}/${name}/env";
-
-      storageEnabled = app.storage.enable;
-      storageHostPath = "${appsDataRoot}/${name}/data";
 
       # The relay password, rendered for this container alone (tmpfs).
       mailEnabled = app.mail.enable;
@@ -337,8 +327,6 @@ let
         appDbEnvFile
         objectStorageEnabled
         bucketEnvFile
-        storageEnabled
-        storageHostPath
         mailEnabled
         mailEnvDir
         mailEnvFile
@@ -532,15 +520,13 @@ let
     };
 
   # The durable things an app owns even before it runs: its database and
-  # its data dir.
+  # its bucket.
   appData =
     {
       name,
       postgresEnabled,
       objectStorageEnabled,
       egressEnabled,
-      storageEnabled,
-      storageHostPath,
       ...
     }:
     {
@@ -568,16 +554,6 @@ let
         "${name}" = {
           reach = if egressEnabled then "hostPort" else "bridge";
         };
-      };
-
-      # Persistent data dir — the fleet-standard statePaths convention
-      # (uid 0 default = container root = the operator; state-paths.service
-      # sorts paths so parents are created before children, and every
-      # podman unit orders after it).
-      fleet.statePaths = lib.optionalAttrs storageEnabled {
-        "${appsDataRoot}" = { };
-        "${appsDataRoot}/${name}" = { };
-        "${storageHostPath}" = { };
       };
     };
 
@@ -879,8 +855,6 @@ let
       hostname,
       publicUrl,
       dev,
-      storageEnabled,
-      storageHostPath,
       appSecretsFile,
       postgresEnabled,
       appDbEnvFile,
@@ -902,19 +876,11 @@ let
           {
             inherit (app) image;
 
-            # A hostPath on another dataset additionally picks up RequiresMountsFor for
-            # free — podman.nix extracts it from `volumes`, closing the
-            # cold-boot race where the container starts before the ZFS
-            # dataset mounts and writes into the empty underlay.
-            #
             # The dev-mode mount goes at /app, where the image's entrypoint looks
             # for a tree: the live checkout, not a copy, which is what lets
-            # the dev server watch files edited on the host. /app/data (storage)
-            # nests inside it when both are on; podman orders nested mounts by
-            # path depth, so the inner one still wins.
-            volumes =
-              lib.optional dev "${app.source.path}:/app"
-              ++ lib.optional storageEnabled "${storageHostPath}:/app/data";
+            # the dev server watch files edited on the host. Nothing else is
+            # mounted: an app keeps no host directory (convention #2).
+            volumes = lib.optional dev "${app.source.path}:/app";
 
             environmentFiles = [
               appSecretsFile
@@ -1060,7 +1026,6 @@ in
           "bridgeMemberships"
           "monitoredJobs"
           "ssoClients"
-          "statePaths"
           "webApps"
           "prometheusScrapes"
           "grafanaDashboardsByFolder"
@@ -1114,10 +1079,6 @@ in
         ssoClients = attrsOpt [
           "fleet"
           "ssoClients"
-        ];
-        statePaths = attrsOpt [
-          "fleet"
-          "statePaths"
         ];
         webApps = attrsOpt [
           "fleet"

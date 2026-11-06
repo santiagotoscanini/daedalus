@@ -93,7 +93,6 @@ function app(name: string, over: Rec = {}): Rec {
     image: null,
     hostname: null,
     postgres: false,
-    storage: false,
     objectStorage: false,
     litellm: false,
     prometheus: false,

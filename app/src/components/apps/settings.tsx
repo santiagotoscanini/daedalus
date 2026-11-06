@@ -17,15 +17,12 @@ export function Settings({
   patch,
   takenHostnames,
   reservedLabels,
-  stateRoot,
 }: {
   app: AppRecord
   readOnly: boolean
   patch: (p: AppPatch) => void
   takenHostnames: NonNullable<LoaderData>['takenHostnames']
   reservedLabels: NonNullable<LoaderData>['reservedLabels']
-  /** `fleet.stateRoot` on the host, from the site export. */
-  stateRoot: string
 }) {
   const site = useSite()
   return (
@@ -39,15 +36,6 @@ export function Settings({
           }}
           label="Postgres"
           hint="Role + database on the shared cluster. Turning it off leaves the database in place."
-        />
-        <Toggle
-          checked={app.storage}
-          disabled={readOnly}
-          onChange={(v) => {
-            patch({ storage: v })
-          }}
-          label="Persistent storage"
-          hint="Bind-mounts a data dir at /app/data."
         />
         <Toggle
           checked={app.objectStorage}
@@ -301,13 +289,7 @@ export function Settings({
       {!readOnly && app.sourceMode !== 'local' && <BuildSettings app={app} />}
 
       {!readOnly && (
-        <RemovePanel
-          name={app.name}
-          postgres={app.postgres}
-          storage={app.storage}
-          objectStorage={app.objectStorage}
-          dataDir={`${stateRoot}/apps/${app.name}/data`}
-        />
+        <RemovePanel name={app.name} postgres={app.postgres} objectStorage={app.objectStorage} />
       )}
     </BoardGrid>
   )

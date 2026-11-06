@@ -27,15 +27,11 @@ import { Board } from '../viz'
 export function RemovePanel({
   name,
   postgres,
-  storage,
   objectStorage,
-  dataDir,
 }: {
   name: string
   postgres: boolean
-  storage: boolean
   objectStorage: boolean
-  dataDir: string
 }) {
   const router = useRouter()
   const [confirm, setConfirm] = useState('')
@@ -65,7 +61,6 @@ export function RemovePanel({
             <b>Not removed:</b>{' '}
             {[
               postgres && `the ${name} database and role on the shared cluster`,
-              storage && dataDir,
               objectStorage &&
                 `the ${name} bucket, its objects and its access key on the object store`,
               'its generated secrets in the box’s machine state',

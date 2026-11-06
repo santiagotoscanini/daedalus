@@ -388,7 +388,6 @@ export type AppFacts = Pick<RepoFacts, 'hasDatabase' | 'railpackEnv' | 'register
  */
 export type AppRegistration = {
   postgres: boolean
-  storage: boolean
   objectStorage: boolean
   litellm: boolean
   prometheus: boolean
@@ -416,7 +415,6 @@ export function appFacts(app: AppRegistration): AppFacts {
     railpackEnv: app.railpackEnv,
     registeredAsServer:
       app.postgres ||
-      app.storage ||
       app.objectStorage ||
       app.litellm ||
       app.prometheus ||
