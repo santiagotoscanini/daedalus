@@ -123,6 +123,9 @@ export const apps = pgTable(
 
     postgres: boolean('postgres').notNull().default(false),
     storage: boolean('storage').notNull().default(false),
+    // A private bucket on the shared Garage object store (`objectStorage.enable`):
+    // S3_* and the app's own access key in an env file (nix/modules/garage).
+    objectStorage: boolean('object_storage').notNull().default(false),
     litellm: boolean('litellm').notNull().default(false),
     prometheus: boolean('prometheus').notNull().default(false),
     // The box's mail relay (`mail.enable`): SMTP_* + MAIL_TO, the

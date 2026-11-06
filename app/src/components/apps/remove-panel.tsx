@@ -28,11 +28,13 @@ export function RemovePanel({
   name,
   postgres,
   storage,
+  objectStorage,
   dataDir,
 }: {
   name: string
   postgres: boolean
   storage: boolean
+  objectStorage: boolean
   dataDir: string
 }) {
   const router = useRouter()
@@ -64,6 +66,8 @@ export function RemovePanel({
             {[
               postgres && `the ${name} database and role on the shared cluster`,
               storage && dataDir,
+              objectStorage &&
+                `the ${name} bucket, its objects and its access key on the object store`,
               'its generated secrets in the box’s machine state',
               `any site/vault/apps/${name}-env.sops`,
               'the GitHub repo and its images in the box’s registry',

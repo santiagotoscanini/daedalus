@@ -1,0 +1,55 @@
+# Garage's configuration — rendered into the store by modules/garage/garage.nix,
+# which substitutes the @…@ placeholders. Nothing secret lives here: the RPC
+# secret and the metrics token arrive as GARAGE_RPC_SECRET and
+# GARAGE_METRICS_TOKEN from the cluster env file in the machine state.
+#
+# One node, one dataset. Metadata and blocks sit side by side under the same
+# ZFS dataset on purpose: one filesystem snapshot then captures both at the
+# same instant, and a restore never pairs metadata with blocks that garbage
+# collection has already deleted.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+
+# SQLite, not the LMDB default: LMDB can corrupt after an unclean shutdown and
+# its 511-byte key limit caps object keys at 479 bytes. SQLite runs in WAL
+# mode, which a ZFS snapshot captures as a crash-consistent image.
+db_engine = "sqlite"
+# synchronous=NORMAL for the metadata, an fsync per block for the data: an
+# acknowledged PUT survives a power cut.
+metadata_fsync = true
+data_fsync = true
+# Belt and braces on top of ZFS snapshots: Garage's own compacted copy of the
+# metadata database, the two newest kept under <metadata_dir>/snapshots.
+metadata_auto_snapshot_interval = "6h"
+
+replication_factor = 1
+consistency_mode = "consistent"
+
+# The filesystem compresses (lz4, with early abort on incompressible data);
+# Garage's zstd would run on every block and keep the result even when it is
+# larger — and what apps store here is mostly JPEG, WebP and audio.
+compression_level = "none"
+
+# With one copy of each block Garage's scrub can only detect damage, never
+# repair it; ZFS already checksums every read and scrubs the pool monthly.
+disable_scrub = true
+
+# RPC is the cluster's root door (`garage json-api` needs no token over it), so
+# it binds the container's loopback only. The CLI run through `podman exec`
+# dials 127.0.0.1 on this port when rpc_public_addr is unset.
+rpc_bind_addr = "127.0.0.1:3901"
+
+[s3_api]
+api_bind_addr = "0.0.0.0:3900"
+s3_region = "@region@"
+# No root_domain: path-style addressing only. Every published host is one label
+# under the base domain, which a `<bucket>.s3.<domain>` name would not be.
+# Used when Garage builds a URL itself (a PostObject Location).
+public_endpoint = "https://@publicHost@"
+public_endpoint_path_style = true
+
+[admin]
+api_bind_addr = "0.0.0.0:3903"
+# /metrics answers only with the metrics token. /health stays open, by design.
+metrics_require_token = true

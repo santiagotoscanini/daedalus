@@ -237,6 +237,29 @@ in
               # ALTER ROLE <name> SET statement_timeout = '30s'; etc.
             };
 
+            # A private S3 bucket per app, materialized by modules/garage/.
+            objectStorage = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  When true, materialize a bucket `<name>` on the shared
+                  Garage object store via modules/garage/, with an access key
+                  that may read, write and own that bucket and nothing else.
+                  The container joins the `garage-net` bridge (or, in `egress`
+                  mode, dials the store's host port) and receives S3_ENDPOINT,
+                  S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID and
+                  S3_SECRET_ACCESS_KEY (plus the same values under the AWS
+                  SDK's own names) via env file. See modules/garage/README.md.
+
+                  This is where an app keeps files: uploads, rendered
+                  derivatives, generated media. Records stay in Postgres, and
+                  scratch space is the container's own filesystem, which a
+                  redeploy discards.
+                '';
+              };
+            };
+
             # Persistent disk for file-backed apps (SQLite, caches, uploads).
             storage = {
               enable = lib.mkOption {

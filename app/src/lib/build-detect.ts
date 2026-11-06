@@ -389,6 +389,7 @@ export type AppFacts = Pick<RepoFacts, 'hasDatabase' | 'railpackEnv' | 'register
 export type AppRegistration = {
   postgres: boolean
   storage: boolean
+  objectStorage: boolean
   litellm: boolean
   prometheus: boolean
   /** "none" | "proxy" | "native" — native means the app is the OIDC client. */
@@ -416,6 +417,7 @@ export function appFacts(app: AppRegistration): AppFacts {
     registeredAsServer:
       app.postgres ||
       app.storage ||
+      app.objectStorage ||
       app.litellm ||
       app.prometheus ||
       app.authMode === 'native' ||

@@ -112,6 +112,7 @@ const newApp = (over: Partial<Parameters<typeof createApp>[0]> = {}) => ({
   stage: 'live' as const,
   postgres: false,
   storage: false,
+  objectStorage: false,
   litellm: false,
   prometheus: false,
   image: null,

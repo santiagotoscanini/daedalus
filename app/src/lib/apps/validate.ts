@@ -43,6 +43,7 @@ export type NewApp = {
   description: string
   postgres: boolean
   storage: boolean
+  objectStorage: boolean
   litellm: boolean
   prometheus: boolean
   /** null = <registry host>/<name>:latest, the platform default. */
@@ -58,7 +59,9 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
     if (typeof v !== 'string') throw new Error(`${k} must be a string`)
     return v
   }
-  const bool = (k: 'postgres' | 'storage' | 'litellm' | 'prometheus'): boolean => {
+  const bool = (
+    k: 'postgres' | 'storage' | 'objectStorage' | 'litellm' | 'prometheus',
+  ): boolean => {
     const v = input[k]
     if (typeof v !== 'boolean') throw new Error(`${k} must be a boolean`)
     return v
@@ -78,6 +81,7 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
     description: str('description'),
     postgres: bool('postgres'),
     storage: bool('storage'),
+    objectStorage: bool('objectStorage'),
     litellm: bool('litellm'),
     prometheus: bool('prometheus'),
     image: strOrNull('image'),
@@ -107,6 +111,7 @@ export const EDITABLE_FIELDS = [
   'description',
   'postgres',
   'storage',
+  'objectStorage',
   'litellm',
   'prometheus',
   'mail',
@@ -236,6 +241,7 @@ export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
         break
       case 'postgres':
       case 'storage':
+      case 'objectStorage':
       case 'litellm':
       case 'prometheus':
       case 'mail':

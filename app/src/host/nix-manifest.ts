@@ -82,6 +82,8 @@ export type ManifestApp = {
   sourceMode?: SourceMode
   postgres: boolean
   storage: boolean
+  /** A Garage bucket. Optional so an apps.json predating the field still parses. */
+  objectStorage?: boolean
   litellm: boolean
   prometheus: boolean
   /** The mail relay. Optional so an apps.json predating the field still parses. */
@@ -155,6 +157,7 @@ export const manifestApp: Decoder<ManifestApp> = obj({
   sourceMode: optional(literal(...SOURCE_MODES), 'registry'),
   postgres: bool,
   storage: bool,
+  objectStorage: optional(bool, false),
   litellm: bool,
   prometheus: bool,
   mail: optional(bool, false),

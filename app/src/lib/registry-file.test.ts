@@ -6,6 +6,7 @@ const APP: ManifestApp = {
   stage: 'lab',
   postgres: true,
   storage: false,
+  objectStorage: false,
   litellm: false,
   prometheus: false,
   hostname: null,

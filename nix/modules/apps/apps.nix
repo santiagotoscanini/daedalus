@@ -52,6 +52,8 @@
 # Optional features (opt-in; `false` by default):
 #   - postgres.enable   → injects DATABASE_URL (+ POSTGRES_*)
 #   - storage.enable    → bind-mounts a persistent data dir at /app/data
+#   - objectStorage.enable → a private S3 bucket on the shared Garage store:
+#                         S3_ENDPOINT/REGION/BUCKET + the app's own key
 #   - litellm.enable    → injects LITELLM_BASE_URL (fleet.litellmBaseUrl)
 #   - prometheus.enable → /metrics scrape + per-app Grafana dashboard
 #   - mail.enable       → the box's mail relay: SMTP_HOST/PORT/USER +
@@ -90,6 +92,7 @@
 #   environmentFiles = [
 #     <machineState>/apps/<name>/env    # always (AUTH_SECRET)
 #     <machineState>/app-db/<name>/env  # when postgres=true
+#     <machineState>/garage/<name>/env  # when objectStorage=true (S3_*)
 #     /run/app-<name>-smtp/env          # when mail.enable (SMTP_PASSWORD)
 #     <user-supplied per-app overlays>             # via .environmentFiles
 #   ];
@@ -126,6 +129,10 @@ let
 
   appSecretsBase = "${config.fleet.machineState}/apps";
   appDbEnvBase = "${config.fleet.machineState}/app-db";
+  # The bucket bootstrap's env files (modules/garage) — the same path that
+  # module writes, derived here the way appDbEnvBase is, so no fragment reads
+  # `fleet.appBuckets` while that option is still being assembled from them.
+  appBucketEnvBase = "${config.fleet.machineState}/garage";
 
   # Host tree backing `storage.enable`. One dir per app underneath —
   # and the app-adjacent state other stacks own (an app's VPN tunnel
@@ -175,6 +182,9 @@ let
 
       postgresEnabled = app.postgres.enable;
       appDbEnvFile = "${appDbEnvBase}/${name}/env";
+
+      objectStorageEnabled = app.objectStorage.enable;
+      bucketEnvFile = "${appBucketEnvBase}/${name}/env";
 
       storageEnabled = app.storage.enable;
       storageHostPath = "${appsDataRoot}/${name}/data";
@@ -325,6 +335,8 @@ let
         appSecretsFile
         postgresEnabled
         appDbEnvFile
+        objectStorageEnabled
+        bucketEnvFile
         storageEnabled
         storageHostPath
         mailEnabled
@@ -353,6 +365,7 @@ let
       name,
       app,
       egressEnabled,
+      objectStorageEnabled,
       proxyAuth,
       nativeAuth,
       dev,
@@ -361,6 +374,10 @@ let
     }:
     {
       assertions = [
+        {
+          assertion = objectStorageEnabled -> config.fleet.modules.garage.enable;
+          message = "fleet.apps.${name}: `objectStorage.enable` needs the object store — enable fleet.modules.garage.";
+        }
         {
           assertion = !(egressEnabled && app.egress.hostPort == null);
           message = "fleet.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app.";
@@ -520,6 +537,7 @@ let
     {
       name,
       postgresEnabled,
+      objectStorageEnabled,
       egressEnabled,
       storageEnabled,
       storageHostPath,
@@ -538,6 +556,15 @@ let
       # state it as well would be a second fact that can disagree with
       # the first.
       fleet.appDatabases = lib.optionalAttrs postgresEnabled {
+        "${name}" = {
+          reach = if egressEnabled then "hostPort" else "bridge";
+        };
+      };
+
+      # Same delegation for the bucket (modules/garage): the key's presence
+      # makes the bucket, the access key and the env file, and `reach` is
+      # derived from egress for the reason given above.
+      fleet.appBuckets = lib.optionalAttrs objectStorageEnabled {
         "${name}" = {
           reach = if egressEnabled then "hostPort" else "bridge";
         };
@@ -566,6 +593,7 @@ let
       egressEnabled,
       isolatedAuth,
       postgresEnabled,
+      objectStorageEnabled,
       proxyAuth,
       ...
     }:
@@ -584,7 +612,8 @@ let
       # platform/isolation.nix).
       fleet.bridgeMemberships."${cName}" =
         lib.optional (exposed && !egressEnabled && !isolatedAuth) "traefik"
-        ++ lib.optional (postgresEnabled && !egressEnabled) "app-db";
+        ++ lib.optional (postgresEnabled && !egressEnabled) "app-db"
+        ++ lib.optional (objectStorageEnabled && !egressEnabled) "garage";
 
       # Web exposure — hardcoded internal port 3000. Bridge-routed by default
       # (serviceName on traefik-net). In egress mode the app can't ride
@@ -855,6 +884,8 @@ let
       appSecretsFile,
       postgresEnabled,
       appDbEnvFile,
+      objectStorageEnabled,
+      bucketEnvFile,
       mailEnabled,
       mailEnvFile,
       nativeAuth,
@@ -889,6 +920,7 @@ let
               appSecretsFile
             ]
             ++ (lib.optional postgresEnabled appDbEnvFile)
+            ++ (lib.optional objectStorageEnabled bucketEnvFile)
             ++ (lib.optional mailEnabled mailEnvFile)
             ++ app.environmentFiles;
 
@@ -1023,6 +1055,7 @@ in
           "virtualisation"
         ];
         fleet = [
+          "appBuckets"
           "appDatabases"
           "bridgeMemberships"
           "monitoredJobs"
@@ -1062,6 +1095,10 @@ in
       ];
 
       fleet = {
+        appBuckets = attrsOpt [
+          "fleet"
+          "appBuckets"
+        ];
         appDatabases = attrsOpt [
           "fleet"
           "appDatabases"

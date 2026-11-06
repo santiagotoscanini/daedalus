@@ -60,6 +60,7 @@ export function Wizard({ options }: { options: Options }) {
   const [description, setDescription] = useState('')
   const [postgres, setPostgres] = useState(false)
   const [storage, setStorage] = useState(false)
+  const [objectStorage, setObjectStorage] = useState(false)
   const [litellm, setLitellm] = useState(false)
   const [prometheus, setPrometheus] = useState(false)
   const [image, setImage] = useState('')
@@ -151,6 +152,7 @@ export function Wizard({ options }: { options: Options }) {
               description: description.trim(),
               postgres,
               storage,
+              objectStorage,
               litellm,
               prometheus,
               image: image.trim() || null,
@@ -272,6 +274,12 @@ export function Wizard({ options }: { options: Options }) {
                   onChange={setStorage}
                   label="Persistent storage"
                   hint="Bind-mounts a data dir at /app/data. What SQLite and file-backed apps need."
+                />
+                <Toggle
+                  checked={objectStorage}
+                  onChange={setObjectStorage}
+                  label="Object storage"
+                  hint="A private S3 bucket on the box’s Garage store with its own key, injected as S3_*. Where uploads and generated files go."
                 />
                 <Toggle
                   checked={litellm}

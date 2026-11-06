@@ -72,7 +72,7 @@ let
   # concern while being persistent — the bind source is always present.
   containerNames = lib.attrNames config.virtualisation.oci-containers.containers;
 
-  textfileDir = "/var/lib/node-exporter/textfile";
+  inherit (config.fleet.modules.monitoring) textfileDir;
 
   # Where rootless podman puts every container's cgroup. Uniform for all of
   # them (verified: 73/73 scopes sit directly here), so the path can be built
@@ -381,6 +381,19 @@ in
       type = lib.types.bool;
       default = false;
       description = "Prometheus, Grafana and node-exporter.";
+    };
+
+    textfileDir = lib.mkOption {
+      type = lib.types.str;
+      readOnly = true;
+      default = "/var/lib/node-exporter/textfile";
+      description = ''
+        node-exporter's textfile-collector directory. A stack with metrics no
+        exporter of its own publishes writes a `<name>.prom` here (atomically:
+        write a temp file, then rename), as the operator, from inside its own
+        `mkIf fleet.modules.monitoring.enable`. Persistent and outside every
+        snapshotted tree, so a file rewritten every minute churns nothing.
+      '';
     };
 
     envSopsFile = lib.mkOption {

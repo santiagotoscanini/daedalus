@@ -48,6 +48,7 @@ evaluation with the option's name.
 | `app-db` | The shared Postgres cluster (with pgvector), one role and database per tenant, its exporter, a read-only role for the operator's MCP client. | `fleet.images.app-db-exporter` |
 | `cloudflared` | The Cloudflare tunnel — public ingress — and the reconciler that keeps the zone's CNAMEs matching the routes. | `credentialsSopsFile`, `fleet.images.cloudflared` |
 | `factorio` | The headless Factorio server behind OpenFactorioServerManager; the game port is forwarded by the router. | `version` (required), `envSopsFile`, `fleet.images.factorio` |
+| `garage` | Garage, the shared S3 object store: one private bucket and access key per tenant (`fleet.appBuckets`; an app asks with `objectStorage.enable`), a LAN-only S3 route, per-bucket usage metrics; optionally `console`, the garage-ui web console behind its own OIDC client. | `fleet.images.garage`; `console.enable`, `console.authGroups`, `fleet.images.garage-ui` |
 | `gatus` | Outside-in uptime and TLS-expiry probing of every published hostname. | `allowedSubjects` (required), `envSopsFile` (optional), `fleet.images.gatus` |
 | `healthchecks` | Dead-man's-switch monitoring of the scheduled jobs. | `envSopsFile`, `fleet.images.healthchecks` |
 | `logging` | Loki and the alloy shipper. Other stacks contribute `fleet.logStacks`, `fleet.logDrops`, `fleet.logFiles`. | `fleet.images.{loki,alloy}` |
@@ -64,7 +65,7 @@ evaluation with the option's name.
 | `verdaccio` | A private npm mirror; the box's app builds and the control plane's image install through it. | `fleet.images.{verdaccio-openid,verdaccio-openid-builder}` — the two bases its image is built on |
 | `wg-easy` | A WireGuard server and its admin UI; the tunnel port is forwarded by the router, and a peer reaches the forwarded ports and `tunnelHostPorts` at the LAN address. | `envSopsFile`, `fleet.images.wg-easy`; `tunnelHostPorts` (optional) |
 
-The spine — everything above but the leaves (factorio, grocy,
+The spine — everything above but the leaves (factorio, garage, grocy,
 intel-gpu-exporter, metube, myspeed, stirling-pdf, verdaccio, wg-easy) — is
 switched on in `example-host/`, with `stirling-pdf` as the one example
 leaf, so a host made from it is a box with a control plane to log

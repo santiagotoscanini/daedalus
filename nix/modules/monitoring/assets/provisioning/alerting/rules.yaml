@@ -642,6 +642,94 @@ groups:
         labels:
           severity: critical
         isPaused: false
+      # The object store (modules/garage). `cluster_available` is the same
+      # condition Garage's /health answers 503 on: every app's files are
+      # unreachable while it is 0. No data = the module is off, which is OK.
+      - uid: object-store-unavailable-1
+        title: Object Store Unavailable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: cluster_available{job="garage"}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Garage has reported its cluster unavailable for 5 minutes. Every app with object storage is failing its reads and writes. Check `podman logs garage` and `podman exec garage /garage status`.
+          summary: The object store is unavailable
+        labels:
+          severity: critical
+        isPaused: false
+      # Blocks Garage failed to read back or resync. With one copy of each
+      # block there is no other node to fetch it from, so a non-zero count is
+      # an object that cannot be served: upstream's "SHOULD BE ZERO".
+      - uid: object-store-block-errors-1
+        title: Object Store Block Errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: block_resync_errored_blocks{job="garage"}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Garage holds {{ $values.A }} block(s) it cannot read or resync. `podman exec garage /garage block list-errors` names them; ZFS (`zpool status -v`) says whether the disk is the cause.
+          summary: The object store has unreadable blocks
+        labels:
+          severity: critical
+        isPaused: false
   - orgId: 1
     name: Predictive Alerts
     folder: System

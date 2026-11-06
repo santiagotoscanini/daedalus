@@ -50,6 +50,15 @@ export function Settings({
           hint="Bind-mounts a data dir at /app/data."
         />
         <Toggle
+          checked={app.objectStorage}
+          disabled={readOnly}
+          onChange={(v) => {
+            patch({ objectStorage: v })
+          }}
+          label="Object storage"
+          hint="A private S3 bucket on the box’s Garage store, with its own key, injected as S3_*. Turning it off leaves the bucket and its objects in place."
+        />
+        <Toggle
           checked={app.litellm}
           disabled={readOnly}
           onChange={(v) => {
@@ -296,6 +305,7 @@ export function Settings({
           name={app.name}
           postgres={app.postgres}
           storage={app.storage}
+          objectStorage={app.objectStorage}
           dataDir={`${stateRoot}/apps/${app.name}/data`}
         />
       )}

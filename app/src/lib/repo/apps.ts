@@ -178,6 +178,7 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
     hostname,
     postgres: input.postgres,
     storage: input.storage,
+    objectStorage: input.objectStorage,
     litellm: input.litellm,
     prometheus: input.prometheus,
     authMode: 'native',

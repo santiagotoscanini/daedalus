@@ -105,6 +105,33 @@ describe('versionGap', () => {
     expect(gap.behind).toEqual([])
   })
 
+  it('reads a host/owner/name repo from that Forgejo forge, unauthenticated', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => [
+        { tag_name: 'v2.5.0', body: '- fixed a thing' },
+        { tag_name: 'v2.4.1', body: '' },
+      ],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const gap = await versionGap('git.example.org/team/store', '2.4.1')
+    expect(gap.behind).toEqual(['2.5.0'])
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://git.example.org/api/v1/repos/team/store/releases?limit=50')
+    expect(init.headers).toEqual({ Accept: 'application/json' })
+    // No html_url on the stub: the fallback is the forge's own page.
+    expect(gap.releases[0]?.url).toBe('https://git.example.org/team/store/releases')
+  })
+
+  it('names the forge that refused, not GitHub', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, json: async () => [] })),
+    )
+    const gap = await versionGap('git.example.org/team/refused', '1.0.0')
+    expect(gap.note).toBe('git.example.org did not answer')
+  })
+
   it('lists the newest releases when nothing can be named, only if asked', async () => {
     stubReleases([
       { tag_name: 'v3.1.0', body: '- x' },

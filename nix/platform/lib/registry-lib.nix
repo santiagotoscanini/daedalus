@@ -47,6 +47,9 @@
 
       postgres.enable = a.postgres;
       storage.enable = a.storage;
+      # `or` like `mail` below: an apps.json written before the field still
+      # evaluates.
+      objectStorage.enable = a.objectStorage or false;
       litellm.enable = a.litellm;
       prometheus.enable = a.prometheus;
       # `or` like `resources` below: an apps.json written before the field

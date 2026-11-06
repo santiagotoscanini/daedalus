@@ -120,6 +120,8 @@
         "apps/declarations.nix"
         "cloudflared/cloudflared.nix"
         "factorio/factorio.nix"
+        "garage/console.nix"
+        "garage/garage.nix"
         "gatus/gatus.nix"
         "grocy/grocy.nix"
         "healthchecks/healthchecks.nix"

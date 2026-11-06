@@ -7,6 +7,7 @@
       "awaitingImage": true,
       "postgres": true,
       "storage": false,
+      "objectStorage": false,
       "litellm": false,
       "prometheus": false,
       "mail": false,

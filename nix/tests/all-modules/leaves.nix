@@ -17,6 +17,11 @@
         version = "0.0.0";
         envSopsFile = ./sops/factorio/env.sops;
       };
+      # The object store: no tenant here, so the store alone evaluates.
+      garage = {
+        enable = true;
+        console.enable = true;
+      };
       grocy.enable = true;
       intel-gpu-exporter.enable = true;
       metube = {
@@ -32,6 +37,8 @@
     };
     images = {
       factorio = "docker.io/ofsm/ofsm:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+      garage = "docker.io/dxflrs/garage:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+      garage-ui = "docker.io/noooste/garage-ui:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
       grocy = "docker.io/linuxserver/grocy:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
       intel-gpu-exporter = "ghcr.io/clambin/intel-gpu-exporter:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
       metube = "ghcr.io/alexta69/metube:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";

@@ -127,12 +127,37 @@ export async function githubHeaders(): Promise<Record<string, string>> {
 
 const cache = swrCache({ ttlMs: TTL_MS, retryMs: RETRY_MS })
 
+/**
+ * Where a repo's releases live. `owner/name` is GitHub. `host/owner/name` is a
+ * Forgejo or Gitea forge — Garage publishes on its own, mirroring only tags
+ * to GitHub — whose `/api/v1/…/releases` answers the same JSON shape, with no
+ * key and no rate limit worth a token.
+ */
+function forge(repo: string): { api: string; web: string; name: string; github: boolean } {
+  const [host, owner, name] = repo.split('/')
+  if (name === undefined) {
+    return {
+      api: `https://api.github.com/repos/${repo}/releases?per_page=60`,
+      web: `https://github.com/${repo}/releases`,
+      name: 'GitHub',
+      github: true,
+    }
+  }
+  return {
+    api: `https://${host}/api/v1/repos/${owner}/${name}/releases?limit=50`,
+    web: `https://${repo}/releases`,
+    name: host ?? repo,
+    github: false,
+  }
+}
+
 /** A repo's published releases, newest first, at most once per `TTL_MS`. */
 export async function releases(repo: string): Promise<GhRelease[] | null> {
   return cache.get(`releases:${repo}`, async (): Promise<GhRelease[] | null> => {
+    const where = forge(repo)
     try {
-      const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=60`, {
-        headers: await githubHeaders(),
+      const res = await fetch(where.api, {
+        headers: where.github ? await githubHeaders() : { Accept: 'application/json' },
         signal: AbortSignal.timeout(6_000),
       })
       if (res.ok) return (await res.json()) as GhRelease[]
@@ -229,11 +254,14 @@ export async function versionGap(
   opts: GapOptions = {},
 ): Promise<VersionGap> {
   const list = await releases(repo)
+  const where = forge(repo)
   if (list === null) {
     return {
       ...EMPTY_GAP,
       installed: running,
-      note: 'GitHub did not answer — its unauthenticated rate limit is 60 requests an hour',
+      note: where.github
+        ? 'GitHub did not answer — its unauthenticated rate limit is 60 requests an hour'
+        : `${where.name} did not answer`,
     }
   }
 
@@ -311,7 +339,7 @@ export async function versionGap(
       (r): ReleaseNote => ({
         version: r.version,
         date: (r.published_at ?? '').slice(0, 10),
-        url: r.html_url ?? `https://github.com/${repo}/releases`,
+        url: r.html_url ?? where.web,
         ...parseBody(r.body ?? ''),
       }),
     )

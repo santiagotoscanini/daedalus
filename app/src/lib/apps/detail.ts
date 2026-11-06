@@ -112,6 +112,7 @@ export async function loadAppDetail(ctx: Ctx, data: { name: string }) {
       hasIcon,
       postgres: record.postgres,
       storage: record.storage,
+      objectStorage: record.objectStorage,
       litellm: record.litellm,
       prometheus: record.prometheus,
       mail: record.mail,
