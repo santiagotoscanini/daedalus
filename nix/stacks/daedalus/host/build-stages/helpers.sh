@@ -223,21 +223,34 @@ read_work_json() {
     jq -e 'type == "object"' "$2" >/dev/null 2>&1
 }
 
-# Kill anything the build user still runs inside this unit. Railpack's mise
-# reads the repository's own mise config (spike B12); nothing it starts may
-# outlive the stage that started it and sit beside the registry credential.
+# Kill anything the build user still runs inside this unit, and wait until it
+# is gone. Railpack's mise reads the repository's own mise config (spike B12);
+# nothing it starts may outlive the stage that started it and sit beside the
+# registry credential. The wait matters: SIGKILL lands asynchronously, and a
+# process still dying holds its cwd and open files, so an unmount right after
+# the kill found the mise cache busy and failed a build. A cgroup v2
+# `cgroup.procs` no longer lists a zombie, which has released its files by
+# then. Bounded at 5 s; the caller's own check reports anything left.
 # Skipped when the agent itself runs as the build user (the test harness).
 reap_build_processes() {
-  local cg pid uid
+  local cg pid uid alive tries=0
   uid="$(id -u "$BUILD_USER" 2>/dev/null)" || return 0
   [ "$uid" != "$(id -u)" ] || return 0
   cg="$(sed -n 's/^0:://p' /proc/self/cgroup)"
   [ -n "$cg" ] && [ -r "/sys/fs/cgroup$cg/cgroup.procs" ] || return 0
-  while read -r pid; do
-    if [ "$(stat -c %u "/proc/$pid" 2>/dev/null)" = "$uid" ]; then
-      kill -KILL "$pid" 2>/dev/null || true
-    fi
-  done <"/sys/fs/cgroup$cg/cgroup.procs"
+  while :; do
+    alive=0
+    while read -r pid; do
+      if [ "$(stat -c %u "/proc/$pid" 2>/dev/null)" = "$uid" ]; then
+        kill -KILL "$pid" 2>/dev/null || true
+        alive=1
+      fi
+    done <"/sys/fs/cgroup$cg/cgroup.procs"
+    [ "$alive" = 1 ] || return 0
+    tries=$((tries + 1))
+    [ "$tries" -lt 50 ] || return 0
+    sleep 0.1
+  done
 }
 
 # ── Railpack's mise cache, one per app ────────────────────────────────────
