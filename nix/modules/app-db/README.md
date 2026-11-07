@@ -217,7 +217,7 @@ deviation in the app's declaration when it happens.
 nix/modules/app-db/         (the engine)
 ├── app-db.nix          # shared pg + registry + per-app bootstrap units
 ├── exporter.nix        # app-db-exporter (postgres_exporter) + dashboard
-├── claude-ro.nix       # read-only role for the operator's MCP client
+├── claude-ro.nix       # read-only role for an MCP server (readOnlyRole.enable); password minted on the box
 ├── README.md           # this file
 └── assets/
     ├── bootstrap.sh    # per-app role/db SQL, concatenated into the units

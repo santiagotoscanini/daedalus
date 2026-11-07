@@ -1,5 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { imageTag } from '../../../lib/dashboard/images'
 import { loadMailRelay, type MailRelay } from '../../../lib/dashboard/mail-relay'
 import { basicAuth, getJson } from '../../../lib/http'
 
@@ -21,6 +22,8 @@ export type AlertsData = {
   /** The relay itself, read back from what it logged. */
   mail: MailRelay
   gap: VersionGap
+  /** The read-only MCP server over Grafana, when the host runs one: mcp-grafana. */
+  mcp: { version: string | null; gap: VersionGap } | null
 }
 
 type GrafanaRule = {
@@ -99,5 +102,14 @@ export async function loadAlerts(ctx: Ctx): Promise<AlertsData> {
     },
     delivery: { contactPoints: contacts?.length ?? null, mail: true },
     mail,
+    mcp: await mcpServer(),
   }
+}
+
+/** The read-only MCP server's pin, or null on a host that runs none. */
+async function mcpServer(): Promise<AlertsData['mcp']> {
+  const version = await imageTag('mcp-grafana')
+  return version === null
+    ? null
+    : { version, gap: await versionGap('grafana/mcp-grafana', version) }
 }

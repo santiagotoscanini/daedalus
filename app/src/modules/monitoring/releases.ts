@@ -14,4 +14,5 @@ export const releases: Record<string, ReleaseSource> = {
   alloy: { repo: 'grafana/alloy' },
   gatus: { repo: 'TwiN/gatus' },
   healthchecks: { repo: 'healthchecks/healthchecks', opts: { tag: TWO_OR_THREE } },
+  'mcp-grafana': { repo: 'grafana/mcp-grafana' },
 }

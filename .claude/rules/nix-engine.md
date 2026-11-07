@@ -116,7 +116,7 @@ the key fails eval):
 - `site/apps.json` must exist (`fleet.registry.file`); `site/nodes.json` is optional and becomes `fleet.nodes` (`platform/nodes.nix`: the approved machines by id, name and what each offers; never a MAC or an address — the control plane binds MAC to name at runtime through the `nodes-dhcp` root verb and the resolver's `dhcp-hostsdir`).
 
 Optional, null/empty by default, host-defined when wanted:
-`fleet.claude.mcpSopsFile`, `fleet.hcPing.keySopsFile`,
+`fleet.claude.mcpSopsFile`, `fleet.claude.mcpServers`, `fleet.hcPing.keySopsFile`,
 `fleet.zfs.datasets` (empty switches platform/zfs.nix off), `fleet.zfs.arcMaxBytes`,
 `fleet.backup.replications`, `fleet.ddns.enable` (platform/ddclient),
 `fleet.autoupgrade.inputs`, `fleet.upgradeGuard.*` (checks, criticalContainers,

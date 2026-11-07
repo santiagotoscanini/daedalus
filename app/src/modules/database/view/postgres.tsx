@@ -125,6 +125,22 @@ export function PostgresView({ d }: { d: Postgres }) {
           }
         />
 
+        {d.mcp !== null && (
+          <Changelog
+            gap={d.mcp.gap}
+            span={12}
+            aside={<span className={NOTE}>crystaldba/postgres-mcp</span>}
+            foot={
+              <p className={FOOT}>
+                The read-only MCP server Claude reads the cluster through, behind the LLM gateway.
+                It signs in as <span className={MONO}>claude_ro</span>, a role that can read every
+                database except a private app&rsquo;s and write none, so the guarantee is the
+                database&rsquo;s rather than the client&rsquo;s.
+              </p>
+            }
+          />
+        )}
+
         <LogBoard
           source={{ stack: 'app-db' }}
           title="Cluster logs"
@@ -135,6 +151,22 @@ export function PostgresView({ d }: { d: Postgres }) {
               role: 'what creates a tenant’s role and database',
               note: 'Materialises one role, one database and one env file per fleet.appDatabases entry, generating the password on the box rather than in the store. An app that suddenly cannot connect after being declared is usually this not having run. Every tenant is ordered after it, and after podman-pg itself, so a mass restart re-queues them.',
             },
+            ...(d.mcp === null
+              ? []
+              : [
+                  {
+                    source: { container: 'mcp-app-db' },
+                    label: 'Read-only MCP',
+                    role: 'the MCP server Claude reads the cluster through',
+                    note: 'postgres-mcp in restricted mode, behind the LLM gateway, which hands it to one virtual key. A connection error here is usually the claude_ro role or its password, which the unit beside it converges.',
+                  },
+                  {
+                    source: { unit: 'app-db-claude-ro.service' },
+                    label: 'Read-only role',
+                    role: 'what creates claude_ro and its grants',
+                    note: 'Mints the role’s password on the box the first time, then grants read on everything and CONNECT on every database but a private app’s. A database created since its last run is not readable until it runs again.',
+                  },
+                ]),
           ]}
         />
       </BoardGrid>

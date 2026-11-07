@@ -1,5 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
-import type { VersionGap } from '../../../lib/dashboard/github'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { imageTag } from '../../../lib/dashboard/images'
 import { postgresGap } from '../../../lib/dashboard/postgres'
 
 /* ── Postgres ─────────────────────────────────────────────────────────── */
@@ -36,6 +37,8 @@ export type PostgresData = {
   up: boolean | null
   /** The release gap, from postgresql.org rather than GitHub — lib/dashboard/postgres.ts says why. */
   gap: VersionGap
+  /** The read-only MCP server over the cluster (role claude_ro), when the host runs one: mcp-app-db. */
+  mcp: { version: string | null; gap: VersionGap } | null
 }
 
 export async function loadPostgres(ctx: Ctx): Promise<PostgresData> {
@@ -104,6 +107,7 @@ export async function loadPostgres(ctx: Ctx): Promise<PostgresData> {
     version,
     gap: await postgresGap(version),
     up: up === null ? null : up === 1,
+    mcp: await mcpServer(),
   }
 }
 
@@ -111,4 +115,12 @@ async function pgVersion(ctx: Ctx): Promise<string | null> {
   const rows = await ctx.prom.vector('pg_static')
   const v = rows[0]?.metric.short_version ?? rows[0]?.metric.version ?? null
   return v === null ? null : v.split(' ').slice(0, 2).join(' ')
+}
+
+/** The read-only MCP server's pin, or null on a host that runs none. */
+async function mcpServer(): Promise<PostgresData['mcp']> {
+  const version = await imageTag('mcp-app-db')
+  return version === null
+    ? null
+    : { version, gap: await versionGap('crystaldba/postgres-mcp', version) }
 }

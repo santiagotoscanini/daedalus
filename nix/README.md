@@ -155,7 +155,7 @@ read into `fleet.nodes`; optional, a box without machines has none) and
 renders it for every consumer).
 
 Optional, null or empty by default: `fleet.hcPing.keySopsFile`,
-`fleet.claude.mcpSopsFile`, `fleet.zfs.datasets` (empty: no ZFS mechanism
+`fleet.claude.mcpSopsFile`, `fleet.claude.mcpServers`, `fleet.zfs.datasets` (empty: no ZFS mechanism
 at all), `fleet.zfs.arcMaxBytes`, `fleet.ddns.enable` (ddclient for
 `fleet.wanHost`), `fleet.backup.replications`, `fleet.autoupgrade.inputs`,
 `fleet.daedalus.routerProduct`, `fleet.daedalus.routerAdminUrl` (default

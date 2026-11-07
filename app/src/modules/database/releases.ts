@@ -7,6 +7,7 @@ import type { ReleaseSource } from '../../lib/dashboard/image-repos'
 // own Forgejo, not GitHub, which mirrors only the tags.
 export const releases: Record<string, ReleaseSource> = {
   'app-db-exporter': { repo: 'prometheus-community/postgres_exporter' },
+  'mcp-app-db': { repo: 'crystaldba/postgres-mcp' },
   garage: { repo: 'git.deuxfleurs.fr/Deuxfleurs/garage' },
   'garage-ui': { repo: 'Noooste/garage-ui' },
 }

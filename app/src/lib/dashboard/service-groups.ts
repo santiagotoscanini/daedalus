@@ -29,6 +29,8 @@ const FOLD: Record<string, string> = {
   scraparr: 'tv',
   // Sidecars of one service.
   'grocy-mcp': 'grocy',
+  'grafana-mcp': 'monitoring',
+  'app-db-mcp': 'app-db',
   'calibre-web-mcp': 'calibre-web',
   'shelfmark-mcp': 'shelfmark',
   'ryot-mcp': 'ryot',

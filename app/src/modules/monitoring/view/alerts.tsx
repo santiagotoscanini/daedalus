@@ -56,7 +56,22 @@ export function AlertsView({ data: d }: { data: Alerts }) {
 
         <Changelog gap={d.gap} span={12} />
 
-        <GrafanaLogsBoard />
+        {d.mcp !== null && (
+          <Changelog
+            gap={d.mcp.gap}
+            span={12}
+            aside={<span className={NOTE}>grafana/mcp-grafana</span>}
+            foot={
+              <p className={FOOT}>
+                The MCP server Claude reads metrics, logs and alert state through, behind the LLM
+                gateway. Its token is a Viewer&rsquo;s, minted on the box, and its write tools are
+                off, so it can query Prometheus and Loki but change nothing in Grafana.
+              </p>
+            }
+          />
+        )}
+
+        <GrafanaLogsBoard mcp={d.mcp !== null} />
       </BoardGrid>
     </>
   )
@@ -212,11 +227,29 @@ function Panel2({ f }: { f: AlertsFacts }) {
   )
 }
 
-function GrafanaLogsBoard() {
+function GrafanaLogsBoard({ mcp }: { mcp: boolean }) {
   return (
     <LogBoard
       source={{ container: 'grafana' }}
       title="Grafana logs"
+      neighbours={
+        mcp
+          ? [
+              {
+                source: { container: 'mcp-grafana' },
+                label: 'Grafana MCP',
+                role: 'the MCP server Claude queries Grafana through',
+                note: 'mcp-grafana behind the LLM gateway, which hands it to one virtual key, with only its read tools enabled. A 401 here means its token was revoked; the unit beside it mints a new one when the file holding it is deleted.',
+              },
+              {
+                source: { unit: 'grafana-mcp-token.service' },
+                label: 'MCP token',
+                role: 'what gives the MCP server its Grafana token',
+                note: 'Keeps a Viewer service account for the MCP server and, when the box holds no working token for it, revokes the old ones and mints one. Runs at boot and on every rebuild that changes it.',
+              },
+            ]
+          : undefined
+      }
       foot={
         <p className={FOOT}>
           Rule evaluation, provisioning and notification delivery all land here. An alert that

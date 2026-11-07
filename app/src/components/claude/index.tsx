@@ -244,6 +244,14 @@ function RemoteControlLogs() {
     <LogBoard
       source={{ unit: 'daedalus-claude-rc.service' }}
       title="Remote Control logs"
+      neighbours={[
+        {
+          source: { unit: 'claude-mcp-json.service' },
+          label: 'MCP config',
+          role: 'what writes the sessions’ .mcp.json',
+          note: 'Renders the MCP servers every session on the box starts with: the operator’s encrypted file, plus the gateway servers stacks declare, each with a key minted on the box. A server missing from a new session is usually this unit having failed, which leaves the previous file in place.',
+        },
+      ]}
       foot={
         <p className={FOOT}>
           The server's log file, which is mostly not events: every remote session writes its

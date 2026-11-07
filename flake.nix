@@ -63,7 +63,7 @@
         "autoupgrade/autoupgrade.nix"
         "backup.nix"
         "claude-code/claude-code.nix"
-        "claude.nix"
+        "claude/claude.nix"
         "config-bundle.nix"
         "ddclient/ddclient.nix"
         "export.nix"
