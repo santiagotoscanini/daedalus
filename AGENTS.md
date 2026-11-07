@@ -10,7 +10,7 @@ path-scoped rules load as you touch files.
   standalone pnpm project deployed to GitHub Pages by
   `.github/workflows/website.yml`; its docs page inventories the
   operator's external setup — keep it honest about what this repo
-  contains). Public: `santiagotoscanini/daedalus`.
+  contains). Public: `daedalus-sh/daedalus`.
   The landing's services field ("Everything it touches") reads ONE file,
   `website/src/data/services.ts`. An entry means the engine or the reference
   box really runs or reaches that service; add or remove one by editing the

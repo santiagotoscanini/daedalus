@@ -3,7 +3,7 @@
 A complete config repo for one box running daedalus — the generic twin of a real
 host's `/etc/nixos`: the engine as a flake input, plus every definition a host brings.
 
-**Copied here by `nix flake init -t github:santiagotoscanini/daedalus#config`?**
+**Copied here by `nix flake init -t github:daedalus-sh/daedalus#config`?**
 This is now your repo. Every value is a documentation value (example.org, alice,
 RFC 5737 addresses, all-zero pins, placeholder `*.sops`): replace each one — the
 files say which — create the secrets (`host/sops/README.md`), swap in your own

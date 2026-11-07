@@ -137,7 +137,7 @@ export async function loadSeerr(ctx: Ctx): Promise<SeerrData> {
       .filter((u) => u.requests > 0)
       .sort((a, b) => b.requests - a.requests),
     // Our own repository; its Updates row (fleet.manualPins) names the same.
-    mcp: { version: mcpVersion, gap: await versionGap('santiagotoscanini/seerr-mcp', mcpVersion) },
+    mcp: { version: mcpVersion, gap: await versionGap('daedalus-sh/seerr-mcp', mcpVersion) },
   }
 }
 

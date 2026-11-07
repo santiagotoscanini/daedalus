@@ -321,7 +321,7 @@
         host-scripts = import ./nix/tests/host-scripts { inherit pkgs; };
       };
 
-      # `nix flake init -t github:santiagotoscanini/daedalus#config`: the
+      # `nix flake init -t github:daedalus-sh/daedalus#config`: the
       # example host this flake's checks evaluate, as a starting point — every
       # value in it is a documentation value to replace (its files say which).
       templates.config = {

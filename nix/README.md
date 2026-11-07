@@ -18,7 +18,7 @@ The root `flake.nix` exports:
   catalog (every catalog module off). One module, not three: the control
   plane defines options only catalog modules declare;
 - `templates.config` — the example host under `../example-host/`, to start from (`nix flake init -t
-  github:santiagotoscanini/daedalus#config`), which is also the host the
+  github:daedalus-sh/daedalus#config`), which is also the host the
   checks evaluate;
 - `lib.path` — this directory as a path, for a host that keeps stacks of
   its own and needs the libraries;
@@ -73,7 +73,7 @@ in to. `nix/tests/all-modules` switches on the other leaves.
 
 ## Importing it
 
-`nix flake init -t github:santiagotoscanini/daedalus#config` writes the
+`nix flake init -t github:daedalus-sh/daedalus#config` writes the
 host below into an empty directory; replace every documentation value in
 it (each file says which), replace `hardware-configuration.nix` with
 `nixos-generate-config`'s, create the secrets (`host/sops/README.md`),
@@ -83,7 +83,7 @@ resolve the image pins, and switch. What it is, in short:
 # flake.nix — the engine is one input, pinned by rev, followed on all four
 # of its own inputs so importing it adds nothing to your lock
 daedalus = {
-  url = "github:santiagotoscanini/daedalus";
+  url = "github:daedalus-sh/daedalus";
   inputs.nixpkgs.follows = "nixpkgs";
   inputs.nixpkgs-unstable.follows = "nixpkgs-unstable";
   inputs.sops-nix.follows = "sops-nix";

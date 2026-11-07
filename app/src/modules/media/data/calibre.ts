@@ -52,7 +52,7 @@ export async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
       }),
     ),
     // Our own repository; its Updates row (fleet.manualPins) names the same.
-    versionGap('santiagotoscanini/calibre-web-mcp', mcpVersion),
+    versionGap('daedalus-sh/calibre-web-mcp', mcpVersion),
   ])
 
   return {

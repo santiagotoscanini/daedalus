@@ -26,7 +26,7 @@ export async function loadRyot(ctx: Ctx): Promise<RyotData> {
   const mcpVersion = ctx.env('RYOT_MCP_VERSION') || null
   const [gap, mcpGap] = await Promise.all([
     versionGap('IgnisDa/ryot', version),
-    versionGap('santiagotoscanini/ryot-mcp', mcpVersion),
+    versionGap('daedalus-sh/ryot-mcp', mcpVersion),
   ])
   return { version, gap, mcp: { version: mcpVersion, gap: mcpGap } }
 }

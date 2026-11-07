@@ -653,7 +653,7 @@ and `Cargo.toml` must agree, and the commit must be on `main`.
 
 A version whose `Cargo.toml` carries `[package.metadata.release] draft =
 true` is published as a draft, which no agent is offered: try it, then
-`gh release edit agent-v<version> -R santiagotoscanini/daedalus
+`gh release edit agent-v<version> -R daedalus-sh/daedalus
 --draft=false --latest`, and drop the table in the next bump.
 
 The Mac's app is put together by [`macos/package.sh`](macos/package.sh),

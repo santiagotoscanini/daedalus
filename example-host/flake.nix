@@ -16,7 +16,7 @@
     # touches and this is not one of them. `follows` on all four so importing
     # the engine adds nothing to this lock.
     daedalus = {
-      url = "github:santiagotoscanini/daedalus";
+      url = "github:daedalus-sh/daedalus";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.nixpkgs-unstable.follows = "nixpkgs-unstable";
       inputs.sops-nix.follows = "sops-nix";

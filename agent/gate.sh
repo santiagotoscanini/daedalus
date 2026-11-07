@@ -41,7 +41,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 what="${1:-all}"
 app_gen="$here/../app/src/host/controller/generated"
 gen="${AGENT_GEN_DIR:-$app_gen}"
-mkdir -p /tmp/agent-apt "$gen"
+mkdir -p /tmp/agent-apt /tmp/agent-cargo /tmp/agent-target "$gen"
 set +e
 podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -w /w/agent \
   -v /tmp/agent-cargo:/tmp/agent-cargo -v /tmp/agent-target:/tmp/agent-target \
@@ -59,10 +59,11 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
     rustup component add clippy rustfmt >/dev/null 2>&1
     # session-host/interop builds this crate by path and pins its version in
     # its own Cargo.lock: a version bump here leaves that lock stale and its
-    # --locked CI red. Rewritten on every run, from the cache when it can be.
+    # --locked CI red. Rewritten on every run, online: offline, cargo settles
+    # the dependencies of this crate on whatever the cache holds, and a cold
+    # cache (a fresh /tmp) quietly downgrades them in that lock.
     echo "--- session-host/interop/Cargo.lock follows the version"
-    cargo update -q -p daedalus-agent --manifest-path ../session-host/interop/Cargo.toml --offline 2>/dev/null \
-      || cargo update -q -p daedalus-agent --manifest-path ../session-host/interop/Cargo.toml \
+    cargo update -q -p daedalus-agent --manifest-path ../session-host/interop/Cargo.toml \
       || { echo "cargo update of session-host/interop failed"; exit 1; }
     what="'"$what"'"
     failed=0

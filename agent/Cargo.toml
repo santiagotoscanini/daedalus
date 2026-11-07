@@ -1,12 +1,12 @@
 [package]
 name = "daedalus-agent"
-version = "0.28.0"
+version = "0.29.0"
 edition = "2021"
 # The rustc of the nixpkgs the box builds it with (26.05); rust-toolchain.toml
 # pins the same release for every other build.
 rust-version = "1.95"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
-repository = "https://github.com/santiagotoscanini/daedalus"
+repository = "https://github.com/daedalus-sh/daedalus"
 license = "MIT"
 publish = false
 build = "build.rs"

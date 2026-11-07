@@ -46,7 +46,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo = "santiagotoscanini/daedalus",
+  [string]$Repo = "daedalus-sh/daedalus",
   [string]$Version = "",
   [string]$Controller = "",
   [string]$Pin = ""

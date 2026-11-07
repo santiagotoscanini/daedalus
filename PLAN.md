@@ -43,7 +43,7 @@ declares), so the order is import → rebuild → UI. A "web UI first" installer
 mode of the same app is a later refinement of `init`.
 
 ```
-ENGINE  github.com/santiagotoscanini/daedalus   (public; one branch, main)
+ENGINE  github.com/daedalus-sh/daedalus   (public; one branch, main)
   flake.nix           nixosModules.default, lib.path, templates.config, packages; packages.init is Phase 12
   nix/{platform,modules/<id>,stacks/daedalus}   every catalog stack gated by fleet.modules.<id>.enable
   app/                the TanStack Start app; src/core + src/modules/<id> (manifest, loaders, views)
@@ -88,7 +88,7 @@ on a failed switch restores the bytes and switches again.
 | The engine | engine repo | never written by a running system |
 
 **The app, end state.** One image, built by CI on GitHub-hosted runners into
-`ghcr.io/santiagotoscanini/daedalus:<semver>@sha256`, pinned by the engine
+`ghcr.io/daedalus-sh/daedalus:<semver>@sha256`, pinned by the engine
 (`fleet.daedalus.image` defaults to the version `app/package.json` declares).
 Users run it as-is. Settings forms come from an in-house renderer over a
 constrained JSON-Schema subset (the RJSF spike failed on bundle cost).
@@ -221,7 +221,7 @@ through a local clone because it develops it, everyone else through
 ### Phase 12 — Onboarding, init, catalog, release (1–2 weeks)
 
 Wizard over the existing pieces (each step re-runnable from Settings);
-`packages.init` (`nix run github:santiagotoscanini/daedalus#init`: asks
+`packages.init` (`nix run github:daedalus-sh/daedalus#init`: asks
 hostname + admin user, writes the CONFIG flake from `templates.config`, runs
 `nixos-generate-config`, creates `site/` in the config with `.sops.yaml` from
 the host key, resolves the first set of image pins into `host/images.nix`,

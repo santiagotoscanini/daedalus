@@ -60,7 +60,7 @@ const SECTIONS: DocSection[] = [
       {
         name: "Start from the template",
         body: "On the computer that will be the box, make an empty folder for the repository and fill it from daedalus’s template.",
-        code: ["nix flake init -t github:santiagotoscanini/daedalus#config"],
+        code: ["nix flake init -t github:daedalus-sh/daedalus#config"],
       },
       {
         name: "Replace the documentation values",

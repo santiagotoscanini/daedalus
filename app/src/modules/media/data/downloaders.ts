@@ -173,7 +173,7 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
     // blank.
     versionGap('calibrain/shelfmark', shelfmark.version, { notesWhenUnknown: true }),
     // Our own repository; its Updates row (fleet.manualPins) names the same.
-    versionGap('santiagotoscanini/shelfmark-mcp', mcpVer),
+    versionGap('daedalus-sh/shelfmark-mcp', mcpVer),
   ])
 
   const done = metubeHistory?.done ?? []

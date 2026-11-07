@@ -67,7 +67,7 @@ set -eu
 # session run as.
 umask 022
 
-REPO="${DAEDALUS_REPO:-santiagotoscanini/daedalus}"
+REPO="${DAEDALUS_REPO:-daedalus-sh/daedalus}"
 VERSION="${DAEDALUS_AGENT_VERSION:-}"
 
 # --controller HOST:PORT and --pin FINGERPRINT, passed on to `install`; on a

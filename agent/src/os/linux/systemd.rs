@@ -53,7 +53,7 @@ pub const SESSION_UNIT: &str = "daedalus-agent-session.service";
 const SERVICE_PATH: &str = "/etc/systemd/system/daedalus-agent.service";
 const SESSION_PATH: &str = "/etc/systemd/user/daedalus-agent-session.service";
 const AUTOSTART_PATH: &str = "/etc/xdg/autostart/daedalus-agent-tray.desktop";
-const DOCS: &str = "https://github.com/santiagotoscanini/daedalus/tree/main/agent";
+const DOCS: &str = "https://github.com/daedalus-sh/daedalus/tree/main/agent";
 
 /// systemd restarts the session unit and XDG autostart starts the tray;
 /// the service watches neither.
@@ -621,7 +621,7 @@ mod tests {
             service_unit(Path::new(EXE)),
             r#"[Unit]
 Description=Daedalus Agent: keeps this machine awake for the box, reports on it, updates itself
-Documentation=https://github.com/santiagotoscanini/daedalus/tree/main/agent
+Documentation=https://github.com/daedalus-sh/daedalus/tree/main/agent
 Wants=network-online.target
 After=network-online.target
 
@@ -655,7 +655,7 @@ WantedBy=multi-user.target
             session_unit(Path::new(EXE)),
             r#"[Unit]
 Description=Daedalus Agent session: Claude Code remote control for this user
-Documentation=https://github.com/santiagotoscanini/daedalus/tree/main/agent
+Documentation=https://github.com/daedalus-sh/daedalus/tree/main/agent
 
 [Service]
 Type=simple

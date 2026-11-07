@@ -125,7 +125,7 @@ use serde::{Deserialize, Serialize};
 /// The GitHub repository whose `agent-v<semver>` releases this agent
 /// follows. Not a knob: every release is verified against the key compiled
 /// into this binary (update.rs), so another feed would need another build.
-pub const DEFAULT_REPO: &str = "santiagotoscanini/daedalus";
+pub const DEFAULT_REPO: &str = "daedalus-sh/daedalus";
 
 /// What the box decides — holding the machine awake, Claude remote control
 /// and its directory, provider ports — is not here: it is the box's policy

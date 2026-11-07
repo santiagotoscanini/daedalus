@@ -11,8 +11,10 @@
 // Readers: the provenance stamp (core/site) and the Updates page's engine card
 // (modules/system/data/updates.ts) find the engine's workspace clone by this
 // slug; the Actions module lists the engine beside the box's own repos when
-// they share an owner. The host agent that updates the engine needs no copy — it
-// fast-forwards the clone from its own `origin`.
+// the box's operator owns it — its owner, or an account whose App installation
+// the box trusts, since the engine lives in an org of its own. The host agent
+// that updates the engine needs no copy — it fast-forwards the clone from its
+// own `origin`.
 
 /** `owner/name` on GitHub, as the workspace snapshot spells a remote. */
-export const ENGINE_REPO = 'santiagotoscanini/daedalus'
+export const ENGINE_REPO = 'daedalus-sh/daedalus'

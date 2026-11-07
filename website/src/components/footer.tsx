@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Logo } from "~/components/logo";
 
-const REPO = "https://github.com/santiagotoscanini/daedalus";
+const REPO = "https://github.com/daedalus-sh/daedalus";
 
 /** On every route: one row under the page's only rule, a full-bleed hairline. The mark and name at
  * the left, four plain links at the right; below 640 they stack as two centred lines. The mark is

@@ -44,7 +44,7 @@ import {
   THREAD_TOP,
 } from "./hero/timeline";
 
-const REPO = "https://github.com/santiagotoscanini/daedalus";
+const REPO = "https://github.com/daedalus-sh/daedalus";
 
 type Phone = "a" | "b";
 

@@ -15,7 +15,7 @@ import { ComingLine } from "~/components/landing/coming";
 import { Header, Section } from "~/components/landing/section";
 import { Mark } from "~/components/marks";
 
-const REPO = "https://github.com/santiagotoscanini/daedalus";
+const REPO = "https://github.com/daedalus-sh/daedalus";
 const MAC_DMG = `${REPO}/releases/latest/download/daedalus-agent-macos.dmg`;
 
 /* The Windows mark redrawn on a 13px grid: two squares of 6 with a 1px gap, so every edge lands on a

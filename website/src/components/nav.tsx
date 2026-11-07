@@ -5,7 +5,7 @@ import { SectionLink } from "~/components/landing/section";
 import { Logo } from "~/components/logo";
 import { Mark } from "~/components/marks";
 
-const REPO = "https://github.com/santiagotoscanini/daedalus";
+const REPO = "https://github.com/daedalus-sh/daedalus";
 
 // Section links work from any page (SectionLink). Every hash here must be an id on the landing:
 // scripts/check-anchors.mjs fails the build otherwise.

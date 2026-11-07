@@ -161,8 +161,9 @@ export type RepoRef = {
 /**
  * The repositories this box has a reason to watch: every app it builds (an
  * app's name IS its repository under the owner), every project on Settings
- * › Projects that names one, and the engine itself when this box's owner is
- * the engine's — its Actions are where the agent and the image are built.
+ * › Projects that names one, and the engine itself when this box's operator
+ * owns it (`ownsEngine`) — its Actions are where the agent and the image are
+ * built.
  */
 export async function knownRepos(ctx: Ctx): Promise<RepoRef[]> {
   const owner = ctx.site.owner
@@ -190,6 +191,20 @@ export async function knownRepos(ctx: Ctx): Promise<RepoRef[]> {
   for (const p of await listExternalApps(ctx)) {
     if (p.repo !== null && /^[\w.-]+\/[\w.-]+$/.test(p.repo)) add(p.repo, 'project')
   }
-  if (ENGINE_REPO.split('/')[0] === owner) add(ENGINE_REPO, 'engine')
+  if (await ownsEngine(ctx, owner)) add(ENGINE_REPO, 'engine')
   return out
+}
+
+/**
+ * Whether this box's operator owns the engine: its owner is the box's, or an
+ * account whose installation of the App the box trusts (Settings ›
+ * Integrations) — the engine lives in an org of its own. A stranger's box
+ * trusts neither, so it does not watch the engine's Actions.
+ */
+async function ownsEngine(ctx: Ctx, owner: string): Promise<boolean> {
+  const engineOwner = (ENGINE_REPO.split('/')[0] ?? '').toLowerCase()
+  if (owner.toLowerCase() === engineOwner) return true
+  const { otherInstallations } = await import('../../../core/github-app')
+  const others = await otherInstallations(ctx)
+  return others.data.some((i) => i.state === 'ok' && i.account?.login.toLowerCase() === engineOwner)
 }

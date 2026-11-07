@@ -46,7 +46,7 @@ to match. The craftsman, not the labyrinth.
 |---|---|
 | [`app/`](app/) | Daedalus itself — the TypeScript app (TanStack Start + React 19, drizzle-orm, Tailwind v4). |
 | [`nix/`](nix/) | The NixOS side: the platform layer, the control plane's own module and its host verbs (the units that apply, build, deploy and snapshot on the app's behalf), and the catalog of stacks a host can switch on. Exported by [`flake.nix`](flake.nix); [`nix/README.md`](nix/README.md) says how a host imports it and what is not done yet. |
-| [`example-host/`](example-host/) | A complete example host to start from (`nix flake init -t github:santiagotoscanini/daedalus#config`), and the host `nix flake check` evaluates. |
+| [`example-host/`](example-host/) | A complete example host to start from (`nix flake init -t github:daedalus-sh/daedalus#config`), and the host `nix flake check` evaluates. |
 | [`agent/`](agent/) | The Rust service for the other machines the box talks to — [`agent/README.md`](agent/README.md). |
 | [`session-host/`](session-host/) | santree's remote projects, served on the box to approved machines — [`session-host/README.md`](session-host/README.md). |
 | [`website/`](website/) | The landing site and the [external-setup docs](https://daedalus.toscanini.me/docs), deployed to GitHub Pages by [`.github/workflows/website.yml`](.github/workflows/website.yml). |

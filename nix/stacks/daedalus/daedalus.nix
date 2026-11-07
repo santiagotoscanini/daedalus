@@ -231,8 +231,8 @@ in
 
   options.fleet.daedalus.image = lib.mkOption {
     type = lib.types.str;
-    default = "ghcr.io/santiagotoscanini/daedalus:${appVersion}";
-    defaultText = lib.literalExpression ''"ghcr.io/santiagotoscanini/daedalus:<app/package.json version>"'';
+    default = "ghcr.io/daedalus-sh/daedalus:${appVersion}";
+    defaultText = lib.literalExpression ''"ghcr.io/daedalus-sh/daedalus:<app/package.json version>"'';
     description = ''
       The control plane's image under `source = "published"`. The default is
       the engine's own published image at the version this engine rev ships
