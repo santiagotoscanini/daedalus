@@ -244,8 +244,14 @@ function GrafanaLogsBoard({ mcp }: { mcp: boolean }) {
               {
                 source: { unit: 'grafana-mcp-token.service' },
                 label: 'MCP token',
-                role: 'what gives the MCP server its Grafana token',
-                note: 'Keeps a Viewer service account for the MCP server and, when the box holds no working token for it, revokes the old ones and mints one. Runs at boot and on every rebuild that changes it.',
+                role: 'what gives the MCP server its credentials',
+                note: 'Keeps a Viewer service account for the MCP server and, when the box holds no working token for it, revokes the old ones and mints one; also mints, once, the bearer the server demands of the gateway. Runs at boot and on every rebuild that changes it.',
+              },
+              {
+                source: { unit: 'grafana-mcp-litellm-token.service' },
+                label: 'MCP bearer',
+                role: 'what hands the gateway the server’s bearer',
+                note: 'Renders the bearer from the token unit’s file into an env file LiteLLM reads at start. After a rotation, restart LiteLLM: the render runs again first.',
               },
             ]
           : undefined

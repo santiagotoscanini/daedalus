@@ -161,6 +161,12 @@ export function PostgresView({ d }: { d: Postgres }) {
                     note: 'postgres-mcp in restricted mode, behind the LLM gateway, which hands it to one virtual key. A connection error here is usually the claude_ro role or its password, which the unit beside it converges.',
                   },
                   {
+                    source: { unit: 'app-db-mcp-dsn.service' },
+                    label: 'MCP connection',
+                    role: 'what turns the role’s password into the server’s DSN',
+                    note: 'Renders the connection string from the password the role unit minted, before the server starts. A server that cannot sign in after a rotation needs a restart: this runs again first.',
+                  },
+                  {
                     source: { unit: 'app-db-claude-ro.service' },
                     label: 'Read-only role',
                     role: 'what creates claude_ro and its grants',
