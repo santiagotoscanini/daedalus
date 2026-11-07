@@ -54,6 +54,7 @@ export const SERVICES: Service[] = [
   cat("grafana", "Grafana", "app", { module: "monitoring", focus: true }),
   cat("pihole", "Pi-hole", "app", { module: "pihole" }),
   cat("zot", "zot", "app", { module: "registry" }),
+  cat("garage", "Garage", "app", { module: "garage" }),
   cat("loki", "Loki", "app", { module: "logging" }),
   cat("alloy", "Alloy", "di", { module: "logging" }),
   cat("verdaccio", "Verdaccio", "app", { module: "verdaccio" }),
